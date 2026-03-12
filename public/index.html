@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NORVANA — Literature Order Form</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    /* ---- Order form specific ---- */
+    .order-layout {
+      display: grid;
+      grid-template-columns: 1fr 260px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    @media (max-width: 720px) {
+      .order-layout { grid-template-columns: 1fr; }
+      .total-sidebar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; border-radius: 0; border-top: 2px solid var(--gold); box-shadow: 0 -4px 20px rgba(0,0,0,0.12); }
+      .page-content { padding-bottom: 220px; }
+    }
+
+    /* ---- Total sidebar ---- */
+    .total-sidebar {
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 1.5px solid var(--gold);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      position: sticky;
+      top: 20px;
+    }
+
+    .total-sidebar h3 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 14px;
+      font-weight: 700;
+    }
+
+    .total-line {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.875rem;
+      padding: 5px 0;
+      border-bottom: 1px solid #f1f5f9;
+      color: var(--text-light);
+    }
+
+    .total-line:last-of-type { border-bottom: none; }
+
+    .total-line.zero { opacity: 0.4; }
+
+    .grand-total {
+      display: flex;
+      justify-content: space-between;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--navy);
+      border-top: 2px solid var(--navy);
+      margin-top: 10px;
+      padding-top: 10px;
+    }
+
+    .submit-area {
+      margin-top: 16px;
+    }
+
+    .submit-area .btn {
+      width: 100%;
+      padding: 13px;
+      font-size: 0.95rem;
+    }
+
+    /* ---- Catalog tabs ---- */
+    .cat-tabs {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-bottom: 0;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0;
+    }
+
+    .cat-tab {
+      padding: 8px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      border-radius: 6px 6px 0 0;
+      transition: color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+
+    .cat-tab:hover { background: #f1f5f9; color: var(--navy); }
+    .cat-tab.active { color: var(--navy); border-bottom-color: var(--navy); background: #f8fafc; }
+
+    .cat-panel { display: none; }
+    .cat-panel.active { display: block; }
+
+    /* ---- Item table ---- */
+    .item-table-wrap {
+      overflow-x: auto;
+      margin-top: 2px;
+    }
+
+    .item-table th:last-child,
+    .item-table td:last-child { text-align: right; width: 80px; }
+
+    .item-table th:nth-child(3),
+    .item-table td:nth-child(3) { text-align: right; width: 70px; }
+
+    .item-table th:nth-child(4),
+    .item-table td:nth-child(4) { text-align: center; width: 80px; }
+
+    .item-table td.item-no {
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .item-table input[type="number"] {
+      width: 64px;
+      font-size: 0.85rem;
+    }
+
+    .item-table tr.has-qty td { background: #f0fdf7; }
+    .item-table tr.has-qty td.item-subtotal { font-weight: 700; color: var(--green); }
+
+    /* ---- Section subtotal row ---- */
+    .subtotal-row td {
+      background: #f8fafc !important;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: var(--navy);
+      border-top: 2px solid var(--border);
+    }
+
+    /* ---- Success screen ---- */
+    #success-screen {
+      display: none;
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    #success-screen .success-icon {
+      font-size: 3rem;
+      margin-bottom: 16px;
+    }
+
+    #success-screen h2 {
+      font-size: 1.5rem;
+      color: var(--navy);
+      margin-bottom: 10px;
+    }
+
+    #success-screen .receipt-num {
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--green);
+      background: var(--green-bg);
+      border: 1px solid var(--green-border);
+      border-radius: var(--radius);
+      padding: 10px 24px;
+      display: inline-block;
+      margin: 14px 0;
+    }
+
+    #error-msg {
+      display: none;
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
+      color: var(--red);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 0.875rem;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <div class="site-header-logo">NA</div>
+    <div class="site-header-text">
+      <span class="site-header-eyebrow">NORVANA</span>
+      <span class="site-header-title">Literature Order Form</span>
+    </div>
+  </div>
+</header>
+
+<main class="page-content">
+
+  <!-- Loading state -->
+  <div id="loading" style="text-align:center;padding:60px 20px;color:var(--muted);">
+    Loading catalog...
+  </div>
+
+  <!-- Success screen -->
+  <div id="success-screen">
+    <div class="success-icon">&#10003;</div>
+    <h2>Order Submitted!</h2>
+    <p style="color:var(--muted);margin-bottom:8px;">Your order has been received. Keep your receipt number:</p>
+    <div class="receipt-num" id="success-receipt"></div>
+    <p style="color:var(--muted);font-size:0.85rem;max-width:420px;margin:0 auto 24px;">
+      A confirmation email has been sent to you. The Literature Chair will contact you when
+      your order is ready for pickup at the area meeting.
+    </p>
+    <button class="btn btn-outline" onclick="location.reload()">Place Another Order</button>
+  </div>
+
+  <!-- Main form -->
+  <form id="order-form" style="display:none;" novalidate>
+
+    <div class="order-layout">
+
+      <!-- Left: Contact + Catalog -->
+      <div>
+
+        <!-- Contact info -->
+        <div class="card">
+          <div class="card-title">&#128101; Contact Information</div>
+          <div class="form-group">
+            <label for="group-select">Group Name *</label>
+            <select id="group-select" required>
+              <option value="">— Select your group —</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="contact-name">Contact Name *</label>
+              <input type="text" id="contact-name" placeholder="Your name" required>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="contact-phone">Phone</label>
+              <input type="tel" id="contact-phone" placeholder="(555) 555-5555">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:14px;margin-bottom:0;">
+            <label for="contact-email">Email Address *</label>
+            <input type="email" id="contact-email" placeholder="you@example.com" required>
+          </div>
+        </div>
+
+        <!-- Catalog -->
+        <div class="card" style="padding-bottom:0;">
+          <div class="card-title">&#128218; Select Items</div>
+          <div class="cat-tabs" id="cat-tabs"></div>
+          <div id="cat-panels"></div>
+        </div>
+
+      </div>
+
+      <!-- Right: Running total -->
+      <div>
+        <div class="total-sidebar">
+          <h3>&#128176; Order Total</h3>
+          <div id="total-lines">
+            <div class="total-line zero" data-cat="Books"><span>Books</span><span>$0.00</span></div>
+            <div class="total-line zero" data-cat="Pamphlets"><span>Pamphlets</span><span>$0.00</span></div>
+            <div class="total-line zero" data-cat="Keytags"><span>Keytags</span><span>$0.00</span></div>
+            <div class="total-line zero" data-cat="Medallions"><span>Medallions</span><span>$0.00</span></div>
+            <div class="total-line zero" data-cat="Special Orders"><span>Special Orders</span><span>$0.00</span></div>
+          </div>
+          <div class="grand-total">
+            <span>Grand Total</span>
+            <span id="grand-total-val">$0.00</span>
+          </div>
+          <div class="submit-area">
+            <div id="error-msg"></div>
+            <button type="submit" class="btn btn-gold" id="submit-btn">
+              Submit Order
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </form>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+const SUBCATS = ['Books', 'Pamphlets', 'Keytags', 'Medallions', 'Special Orders'];
+const SUBCAT_LABELS = {
+  'Books': 'Books',
+  'Pamphlets': 'Pamphlets (5 Pack)',
+  'Keytags': 'Keytags (5 Pack)',
+  'Medallions': 'Medallions',
+  'Special Orders': 'Special Orders',
+};
+
+let catalog = [];
+let groups = [];
+
+// ---- Init ----
+async function init() {
+  try {
+    const [catRes, grpRes] = await Promise.all([
+      fetch('/api/catalog'),
+      fetch('/api/groups'),
+    ]);
+    catalog = await catRes.json();
+    groups = await grpRes.json();
+
+    // Filter to active items only
+    catalog = catalog.filter(i => i.active);
+
+    populateGroups();
+    buildCatalogTabs();
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('order-form').style.display = 'block';
+  } catch (err) {
+    document.getElementById('loading').textContent = 'Failed to load catalog. Please refresh the page.';
+  }
+}
+
+function populateGroups() {
+  const sel = document.getElementById('group-select');
+  groups.forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = g.name;
+    sel.appendChild(opt);
+  });
+}
+
+function buildCatalogTabs() {
+  const tabsEl  = document.getElementById('cat-tabs');
+  const panelsEl = document.getElementById('cat-panels');
+
+  const byCat = {};
+  SUBCATS.forEach(c => { byCat[c] = []; });
+  catalog.forEach(item => {
+    if (byCat[item.subcategory]) byCat[item.subcategory].push(item);
+  });
+
+  SUBCATS.forEach((cat, idx) => {
+    const items = byCat[cat];
+    if (!items.length) return;
+
+    // Tab button
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cat-tab' + (idx === 0 ? ' active' : '');
+    btn.dataset.cat = cat;
+    btn.textContent = SUBCAT_LABELS[cat];
+    btn.addEventListener('click', () => switchCatTab(cat));
+    tabsEl.appendChild(btn);
+
+    // Panel
+    const panel = document.createElement('div');
+    panel.className = 'cat-panel' + (idx === 0 ? ' active' : '');
+    panel.id = `panel-${cat.replace(/\s+/g, '-')}`;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'item-table-wrap';
+
+    const table = document.createElement('table');
+    table.className = 'item-table';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th style="width:60px;">Item #</th>
+          <th>Description</th>
+          <th>Unit Price</th>
+          <th>Qty</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr class="subtotal-row">
+          <td colspan="4" style="text-align:right;">Section Subtotal</td>
+          <td class="text-right" id="subtotal-${cat.replace(/\s+/g, '-')}">$0.00</td>
+        </tr>
+      </tfoot>`;
+
+    const tbody = table.querySelector('tbody');
+    items.forEach(item => {
+      const tr = document.createElement('tr');
+      tr.dataset.itemId = item.id;
+      tr.dataset.price = item.price;
+      tr.dataset.cat = item.subcategory;
+      tr.innerHTML = `
+        <td class="item-no">${item.item_no}</td>
+        <td>${item.description}</td>
+        <td class="text-right">$${Number(item.price).toFixed(2)}</td>
+        <td class="text-center">
+          <input type="number" class="qty-input" min="0" step="1" value="0"
+            data-item-id="${item.id}" data-price="${item.price}" data-cat="${item.subcategory}">
+        </td>
+        <td class="item-subtotal text-right">$0.00</td>`;
+      tbody.appendChild(tr);
+    });
+
+    wrap.appendChild(table);
+    panel.appendChild(wrap);
+    panelsEl.appendChild(panel);
+  });
+
+  // Attach qty listeners
+  document.querySelectorAll('.qty-input').forEach(input => {
+    input.addEventListener('input', onQtyChange);
+  });
+}
+
+function switchCatTab(cat) {
+  document.querySelectorAll('.cat-tab').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+  document.querySelectorAll('.cat-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${cat.replace(/\s+/g, '-')}`));
+}
+
+function onQtyChange(e) {
+  const input = e.target;
+  const qty = Math.max(0, parseInt(input.value, 10) || 0);
+  input.value = qty;
+
+  const tr = input.closest('tr');
+  const price = parseFloat(input.dataset.price);
+  const subtotal = qty * price;
+
+  const subtotalCell = tr.querySelector('.item-subtotal');
+  subtotalCell.textContent = `$${subtotal.toFixed(2)}`;
+  tr.classList.toggle('has-qty', qty > 0);
+
+  recalcTotals();
+}
+
+function recalcTotals() {
+  const catTotals = {};
+  SUBCATS.forEach(c => { catTotals[c] = 0; });
+
+  document.querySelectorAll('.qty-input').forEach(input => {
+    const qty = parseInt(input.value, 10) || 0;
+    const price = parseFloat(input.dataset.price);
+    const cat = input.dataset.cat;
+    catTotals[cat] = (catTotals[cat] || 0) + qty * price;
+  });
+
+  let grand = 0;
+  SUBCATS.forEach(cat => {
+    const val = catTotals[cat];
+    grand += val;
+
+    // Update section subtotal in table footer
+    const key = cat.replace(/\s+/g, '-');
+    const el = document.getElementById(`subtotal-${key}`);
+    if (el) el.textContent = `$${val.toFixed(2)}`;
+
+    // Update sidebar line
+    const line = document.querySelector(`.total-line[data-cat="${cat}"]`);
+    if (line) {
+      line.querySelector('span:last-child').textContent = `$${val.toFixed(2)}`;
+      line.classList.toggle('zero', val === 0);
+    }
+  });
+
+  document.getElementById('grand-total-val').textContent = `$${grand.toFixed(2)}`;
+}
+
+// ---- Form submit ----
+document.getElementById('order-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const groupId     = document.getElementById('group-select').value;
+  const contactName = document.getElementById('contact-name').value.trim();
+  const email       = document.getElementById('contact-email').value.trim();
+  const phone       = document.getElementById('contact-phone').value.trim();
+  const errEl       = document.getElementById('error-msg');
+
+  errEl.style.display = 'none';
+
+  if (!groupId) { showError('Please select your group.'); return; }
+  if (!contactName) { showError('Please enter your name.'); return; }
+  if (!email || !email.includes('@')) { showError('Please enter a valid email address.'); return; }
+
+  const items = [];
+  document.querySelectorAll('.qty-input').forEach(input => {
+    const qty = parseInt(input.value, 10) || 0;
+    if (qty > 0) {
+      items.push({
+        item_id:     parseInt(input.dataset.itemId, 10),
+        qty_ordered: qty,
+        unit_price:  parseFloat(input.dataset.price),
+      });
+    }
+  });
+
+  if (items.length === 0) {
+    showError('Please add at least one item to your order.');
+    return;
+  }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  try {
+    const res = await fetch('/api/submit-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: parseInt(groupId, 10), contact_name: contactName, email, phone, items }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Submission failed. Please try again.');
+    }
+
+    document.getElementById('order-form').style.display = 'none';
+    document.getElementById('success-receipt').textContent = data.receiptNumber;
+    document.getElementById('success-screen').style.display = 'block';
+  } catch (err) {
+    showError(err.message);
+    btn.disabled = false;
+    btn.textContent = 'Submit Order';
+  }
+});
+
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+init();
+</script>
+
+</body>
+</html>

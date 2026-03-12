@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NORVANA — Lit Chair Dashboard</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    /* ---- Admin-specific ---- */
+    .admin-nav {
+      background: var(--navy-dark);
+      padding: 0 20px;
+    }
+
+    .admin-nav-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+    }
+
+    .admin-nav-btn {
+      padding: 12px 18px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.6);
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .admin-nav-btn:hover { color: rgba(255,255,255,0.9); }
+    .admin-nav-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+    /* ---- Auth gate ---- */
+    #auth-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,37,64,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .auth-box {
+      background: var(--white);
+      border-radius: 12px;
+      padding: 36px 40px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+    }
+
+    .auth-box h2 {
+      font-size: 1.2rem;
+      color: var(--navy);
+      margin-bottom: 6px;
+    }
+
+    .auth-box p { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+
+    #auth-error {
+      display: none;
+      color: var(--red);
+      font-size: 0.8rem;
+      margin-top: 8px;
+    }
+
+    /* ---- Order card ---- */
+    .order-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .order-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s;
+    }
+
+    .order-card-header:hover { background: #f8fafc; }
+
+    .order-card-group {
+      font-weight: 700;
+      color: var(--navy);
+      font-size: 0.95rem;
+      flex: 1;
+    }
+
+    .order-card-meta {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .order-card-receipt {
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .order-card-chevron {
+      color: var(--muted);
+      transition: transform 0.2s;
+      font-size: 0.75rem;
+    }
+
+    .order-card.open .order-card-chevron { transform: rotate(180deg); }
+
+    .order-card-body {
+      display: none;
+      padding: 0 18px 18px;
+      border-top: 1px solid #f1f5f9;
+    }
+
+    .order-card.open .order-card-body { display: block; }
+
+    .order-contact-info {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      font-size: 0.82rem;
+      color: var(--text-light);
+      padding: 12px 0;
+      border-bottom: 1px solid #f1f5f9;
+      margin-bottom: 14px;
+    }
+
+    .order-contact-info span { display: flex; align-items: center; gap: 5px; }
+
+    /* ---- Fulfillment table ---- */
+    .fulfill-table th:nth-child(4),
+    .fulfill-table td:nth-child(4) { text-align: center; width: 80px; }
+
+    .fulfill-table th:nth-child(5),
+    .fulfill-table td:nth-child(5) { text-align: center; width: 100px; }
+
+    .fulfill-table th:last-child,
+    .fulfill-table td:last-child { text-align: right; }
+
+    .fulfill-table input[type="number"] {
+      width: 60px;
+      font-size: 0.85rem;
+    }
+
+    .fulfill-table .adj-cell { background: #fef9ec; }
+
+    /* ---- Revised total ---- */
+    .revised-total-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0 4px;
+      margin-top: 4px;
+      border-top: 2px solid var(--border);
+    }
+
+    .revised-total-label { font-size: 0.82rem; color: var(--muted); }
+
+    .revised-total-val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .order-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .notes-input {
+      flex: 1;
+      min-width: 200px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    /* ---- Summary table ---- */
+    .summary-subcat-heading {
+      background: var(--navy);
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 8px 12px;
+    }
+
+    .summary-total-row td {
+      font-weight: 700;
+      background: #f8fafc;
+      border-top: 2px solid var(--border);
+    }
+
+    /* ---- Cycle selector ---- */
+    .cycle-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .cycle-bar label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 0;
+    }
+
+    .cycle-bar select { width: auto; min-width: 200px; }
+
+    /* ---- History filter bar ---- */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .filter-bar label { margin-bottom: 0; }
+    .filter-bar select { width: auto; min-width: 160px; }
+
+    .status-filter-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .status-filter-btn {
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border-radius: 100px;
+      border: 1.5px solid var(--border);
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .status-filter-btn.active { border-color: var(--navy); background: var(--navy); color: #fff; }
+  </style>
+</head>
+<body>
+
+<!-- Auth overlay -->
+<div id="auth-overlay">
+  <div class="auth-box">
+    <div style="font-size:2rem;margin-bottom:8px;">&#128274;</div>
+    <h2>Lit Chair Access</h2>
+    <p>Enter the admin password to continue</p>
+    <div class="form-group" style="text-align:left;">
+      <label for="pw-input">Password</label>
+      <input type="password" id="pw-input" placeholder="Enter password" autofocus>
+    </div>
+    <div id="auth-error">Incorrect password. Try again.</div>
+    <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="attemptLogin()">
+      Sign In
+    </button>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <div class="site-header-logo">NA</div>
+    <div class="site-header-text">
+      <span class="site-header-eyebrow">NORVANA Literature Committee</span>
+      <span class="site-header-title">Fulfillment Dashboard</span>
+    </div>
+    <div style="margin-left:auto;">
+      <a href="/index.html" class="btn btn-outline btn-sm" style="color:rgba(255,255,255,0.7);border-color:rgba(255,255,255,0.3);">
+        &#8592; Order Form
+      </a>
+    </div>
+  </div>
+</header>
+
+<nav class="admin-nav">
+  <div class="admin-nav-inner">
+    <button class="admin-nav-btn active" data-tab="pending" onclick="switchTab('pending')">Pending Orders</button>
+    <button class="admin-nav-btn" data-tab="history" onclick="switchTab('history')">Order History</button>
+    <button class="admin-nav-btn" data-tab="summary" onclick="switchTab('summary')">Monthly Summary</button>
+    <button class="admin-nav-btn" data-tab="catalog" onclick="switchTab('catalog')">Manage Catalog</button>
+  </div>
+</nav>
+
+<main class="page-content">
+
+  <!-- ======== PENDING ORDERS TAB ======== -->
+  <div id="tab-pending" class="tab-panel active">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h2 style="font-size:1.05rem;color:var(--navy);">Pending Orders</h2>
+        <div class="text-muted" id="current-cycle-label"></div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="loadData()">&#8635; Refresh</button>
+    </div>
+    <div id="pending-list"></div>
+  </div>
+
+  <!-- ======== ORDER HISTORY TAB ======== -->
+  <div id="tab-history" class="tab-panel">
+    <div class="filter-bar">
+      <label>Cycle:</label>
+      <select id="history-cycle-sel" onchange="renderHistory()">
+        <option value="">All cycles</option>
+      </select>
+      <div class="status-filter-group">
+        <button class="status-filter-btn active" data-status="" onclick="setStatusFilter(this, '')">All</button>
+        <button class="status-filter-btn" data-status="pending" onclick="setStatusFilter(this, 'pending')">Pending</button>
+        <button class="status-filter-btn" data-status="ready" onclick="setStatusFilter(this, 'ready')">Ready</button>
+        <button class="status-filter-btn" data-status="paid" onclick="setStatusFilter(this, 'paid')">Paid</button>
+      </div>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
+  <!-- ======== MONTHLY SUMMARY TAB ======== -->
+  <div id="tab-summary" class="tab-panel">
+    <div class="cycle-bar">
+      <label>Cycle:</label>
+      <select id="summary-cycle-sel" onchange="renderSummary()">
+        <option value="">Select a cycle</option>
+      </select>
+    </div>
+    <div id="summary-content"></div>
+  </div>
+
+  <!-- ======== MANAGE CATALOG TAB ======== -->
+  <div id="tab-catalog" class="tab-panel">
+    <div class="card" style="text-align:center;padding:40px;">
+      <div style="font-size:2rem;margin-bottom:12px;">&#128218;</div>
+      <h2 style="font-size:1.1rem;color:var(--navy);margin-bottom:8px;">Catalog Manager</h2>
+      <p class="text-muted" style="margin-bottom:20px;">Add, edit, or deactivate items in the literature catalog.</p>
+      <a href="/admin-catalog.html" class="btn btn-primary">Open Catalog Manager</a>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+let adminPw = '';
+let allOrders = [];
+let allCycles = [];
+let historyStatusFilter = '';
+
+// ---- AUTH ----
+function attemptLogin() {
+  const pw = document.getElementById('pw-input').value;
+  if (!pw) return;
+
+  fetch('/api/orders?limit=1', {
+    headers: { 'X-Admin-Password': pw }
+  }).then(r => {
+    if (r.status === 401) {
+      document.getElementById('auth-error').style.display = 'block';
+      document.getElementById('pw-input').value = '';
+      document.getElementById('pw-input').focus();
+    } else {
+      adminPw = pw;
+      sessionStorage.setItem('adminPw', pw);
+      document.getElementById('auth-overlay').style.display = 'none';
+      loadData();
+    }
+  });
+}
+
+document.getElementById('pw-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') attemptLogin();
+});
+
+// Check session on load
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = sessionStorage.getItem('adminPw');
+  if (saved) {
+    adminPw = saved;
+    fetch('/api/orders?limit=1', { headers: { 'X-Admin-Password': saved } })
+      .then(r => {
+        if (r.ok) {
+          document.getElementById('auth-overlay').style.display = 'none';
+          loadData();
+        } else {
+          sessionStorage.removeItem('adminPw');
+        }
+      });
+  }
+});
+
+// ---- TABS ----
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.getElementById(`tab-${name}`).classList.add('active');
+}
+
+// ---- LOAD DATA ----
+async function loadData() {
+  try {
+    const res = await fetch('/api/orders', { headers: { 'X-Admin-Password': adminPw } });
+    if (!res.ok) throw new Error('Failed to load orders');
+    const data = await res.json();
+    allOrders = data.orders || [];
+    allCycles = data.cycles || [];
+
+    populateCycleSelectors();
+    renderPending();
+    renderHistory();
+    renderSummary();
+  } catch (err) {
+    showToast('Failed to load orders: ' + err.message, 'error');
+  }
+}
+
+function populateCycleSelectors() {
+  ['history-cycle-sel', 'summary-cycle-sel'].forEach(id => {
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    // Keep first option, replace rest
+    while (sel.options.length > 1) sel.remove(1);
+    allCycles.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.label;
+      sel.appendChild(opt);
+    });
+    if (prev) sel.value = prev;
+    // Auto-select first cycle in summary
+    if (id === 'summary-cycle-sel' && !sel.value && allCycles.length) {
+      sel.value = allCycles[0].id;
+    }
+  });
+
+  // Show current cycle label on pending tab
+  if (allCycles.length) {
+    document.getElementById('current-cycle-label').textContent = 'Cycle: ' + allCycles[0].label;
+  }
+}
+
+// ---- PENDING ORDERS ----
+function renderPending() {
+  const container = document.getElementById('pending-list');
+  const pending = allOrders.filter(o => o.status === 'pending');
+
+  if (!pending.length) {
+    container.innerHTML = '<div class="empty-state">No pending orders for the current cycle.</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  pending.forEach(order => {
+    container.appendChild(buildOrderCard(order, true));
+  });
+}
+
+// ---- ORDER HISTORY ----
+function renderHistory() {
+  const container = document.getElementById('history-list');
+  const cycleId = document.getElementById('history-cycle-sel').value;
+
+  let orders = allOrders;
+  if (cycleId) orders = orders.filter(o => String(o.cycle_id) === cycleId);
+  if (historyStatusFilter) orders = orders.filter(o => o.status === historyStatusFilter);
+
+  if (!orders.length) {
+    container.innerHTML = '<div class="empty-state">No orders match the selected filters.</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  orders.forEach(order => {
+    container.appendChild(buildOrderCard(order, order.status === 'pending'));
+  });
+}
+
+function setStatusFilter(btn, status) {
+  historyStatusFilter = status;
+  document.querySelectorAll('.status-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHistory();
+}
+
+// ---- BUILD ORDER CARD ----
+function buildOrderCard(order, editable) {
+  const card = document.createElement('div');
+  card.className = 'order-card';
+  card.id = `order-card-${order.id}`;
+
+  const submittedAt = new Date(order.submitted_at).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+  });
+
+  const originalTotal = order.order_items.reduce((s, i) => s + i.qty_ordered * i.unit_price, 0);
+  const displayTotal = order.revised_total != null ? order.revised_total : originalTotal;
+
+  card.innerHTML = `
+    <div class="order-card-header" onclick="toggleCard(${order.id})">
+      <div>
+        <div class="order-card-group">${order.groups.name}</div>
+        <div class="order-card-meta">${submittedAt}</div>
+      </div>
+      <span class="order-card-receipt">${order.receipt_number}</span>
+      <span class="badge badge-${order.status}">${order.status}</span>
+      <span style="font-weight:700;color:var(--navy);min-width:70px;text-align:right;">$${Number(displayTotal).toFixed(2)}</span>
+      <span class="order-card-chevron">&#9660;</span>
+    </div>
+    <div class="order-card-body">
+      <div class="order-contact-info">
+        <span>&#128100; ${order.contact_name}</span>
+        <span>&#128139; <a href="mailto:${order.email}">${order.email}</a></span>
+        ${order.phone ? `<span>&#128222; ${order.phone}</span>` : ''}
+        ${order.cycles ? `<span>&#128197; ${order.cycles.label}</span>` : ''}
+      </div>
+      <div id="items-${order.id}">
+        ${buildItemsTable(order, editable)}
+      </div>
+    </div>`;
+
+  return card;
+}
+
+function buildItemsTable(order, editable) {
+  const items = order.order_items;
+  const total = items.reduce((s, i) => {
+    const qty = (editable && i.qty_fulfilled != null) ? i.qty_fulfilled : i.qty_ordered;
+    return s + qty * i.unit_price;
+  }, 0);
+
+  const rows = items.map(item => {
+    const qtyFulfill = item.qty_fulfilled != null ? item.qty_fulfilled : item.qty_ordered;
+    const subtotal = (editable ? qtyFulfill : item.qty_ordered) * item.unit_price;
+    const diff = item.qty_ordered !== qtyFulfill;
+
+    return `<tr>
+      <td class="item-no font-mono" style="font-size:0.78rem;color:var(--muted);">${item.catalog_items.item_no}</td>
+      <td>${item.catalog_items.description}</td>
+      <td class="text-right">$${Number(item.unit_price).toFixed(2)}</td>
+      <td class="text-center">${item.qty_ordered}</td>
+      <td class="text-center ${editable ? 'adj-cell' : ''}">
+        ${editable
+          ? `<input type="number" class="fulfill-qty" min="0" step="1" value="${qtyFulfill}"
+              data-order-item-id="${item.id}" data-price="${item.unit_price}"
+              oninput="recalcCard(${order.id})">`
+          : qtyFulfill}
+      </td>
+      <td class="text-right item-line-total-${item.id}">$${subtotal.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  const notesVal = order.notes || '';
+  const actionArea = editable ? `
+    <div class="order-actions">
+      <input type="text" class="notes-input" id="notes-${order.id}" placeholder="Note for group (optional)..." value="${notesVal}">
+      <button class="btn btn-success" onclick="markReady(${order.id})">&#10003; Mark Ready</button>
+    </div>` : '';
+
+  const paidArea = order.status === 'ready' ? `
+    <div style="margin-top:10px;">
+      <button class="btn btn-sm btn-outline" onclick="markPaid(${order.id})">Mark Paid</button>
+    </div>` : '';
+
+  return `
+    <table class="fulfill-table">
+      <thead>
+        <tr>
+          <th style="width:60px;">Item #</th>
+          <th>Description</th>
+          <th>Unit Price</th>
+          <th>Ordered</th>
+          <th>${editable ? 'Fulfilled' : 'Fulfilled'}</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="revised-total-row">
+      <span class="revised-total-label">${order.revised_total != null ? 'Revised Total' : 'Order Total'}</span>
+      <span class="revised-total-val" id="revised-total-${order.id}">$${total.toFixed(2)}</span>
+    </div>
+    ${actionArea}
+    ${paidArea}`;
+}
+
+function toggleCard(orderId) {
+  const card = document.getElementById(`order-card-${orderId}`);
+  card.classList.toggle('open');
+}
+
+function recalcCard(orderId) {
+  const card = document.getElementById(`order-card-${orderId}`);
+  let total = 0;
+  card.querySelectorAll('.fulfill-qty').forEach(input => {
+    const qty = Math.max(0, parseInt(input.value, 10) || 0);
+    const price = parseFloat(input.dataset.price);
+    const itemId = input.dataset.orderItemId;
+    const lineEl = card.querySelector(`.item-line-total-${itemId}`);
+    if (lineEl) lineEl.textContent = `$${(qty * price).toFixed(2)}`;
+    total += qty * price;
+  });
+  const totalEl = document.getElementById(`revised-total-${orderId}`);
+  if (totalEl) totalEl.textContent = `$${total.toFixed(2)}`;
+}
+
+// ---- MARK READY ----
+async function markReady(orderId) {
+  const card = document.getElementById(`order-card-${orderId}`);
+  const items = [];
+  card.querySelectorAll('.fulfill-qty').forEach(input => {
+    items.push({
+      order_item_id: parseInt(input.dataset.orderItemId, 10),
+      qty_fulfilled: Math.max(0, parseInt(input.value, 10) || 0),
+    });
+  });
+
+  const notes = document.getElementById(`notes-${orderId}`)?.value || '';
+
+  try {
+    const res = await fetch('/api/mark-ready', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Password': adminPw,
+      },
+      body: JSON.stringify({ order_id: orderId, items, notes }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+
+    showToast('Order marked ready! Email sent to group contact.', 'success');
+    // Remove from pending list
+    card.remove();
+    // Reload all data to update history/summary
+    await loadData();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// ---- MARK PAID ----
+async function markPaid(orderId) {
+  try {
+    // Use catalog API as a workaround — we'll do a direct Supabase update via a helper endpoint
+    // For simplicity, this hits the orders endpoint with a status update
+    // NOTE: Implement a /api/update-order endpoint if needed; for now shown as a placeholder
+    showToast('Mark Paid feature — update order status in Supabase dashboard for now.', 'error');
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// ---- MONTHLY SUMMARY ----
+function renderSummary() {
+  const cycleId = document.getElementById('summary-cycle-sel').value;
+  const container = document.getElementById('summary-content');
+
+  if (!cycleId) {
+    container.innerHTML = '<div class="empty-state">Select a cycle to view the summary.</div>';
+    return;
+  }
+
+  const cycleOrders = allOrders.filter(o => String(o.cycle_id) === cycleId);
+
+  if (!cycleOrders.length) {
+    container.innerHTML = '<div class="empty-state">No orders found for this cycle.</div>';
+    return;
+  }
+
+  const SUBCATS = ['Books', 'Pamphlets', 'Keytags', 'Medallions', 'Special Orders'];
+
+  // Aggregate: itemId → { item info, totalOrdered, totalFulfilled }
+  const itemMap = {};
+  cycleOrders.forEach(order => {
+    order.order_items.forEach(oi => {
+      const key = oi.catalog_items.id;
+      if (!itemMap[key]) {
+        itemMap[key] = {
+          item_no:     oi.catalog_items.item_no,
+          description: oi.catalog_items.description,
+          subcategory: oi.catalog_items.subcategory,
+          unit_price:  oi.unit_price,
+          totalOrdered:   0,
+          totalFulfilled: 0,
+        };
+      }
+      itemMap[key].totalOrdered   += oi.qty_ordered;
+      itemMap[key].totalFulfilled += (oi.qty_fulfilled || 0);
+    });
+  });
+
+  const items = Object.values(itemMap);
+  const cycle = allCycles.find(c => String(c.id) === cycleId);
+  const orderCount = cycleOrders.length;
+  const grandOrdered   = items.reduce((s, i) => s + i.totalOrdered * i.unit_price, 0);
+  const grandFulfilled = items.reduce((s, i) => s + i.totalFulfilled * i.unit_price, 0);
+
+  let html = `
+    <div class="card" style="padding:16px 20px;margin-bottom:20px;background:var(--amber-bg);border-color:var(--amber-border);">
+      <div style="display:flex;gap:30px;flex-wrap:wrap;">
+        <div><div style="font-size:0.75rem;color:var(--amber);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;">Cycle</div>
+          <div style="font-weight:700;color:var(--navy);">${cycle ? cycle.label : ''}</div></div>
+        <div><div style="font-size:0.75rem;color:var(--amber);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;">Orders</div>
+          <div style="font-weight:700;color:var(--navy);">${orderCount}</div></div>
+        <div><div style="font-size:0.75rem;color:var(--amber);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;">Total Ordered</div>
+          <div style="font-weight:700;color:var(--navy);">$${grandOrdered.toFixed(2)}</div></div>
+        <div><div style="font-size:0.75rem;color:var(--amber);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;">Total Fulfilled</div>
+          <div style="font-weight:700;color:var(--green);">$${grandFulfilled.toFixed(2)}</div></div>
+      </div>
+    </div>`;
+
+  SUBCATS.forEach(cat => {
+    const catItems = items.filter(i => i.subcategory === cat);
+    if (!catItems.length) return;
+
+    const catOrdered   = catItems.reduce((s, i) => s + i.totalOrdered * i.unit_price, 0);
+    const catFulfilled = catItems.reduce((s, i) => s + i.totalFulfilled * i.unit_price, 0);
+
+    html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+      <div class="summary-subcat-heading">${cat}</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:60px;">Item #</th>
+            <th>Description</th>
+            <th class="text-right">Unit Price</th>
+            <th class="text-right">Qty Ordered</th>
+            <th class="text-right">Qty Fulfilled</th>
+            <th class="text-right">Value Ordered</th>
+            <th class="text-right">Value Fulfilled</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    catItems.sort((a, b) => a.item_no.localeCompare(b.item_no)).forEach(item => {
+      html += `<tr>
+        <td class="font-mono" style="font-size:0.78rem;color:var(--muted);">${item.item_no}</td>
+        <td>${item.description}</td>
+        <td class="text-right">$${Number(item.unit_price).toFixed(2)}</td>
+        <td class="text-right">${item.totalOrdered}</td>
+        <td class="text-right">${item.totalFulfilled}</td>
+        <td class="text-right">$${(item.totalOrdered * item.unit_price).toFixed(2)}</td>
+        <td class="text-right" style="color:var(--green);font-weight:600;">$${(item.totalFulfilled * item.unit_price).toFixed(2)}</td>
+      </tr>`;
+    });
+
+    html += `</tbody>
+        <tfoot>
+          <tr class="summary-total-row">
+            <td colspan="5" class="text-right">Section Total</td>
+            <td class="text-right">$${catOrdered.toFixed(2)}</td>
+            <td class="text-right" style="color:var(--green);">$${catFulfilled.toFixed(2)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+// ---- TOAST ----
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => { t.className = ''; }, 3500);
+}
+</script>
+
+</body>
+</html>

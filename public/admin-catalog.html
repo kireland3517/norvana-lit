@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NORVANA — Catalog Manager</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .cat-section { margin-bottom: 28px; }
+
+    .cat-section-heading {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      padding: 8px 0 6px;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 0;
+    }
+
+    .catalog-table td:nth-child(1) { width: 70px; }
+    .catalog-table td:nth-child(3) { width: 90px; }
+    .catalog-table td:nth-child(4) { width: 140px; }
+    .catalog-table td:nth-child(5) { width: 70px; text-align: center; }
+    .catalog-table td:nth-child(6) { width: 60px; text-align: center; }
+
+    .catalog-table tr.inactive td { opacity: 0.45; }
+    .catalog-table tr.inactive td:last-child { opacity: 1; }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 22px;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: #cbd5e1;
+      border-radius: 22px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked + .toggle-slider { background: #059669; }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
+
+    /* Edit form */
+    #edit-form-section {
+      position: sticky;
+      bottom: 20px;
+    }
+
+    .edit-form-card {
+      background: var(--white);
+      border: 2px solid var(--navy);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .edit-form-card h3 {
+      font-size: 0.95rem;
+      color: var(--navy);
+      margin-bottom: 16px;
+    }
+
+    .edit-form-grid {
+      display: grid;
+      grid-template-columns: 100px 1fr 110px 180px 80px;
+      gap: 12px;
+      align-items: end;
+    }
+
+    @media (max-width: 700px) {
+      .edit-form-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .edit-form-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+      justify-content: flex-end;
+    }
+
+    #auth-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,37,64,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .auth-box {
+      background: var(--white);
+      border-radius: 12px;
+      padding: 36px 40px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+    }
+
+    .auth-box h2 { font-size: 1.2rem; color: var(--navy); margin-bottom: 6px; }
+    .auth-box p { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+
+    #auth-error { display: none; color: var(--red); font-size: 0.8rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+<!-- Auth overlay -->
+<div id="auth-overlay">
+  <div class="auth-box">
+    <div style="font-size:2rem;margin-bottom:8px;">&#128274;</div>
+    <h2>Lit Chair Access</h2>
+    <p>Enter the admin password to continue</p>
+    <div class="form-group" style="text-align:left;">
+      <label for="pw-input">Password</label>
+      <input type="password" id="pw-input" placeholder="Enter password" autofocus>
+    </div>
+    <div id="auth-error">Incorrect password. Try again.</div>
+    <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="attemptLogin()">
+      Sign In
+    </button>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="site-header-inner">
+    <div class="site-header-logo">NA</div>
+    <div class="site-header-text">
+      <span class="site-header-eyebrow">NORVANA Literature Committee</span>
+      <span class="site-header-title">Catalog Manager</span>
+    </div>
+    <div style="margin-left:auto;">
+      <a href="/admin.html" class="btn btn-outline btn-sm" style="color:rgba(255,255,255,0.7);border-color:rgba(255,255,255,0.3);">
+        &#8592; Dashboard
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="page-content">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h1 style="font-size:1.1rem;color:var(--navy);">Literature Catalog</h1>
+      <p class="text-muted">Toggle active/inactive items or edit descriptions and prices.</p>
+    </div>
+    <button class="btn btn-primary" onclick="openAddForm()">+ Add New Item</button>
+  </div>
+
+  <div id="catalog-content"></div>
+
+  <!-- Edit / Add form -->
+  <div id="edit-form-section" style="display:none;">
+    <div class="edit-form-card">
+      <h3 id="form-title">Add New Item</h3>
+      <input type="hidden" id="edit-item-id">
+      <div class="edit-form-grid">
+        <div class="form-group" style="margin:0;">
+          <label>Item #</label>
+          <input type="text" id="f-item-no" placeholder="e.g. 1101">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Description</label>
+          <input type="text" id="f-description" placeholder="Item description">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Price</label>
+          <input type="number" id="f-price" placeholder="0.00" step="0.01" min="0" style="width:100%;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Subcategory</label>
+          <select id="f-subcategory">
+            <option value="Books">Books</option>
+            <option value="Pamphlets">Pamphlets (5 Pack)</option>
+            <option value="Keytags">Keytags (5 Pack)</option>
+            <option value="Medallions">Medallions</option>
+            <option value="Special Orders">Special Orders</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Active</label>
+          <select id="f-active">
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+      </div>
+      <div class="edit-form-actions">
+        <button class="btn btn-outline" onclick="closeForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveItem()">Save Item</button>
+      </div>
+      <div id="form-error" style="display:none;color:var(--red);font-size:0.82rem;margin-top:8px;"></div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+let adminPw = '';
+let allItems = [];
+
+const SUBCATS = ['Books', 'Pamphlets', 'Keytags', 'Medallions', 'Special Orders'];
+const SUBCAT_LABELS = {
+  'Books': 'Books',
+  'Pamphlets': 'Pamphlets (5 Pack)',
+  'Keytags': 'Keytags (5 Pack)',
+  'Medallions': 'Medallions',
+  'Special Orders': 'Special Orders',
+};
+
+// ---- AUTH ----
+function attemptLogin() {
+  const pw = document.getElementById('pw-input').value;
+  if (!pw) return;
+
+  fetch('/api/orders?limit=1', { headers: { 'X-Admin-Password': pw } }).then(r => {
+    if (r.status === 401) {
+      document.getElementById('auth-error').style.display = 'block';
+      document.getElementById('pw-input').value = '';
+    } else {
+      adminPw = pw;
+      sessionStorage.setItem('adminPw', pw);
+      document.getElementById('auth-overlay').style.display = 'none';
+      loadCatalog();
+    }
+  });
+}
+
+document.getElementById('pw-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') attemptLogin();
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = sessionStorage.getItem('adminPw');
+  if (saved) {
+    adminPw = saved;
+    fetch('/api/orders?limit=1', { headers: { 'X-Admin-Password': saved } })
+      .then(r => {
+        if (r.ok) {
+          document.getElementById('auth-overlay').style.display = 'none';
+          loadCatalog();
+        } else {
+          sessionStorage.removeItem('adminPw');
+        }
+      });
+  }
+});
+
+// ---- LOAD CATALOG ----
+async function loadCatalog() {
+  try {
+    const res = await fetch('/api/catalog');
+    allItems = await res.json();
+    renderCatalog();
+  } catch (err) {
+    document.getElementById('catalog-content').innerHTML =
+      '<div class="empty-state">Failed to load catalog. Please refresh.</div>';
+  }
+}
+
+function renderCatalog() {
+  const container = document.getElementById('catalog-content');
+  container.innerHTML = '';
+
+  SUBCATS.forEach(cat => {
+    const items = allItems.filter(i => i.subcategory === cat);
+    if (!items.length) return;
+
+    const section = document.createElement('div');
+    section.className = 'cat-section card';
+    section.style.padding = '0';
+    section.style.overflow = 'hidden';
+
+    section.innerHTML = `
+      <div class="cat-section-heading" style="padding:10px 16px;background:#f8fafc;border-bottom:1px solid var(--border);">
+        ${SUBCAT_LABELS[cat]}
+        <span style="font-weight:400;color:var(--muted);margin-left:8px;">(${items.length} items)</span>
+      </div>
+      <table class="catalog-table">
+        <thead>
+          <tr>
+            <th>Item #</th>
+            <th>Description</th>
+            <th>Price</th>
+            <th>Subcategory</th>
+            <th>Active</th>
+            <th>Edit</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-${cat.replace(/\s+/g, '-')}"></tbody>
+      </table>`;
+
+    container.appendChild(section);
+
+    const tbody = section.querySelector(`#tbody-${cat.replace(/\s+/g, '-')}`);
+    items.forEach(item => {
+      tbody.appendChild(buildItemRow(item));
+    });
+  });
+}
+
+function buildItemRow(item) {
+  const tr = document.createElement('tr');
+  tr.id = `row-${item.id}`;
+  tr.className = item.active ? '' : 'inactive';
+
+  tr.innerHTML = `
+    <td class="font-mono" style="font-size:0.8rem;">${item.item_no}</td>
+    <td>${item.description}</td>
+    <td>$${Number(item.price).toFixed(2)}</td>
+    <td><span class="badge" style="background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border);">${item.subcategory}</span></td>
+    <td>
+      <label class="toggle">
+        <input type="checkbox" ${item.active ? 'checked' : ''} onchange="toggleActive(${item.id}, this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </td>
+    <td>
+      <button class="btn btn-sm btn-outline" onclick="openEditForm(${item.id})">Edit</button>
+    </td>`;
+
+  return tr;
+}
+
+// ---- TOGGLE ACTIVE ----
+async function toggleActive(id, active) {
+  try {
+    const res = await fetch('/api/catalog', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Password': adminPw,
+      },
+      body: JSON.stringify({ action: 'toggle', id, active }),
+    });
+    if (!res.ok) throw new Error('Failed to update');
+    // Update local state
+    const item = allItems.find(i => i.id === id);
+    if (item) item.active = active;
+    const row = document.getElementById(`row-${id}`);
+    if (row) row.className = active ? '' : 'inactive';
+    showToast(active ? 'Item activated' : 'Item deactivated', 'success');
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+    loadCatalog(); // Re-sync
+  }
+}
+
+// ---- EDIT / ADD FORM ----
+function openAddForm() {
+  document.getElementById('form-title').textContent = 'Add New Item';
+  document.getElementById('edit-item-id').value = '';
+  document.getElementById('f-item-no').value = '';
+  document.getElementById('f-description').value = '';
+  document.getElementById('f-price').value = '';
+  document.getElementById('f-subcategory').value = 'Books';
+  document.getElementById('f-active').value = 'true';
+  document.getElementById('form-error').style.display = 'none';
+  document.getElementById('edit-form-section').style.display = 'block';
+  document.getElementById('f-item-no').focus();
+  document.getElementById('edit-form-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function openEditForm(id) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+
+  document.getElementById('form-title').textContent = 'Edit Item';
+  document.getElementById('edit-item-id').value = item.id;
+  document.getElementById('f-item-no').value = item.item_no;
+  document.getElementById('f-description').value = item.description;
+  document.getElementById('f-price').value = item.price;
+  document.getElementById('f-subcategory').value = item.subcategory;
+  document.getElementById('f-active').value = String(item.active);
+  document.getElementById('form-error').style.display = 'none';
+  document.getElementById('edit-form-section').style.display = 'block';
+  document.getElementById('edit-form-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function closeForm() {
+  document.getElementById('edit-form-section').style.display = 'none';
+}
+
+async function saveItem() {
+  const id          = document.getElementById('edit-item-id').value;
+  const item_no     = document.getElementById('f-item-no').value.trim();
+  const description = document.getElementById('f-description').value.trim();
+  const price       = parseFloat(document.getElementById('f-price').value);
+  const subcategory = document.getElementById('f-subcategory').value;
+  const active      = document.getElementById('f-active').value === 'true';
+  const errEl       = document.getElementById('form-error');
+
+  errEl.style.display = 'none';
+
+  if (!item_no)     { showFormError('Item # is required.'); return; }
+  if (!description) { showFormError('Description is required.'); return; }
+  if (isNaN(price) || price < 0) { showFormError('Enter a valid price.'); return; }
+
+  const payload = {
+    action: 'upsert',
+    item: { item_no, description, price, subcategory, active },
+  };
+  if (id) payload.item.id = parseInt(id, 10);
+
+  try {
+    const res = await fetch('/api/catalog', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Password': adminPw,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+
+    showToast(id ? 'Item updated!' : 'Item added!', 'success');
+    closeForm();
+    await loadCatalog();
+  } catch (err) {
+    showFormError(err.message);
+  }
+}
+
+function showFormError(msg) {
+  const el = document.getElementById('form-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ---- TOAST ----
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => { t.className = ''; }, 3000);
+}
+</script>
+
+</body>
+</html>
