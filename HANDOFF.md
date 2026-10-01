@@ -104,5 +104,10 @@ advanced service turned on (Services > Sheets API) and the script time zone set 
 | Chair Reports | Presentation Month (or Reporting Month), Draft JSON, Finalized JSON, Revision, Email Attempt JSON |
 
 Catalog column E counts single items, and Pack Size (column H) is how many singles one ordered unit contains (for
-example 5 for a five-pack), so orders count packs while stock counts singles. Do not rename the tabs. Leave the Revision,
+example 5 for a five-pack), so orders count packs while stock counts singles. Leave the Revision,
 Chair Reports and Catalog stock columns alone when editing the sheet by hand.
+
+**Renaming and copying:** the app opens the spreadsheet by its ID (the `SHEET_ID` line near the top of `Code.gs`), not by
+its name. Renaming the spreadsheet file or moving it to another folder is safe. **Renaming a tab breaks the app**, and so
+does making a copy and using the copy (it has a new ID, so the app keeps writing to the original). To move to a new
+spreadsheet on purpose, build it per this layout, put its ID in `SHEET_ID`, and publish a new version.
