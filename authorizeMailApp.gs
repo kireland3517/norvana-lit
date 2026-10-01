@@ -1,9 +1,7 @@
-// Run this function once to authorize MailApp permissions
+// Run this function once from the Apps Script editor to authorize MailApp permissions.
+// It only checks the remaining email quota, which triggers the permission prompt.
+// It sends NO email, so it is harmless even though any visitor could call it.
 function authorizeMailApp() {
-  MailApp.sendEmail({
-    to: 'norvanalit12@gmail.com',
-    subject: 'NORVANA System - Permission Test',
-    body: 'This is a test email to authorize the NORVANA Literature Orders System to send emails. You can ignore this message.'
-  });
-  Logger.log('Email sent successfully - MailApp is authorized');
+  const remaining = MailApp.getRemainingDailyQuota();
+  Logger.log('MailApp is authorized. Emails left today: ' + remaining);
 }

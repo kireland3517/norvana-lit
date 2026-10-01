@@ -1,0 +1,7 @@
+# Large or private material that must never be committed
+order-forms/
+demo-screenshots/
+demo-upload/
+mold dimensions/
+.claude/
+*.pdf

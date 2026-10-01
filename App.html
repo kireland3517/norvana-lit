@@ -42,7 +42,7 @@
     overflow-x: hidden;
   }
 
-  /* ── APP SHELL ── */
+  /* -- APP SHELL -- */
   #app-shell {
     display: flex;
     flex-direction: column;
@@ -51,7 +51,7 @@
     min-height: -webkit-fill-available;
   }
 
-  /* ── TOP BAR ── */
+  /* -- TOP BAR -- */
   .top-bar {
     background: var(--blue);
     padding: 14px 18px;
@@ -82,8 +82,8 @@
   }
   .signout-btn:hover { background: rgba(255,255,255,0.18); color: rgba(255,255,255,0.92); }
 
-  /* ── CONTENT AREA ── */
-  /* min-height: 0 — iOS Safari needs this so flex children can shrink and scroll */
+  /* -- CONTENT AREA -- */
+  /* min-height: 0 -- iOS Safari needs this so flex children can shrink and scroll */
   .content {
     flex: 1 1 auto;
     min-height: 0;
@@ -92,11 +92,11 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* ── VIEWS ── */
+  /* -- VIEWS -- */
   .view { display: none; }
   .view.active { display: block; }
 
-  /* ── BOTTOM NAV ── */
+  /* -- BOTTOM NAV -- */
   .bottom-nav {
     position: fixed;
     bottom: 0;
@@ -119,7 +119,7 @@
     padding-bottom: 9px; gap: 3px; margin: 2px 2px 4px;
     touch-action: manipulation;
     border: none; border-radius: 12px; cursor: pointer;
-    font-family: "Outfit", sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
+    font-family: "Outfit", sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
     color: #9492c4; background: transparent;
     transition: color 0.18s, background 0.18s, opacity 0.15s;
     -webkit-tap-highlight-color: transparent;
@@ -151,7 +151,7 @@
   .logged-in .nav-btn.dash-tab { display: flex; }
   .logged-in .nav-btn.nav-dashboard-gate { display: none; }
 
-  /* ── LOGIN MODAL ── */
+  /* -- LOGIN MODAL -- */
   #login-modal {
     display: none;
     position: fixed; inset: 0; z-index: 300;
@@ -236,10 +236,10 @@
   }
   .login-cancel:hover { color: var(--onyx); background: rgba(46,49,146,0.06); }
 
-  /* ── ORDER FORM VIEW ── */
+  /* -- ORDER FORM VIEW -- */
   #view-order { padding: 16px; }
 
-  /* ── CATEGORY TABS ── */
+  /* -- CATEGORY TABS -- */
   .cat-tabs-wrap {
     background: var(--white);
     border-radius: 14px;
@@ -252,12 +252,12 @@
   .cat-tabs { display: flex; justify-content: stretch; border-bottom: 1px solid var(--border); padding: 0; overflow: hidden; }
 
   .cat-tab {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 2px;
-    padding: 10px 2px 8px;
+    padding: 15px 3px 8px;
     border: none; background: transparent;
     font-family: "Outfit", sans-serif;
     font-size: 10px; font-weight: 700;
@@ -298,10 +298,10 @@
 
   /* Badge showing items selected in a category */
   .cat-tab-badge {
-    position: absolute; top: 6px; right: 6px;
+    position: absolute; top: 1px; right: 1px;
     background: var(--lime-dark); color: var(--onyx);
     font-size: 8px; font-weight: 800;
-    min-width: 14px; height: 14px;
+    min-width: 13px; height: 13px;
     border-radius: 7px; padding: 0 3px;
     display: none; align-items: center; justify-content: center;
     line-height: 1;
@@ -339,7 +339,7 @@
     color: var(--onyx); background-color: var(--snow);
   }
 
-  /* Native arrow hidden by appearance:none — draw chevron (matches report selects) */
+  /* Native arrow hidden by appearance:none -- draw chevron (matches report selects) */
   .field select {
     padding-right: 38px;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6.5L8 10l3.5-3.5' stroke='%232e3192' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -401,6 +401,10 @@
   .qty-val::-webkit-inner-spin-button { -webkit-appearance: none; }
   .item-row.has-qty .qty-wrap .qty-btn:not(.qty-plus) { border-color: var(--blue); }
 
+  .special-note { font-size: 13px; line-height: 1.5; color: var(--onyx); padding: 2px 4px 14px; }
+  .special-note strong { font-weight: 700; }
+  .special-note a { color: var(--blue); word-break: break-all; }
+  body.dark .special-note a { color: var(--lime-dark); }
   .subtotal-bar { background: var(--blue-dark); color: white; border-radius: 12px; padding: 14px 18px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
   .subtotal-label { font-size: 12px; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.06em; }
   .subtotal-amount { font-size: 26px; font-weight: 300; }
@@ -420,24 +424,23 @@
   .submit-btn:disabled { background: var(--border); color: var(--mid); cursor: not-allowed; }
   .submit-btn.submitted { background: var(--lime); color: var(--onyx); display: flex; align-items: center; justify-content: center; gap: 8px; cursor: default; }
 
-  .success-note {
-    display: none; margin-bottom: 12px;
-    background: #1e3a1e; color: #b8f0b8;
-    border: 1px solid #3a6a3a; border-radius: 12px;
-    padding: 14px 16px; font-size: 13px; line-height: 1.6;
-    font-weight: 600; text-align: center;
-    transition: opacity 0.4s;
+  .success-screen { text-align: center; padding: 32px 20px 24px; }
+  .success-check {
+    width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%;
+    background: var(--lime); color: #1c1c2b;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; font-weight: 700;
   }
-  body:not(.dark) .success-note {
-    background: #eafaea; color: #1a5c1a;
-    border-color: #a8d8a8;
-  }
+  .success-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .success-order-id { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; margin-bottom: 4px; }
+  .success-group { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+  .success-msg { font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
 
   .error-msg { background: #fdf0ef; border: 1px solid #f0c0bb; color: #c0392b; border-radius: 10px; padding: 12px 14px; font-size: 13px; margin-bottom: 12px; display: none; line-height: 1.5; }
 
   .loading { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 14px; }
 
-  /* ── DASHBOARD VIEWS ── */
+  /* -- DASHBOARD VIEWS -- */
   #view-orders, #view-reports, #view-inventory, #view-settings { padding: 16px; }
 
   .view-heading { font-size: 22px; font-weight: 700; margin-bottom: 4px; color: var(--onyx); }
@@ -492,7 +495,7 @@
   .order-meta { display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
   .order-meta strong { color: var(--onyx); }
 
-  /* ── ORDER DETAIL PANEL ── */
+  /* -- ORDER DETAIL PANEL -- */
   #order-panel { display: none; position: fixed; inset: 0; background: var(--snow); z-index: 200; overflow-y: auto; flex-direction: column; }
   #order-panel.open { display: flex; }
 
@@ -533,7 +536,7 @@
   .panel-total-note { font-size: 9px; opacity: 0.35; margin-top: 2px; }
   .panel-total-amount { font-size: 32px; font-weight: 300; letter-spacing: -0.02em; }
 
-  /* Navy on lime — do not use var(--onyx); it inverts to light text in dark mode */
+  /* Navy on lime -- do not use var(--onyx); it inverts to light text in dark mode */
   .mark-ready-btn {
     width: 100%; padding: 16px; margin-top: 14px; background: var(--lime); color: #1a1a3e; border: none; border-radius: 12px;
     font-family: "Outfit", sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity 0.2s, filter 0.18s, background 0.18s;
@@ -589,11 +592,17 @@
   .card-check-icon:hover { opacity: 0.65; }
   .card-check-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-  /* ── TOAST ── */
+  /* -- NOTICE (in-page replacement for alert pop-ups) -- */
+  #notice-modal { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(10,12,40,0.55); align-items: center; justify-content: center; padding: 20px; }
+  #notice-modal.open { display: flex; }
+  .notice-sheet { background: var(--white); color: var(--onyx); border-radius: 14px; padding: 20px; max-width: 420px; width: 100%; box-shadow: 0 12px 40px rgba(0,0,0,0.3); }
+  #notice-text { font-size: 14px; line-height: 1.5; margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; }
+
+  /* -- TOAST -- */
   #toast { position: fixed; bottom: calc(88px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%) translateY(20px); background: #1a1a3e; color: white; padding: 12px 22px; border-radius: 24px; font-size: 14px; font-weight: 600; white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.25); opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 500; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  /* ── REPORTS ── */
+  /* -- REPORTS -- */
   .report-card { background: var(--white); border-radius: 14px; border: 1px solid var(--border); margin-bottom: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(46,49,146,0.05); }
   .report-card-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
   .report-card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--blue); }
@@ -633,7 +642,7 @@
   tfoot td { background: var(--lime); color: var(--onyx); padding: 12px 16px; font-weight: 700; font-size: 13px; }
   tfoot td:last-child { text-align: right; font-size: 18px; color: var(--onyx); }
 
-  /* ── REPORT MODE TABS ── */
+  /* -- REPORT MODE TABS -- */
   .report-mode-tabs { display: flex; background: var(--snow); border: 1.5px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; margin-bottom: 14px; }
   .report-mode-tab { flex: 1; padding: 7px 6px; border: none; border-radius: 7px; font-family: "Outfit", sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; background: none; color: var(--muted); transition: background 0.18s, color 0.18s; }
   .report-mode-tab.active { background: var(--white); color: var(--blue); box-shadow: 0 1px 4px rgba(46,49,146,0.10); }
@@ -641,7 +650,7 @@
   .report-month-select { width: 100%; padding: 9px 30px 9px 12px; border-radius: 10px; border: 1.5px solid var(--border); background-color: var(--white); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6.5L8 10l3.5-3.5' stroke='%232e3192' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; background-size: 14px 14px; color: var(--onyx); font-family: "Outfit", sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; -webkit-appearance: none; appearance: none; }
   .report-month-select:focus { outline: none; border-color: var(--blue); }
 
-  /* ── REPORT EXPORT DROPDOWN ── */
+  /* -- REPORT EXPORT DROPDOWN -- */
   .report-export-wrap { position: relative; flex-shrink: 0; }
   .report-export-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); background: var(--white); border: 1.5px solid var(--border); border-radius: 10px; box-shadow: 0 4px 16px rgba(46,49,146,0.13); min-width: 152px; z-index: 200; overflow: hidden; }
   .report-export-menu.open { display: block; }
@@ -649,7 +658,7 @@
   .report-export-item:hover { background: var(--snow); }
   .report-export-item + .report-export-item { border-top: 1px solid var(--border); }
 
-  /* ── SUMMARY VIEW ── */
+  /* -- SUMMARY VIEW -- */
   .summary-cat-header { display: flex; align-items: center; padding: 11px 16px; cursor: pointer; user-select: none; gap: 10px; }
   .summary-cat-qty { font-size: 12px; color: var(--muted); text-align: right; min-width: 80px; flex-shrink: 0; }
   .summary-cat-val { font-size: 13px; font-weight: 600; color: var(--blue); text-align: right; min-width: 64px; flex-shrink: 0; }
@@ -661,7 +670,7 @@
   .summary-item-qty { font-size: 12px; color: var(--muted); text-align: right; min-width: 80px; }
   .summary-item-val { font-size: 13px; font-weight: 600; color: var(--blue); text-align: right; min-width: 64px; }
 
-  /* ── ANNUAL VIEW ── */
+  /* -- ANNUAL VIEW -- */
   .annual-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--white); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 14px; }
   .annual-table th { background: var(--blue); color: white; padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
   .annual-table th:not(:first-child) { text-align: right; }
@@ -671,7 +680,7 @@
   .annual-table tfoot td { background: var(--lime); color: var(--onyx); font-weight: 700; border-top: 2px solid var(--lime-dark); border-bottom: none; font-size: 13px; }
   .annual-table tfoot td:not(:first-child) { text-align: right; }
 
-  /* ── INVENTORY ── */
+  /* -- INVENTORY -- */
   /* inventory summary tiles */
   .inv-summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 4px; }
   .inv-tile { background: var(--white); border-radius: 10px; border: 1px solid var(--border); padding: 10px 12px; cursor: pointer; transition: border-color 0.18s, border-width 0.15s, box-shadow 0.18s, background 0.18s; }
@@ -700,10 +709,10 @@
   /* inventory rows */
   .inv-row { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid #f0f0f8; gap: 8px; }
   .inv-row:last-child { border-bottom: none; }
-  .inv-row.hidden { display: none; }
+  .inv-row.hidden, .inventory-category.hidden { display: none; }
   .inv-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
   .inv-name-wrap { flex: 1; min-width: 0; }
-  .inv-name { font-size: 13px; font-weight: 500; color: var(--onyx); line-height: 1.3; }
+  .inv-name { font-size: 15px; font-weight: 500; color: var(--onyx); line-height: 1.3; }
   .inv-price-label { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
   .inv-stock-input {
@@ -761,7 +770,7 @@
   .add-month-btn { padding: 9px 16px; background: var(--blue); color: white; border: none; border-radius: 9px; font-family: "Outfit", sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: filter 0.18s; }
   .add-month-btn:hover { filter: brightness(1.06); }
 
-  /* ── SETTINGS ── */
+  /* -- SETTINGS -- */
   .settings-section-label { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; display: flex; align-items: center; gap: 7px; }
   .settings-section-label::after { content: ""; flex: 1; height: 1px; background: var(--blue-pale); }
   .settings-field { margin-bottom: 10px; }
@@ -791,7 +800,7 @@
   }
   .app-footer a:hover { color: var(--blue); }
 
-  /* ── DARK MODE ── */
+  /* -- DARK MODE -- */
   body.dark {
     color-scheme: dark;
     --snow: #12132a;
@@ -843,7 +852,7 @@
     border-color: var(--border);
   }
 
-  /* Qty input: keep flush with card — no charcoal box behind the number */
+  /* Qty input: keep flush with card -- no charcoal box behind the number */
   body.dark .qty-val {
     background: transparent !important;
     background-color: transparent !important;
@@ -902,7 +911,7 @@
     background: rgba(232,234,246,0.18);
     border-color: rgba(232,234,246,0.4);
   }
-  /* .stat-num defaults to var(--blue) which stays #2e3192 — invisible on dark tiles */
+  /* .stat-num defaults to var(--blue) which stays #2e3192 -- invisible on dark tiles */
   body.dark .stat-num { color: var(--onyx); -webkit-text-fill-color: var(--onyx); }
   body.dark .stat-num.lime { color: var(--lime); -webkit-text-fill-color: var(--lime); }
   body.dark .stat-label { color: var(--mid); }
@@ -946,7 +955,7 @@
     -webkit-text-fill-color: #e8eaf6 !important;
   }
   body.dark select option { background-color: #1c1e3a; color: #e8eaf6; }
-  /* Solid lime at low opacity reads olive/brown on navy — use cool bar + light text */
+  /* Solid lime at low opacity reads olive/brown on navy -- use cool bar + light text */
   body.dark .report-footer {
     background: rgba(232, 234, 255, 0.12) !important;
     color: #e8eaf6 !important;
@@ -965,7 +974,7 @@
   .mark-ready-btn.done, .submit-btn.submitted { color: #1a1a3e !important; }
   body.dark .mark-ready-btn.done,
   body.dark .mark-ready-btn.done:disabled { color: #1a1a3e !important; -webkit-text-fill-color: #1a1a3e !important; }
-  /* Was var(--onyx) which flips to light on solid lime tfoot — unreadable */
+  /* Was var(--onyx) which flips to light on solid lime tfoot -- unreadable */
   body.dark tfoot td {
     background: #2a2e5c !important;
     color: #e8eaf6 !important;
@@ -1032,7 +1041,7 @@
   body.dark .add-item-form { border-top-color: var(--border); }
   body.dark .add-group-row { border-top-color: var(--border); }
 
-  /* ── THEME TOGGLE ── */
+  /* -- THEME TOGGLE -- */
   .theme-toggle {
     background: none; border: none; cursor: pointer;
     color: rgba(255,255,255,0.7); padding: 6px;
@@ -1043,7 +1052,7 @@
   .theme-toggle svg { width: 20px; height: 20px; }
   .panel-header .theme-toggle { flex-shrink: 0; }
 
-  /* ── SPINNER / EMPTY ── */
+  /* -- SPINNER / EMPTY -- */
   .spinner { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--muted); font-size: 13px; gap: 10px; }
   .spin { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -1059,7 +1068,7 @@
 
 <div id="app-shell">
 
-  <!-- ── TOP BAR ── -->
+  <!-- -- TOP BAR -- -->
   <div class="top-bar">
     <div class="top-bar-left">
       <div class="logo-na"></div>
@@ -1091,7 +1100,7 @@
     </div>
   </div>
 
-  <!-- ── CONTENT ── -->
+  <!-- -- CONTENT -- -->
   <div class="content">
 
     <!-- ORDER FORM VIEW -->
@@ -1103,14 +1112,13 @@
     <div class="view" id="view-orders">
       <div style="padding-top:0">
         <div class="stats-row" id="stats-row">
-          <div class="stat-tile active-new" id="tile-New" onclick="filterOrders('New')"><div class="stat-num periwinkle" id="stat-new">—</div><div class="stat-label">New</div></div>
-          <div class="stat-tile" id="tile-Ready" onclick="filterOrders('Ready')"><div class="stat-num green" id="stat-ready">—</div><div class="stat-label">Ready</div></div>
-          <div class="stat-tile" id="tile-Completed" onclick="filterOrders('Completed')"><div class="stat-num teal" id="stat-completed">—</div><div class="stat-label">Completed</div></div>
+          <div class="stat-tile active-new" id="tile-New" onclick="filterOrders('New')"><div class="stat-num periwinkle" id="stat-new">-</div><div class="stat-label">New</div></div>
+          <div class="stat-tile" id="tile-Ready" onclick="filterOrders('Ready')"><div class="stat-num green" id="stat-ready">-</div><div class="stat-label">Ready</div></div>
+          <div class="stat-tile" id="tile-Completed" onclick="filterOrders('Completed')"><div class="stat-num teal" id="stat-completed">-</div><div class="stat-label">Completed</div></div>
         </div>
         <div id="orders-list">
           <div class="spinner"><div class="spin"></div>Loading orders...</div>
         </div>
-        <div id="footer-orders"></div>
       </div>
     </div>
 
@@ -1135,9 +1143,12 @@
       </div>
     </div>
 
+    <!-- FOOTER -- shown under every view -->
+    <p class="app-footer">&copy; 2026 Katie Ireland | Built for NORVANA Literature Subcommittee<br>Technical questions or issues? <a href="mailto:kireland3517@gmail.com" target="_blank">kireland3517@gmail.com</a></p>
+
   </div>
 
-  <!-- ── BOTTOM NAV ── -->
+  <!-- -- BOTTOM NAV -- -->
   <div class="bottom-nav" id="bottom-nav">
     <!-- Always visible: Order -->
     <button class="nav-btn active" id="nav-order" onclick="switchView('order')">
@@ -1170,22 +1181,22 @@
 
 </div>
 
-<!-- ── LOGIN MODAL ── -->
+<!-- -- LOGIN MODAL -- -->
 <div id="login-modal">
   <div class="login-sheet">
     <div class="login-sheet-handle"></div>
     <div class="login-sheet-title">Dashboard Access</div>
     <div class="login-sheet-sub">Enter your access code to continue</div>
     <label class="login-label">Access Code</label>
-    <input type="password" id="access-code" class="login-input" placeholder="••••••••"
-      inputmode="numeric" onkeydown="if(event.key==='Enter') doLogin()">
+    <input type="password" id="access-code" class="login-input" placeholder="********"
+      inputmode="numeric" autocomplete="new-password" onkeydown="if(event.key==='Enter') doLogin()">
     <div class="login-error" id="login-error">Incorrect access code. Try again.</div>
-    <button class="login-btn" onclick="doLogin()">Unlock Dashboard</button>
+    <button type="button" class="login-btn" id="login-btn" onmousedown="event.preventDefault()" onclick="doLogin()">Unlock Dashboard</button>
     <button class="login-cancel" onclick="closeLoginModal()">Cancel</button>
   </div>
 </div>
 
-<!-- ── ORDER DETAIL PANEL ── -->
+<!-- -- ORDER DETAIL PANEL -- -->
 <div id="order-panel">
   <div class="panel-header">
     <button type="button" class="back-btn" onclick="closeOrderPanel()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -1213,40 +1224,41 @@
   <div class="panel-body" id="panel-body"></div>
 </div>
 
-<!-- ── TOAST ── -->
+<!-- -- TOAST -- -->
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="notice-modal" role="alertdialog" aria-modal="true"><div class="notice-sheet"><div id="notice-text"></div><button type="button" class="login-btn" id="notice-ok" onclick="closeNotice()">OK</button></div></div>
 
 <script>
-// ── State ──────────────────────────────────────────────────────
+// -- State --
 let isLoggedIn     = false;
 let sessionToken   = null;  // server-issued token, validated on every privileged call
+let orderRequestId = '';    // one random ID per order; lets the server ignore an accidental repeat of the same order
 let meetingMonth   = '';
 let allOrders      = [];
 let currentFilter  = 'New';
 let currentOrderId = null;
 let currentItems   = [];
 let viewsLoaded    = { orders: false, reports: false, inventory: false, settings: false };
+let dashboardSignedOut = false; // set on sign-out so a slow reply that arrives afterwards is ignored
 
-// ── Footer strings ─────────────────────────────────────────────
-var FOOTER_PUBLIC = '<p class="app-footer">&copy; 2026 Katie Ireland | Built for NORVANA Literature Subcommittee</p>';
-var FOOTER_DASH   = '<p class="app-footer">&copy; 2026 Katie Ireland | Built for NORVANA Literature Subcommittee<br>Technical questions or issues? <a href="mailto:kireland3517@gmail.com">kireland3517@gmail.com</a></p>';
 
 // Order form state
 let catalog        = [];
 let qtys           = {};
 let windowData     = {};
+let litChairEmail  = 'norvanalit12@gmail.com';
 
-// ── Init ───────────────────────────────────────────────────────
+// -- Init --
 window.addEventListener('load', function() {
   loadFormData();
 });
 
-// ── Top bar sub text ───────────────────────────────────────────
+// -- Top bar sub text --
 function setSubText(text) {
   document.getElementById('top-bar-sub').textContent = text;
 }
 
-// ── Navigation ─────────────────────────────────────────────────
+// -- Navigation --
 function switchView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -1270,7 +1282,7 @@ function switchView(name) {
   if (name === 'settings'  && !viewsLoaded.settings)  loadSettings();
 }
 
-// ── Login modal ────────────────────────────────────────────────
+// -- Login modal --
 function openLoginModal() {
   document.getElementById('login-modal').classList.add('open');
   document.getElementById('access-code').value = '';
@@ -1282,16 +1294,23 @@ function closeLoginModal() {
   document.getElementById('login-modal').classList.remove('open');
 }
 
+let loginInFlight = false;
 function doLogin() {
+  if (loginInFlight) return;
   const code = document.getElementById('access-code').value.trim();
   document.getElementById('login-error').style.display = 'none';
+  loginInFlight = true;
+  const btn = document.getElementById('login-btn');
+  if (btn) btn.textContent = 'Checking...';
   google.script.run
     .withSuccessHandler(function(result) {
+      loginInFlight = false;
+      if (btn) btn.textContent = 'Unlock Dashboard';
       if (result.valid) {
+        dashboardSignedOut = false;
         isLoggedIn   = true;
         sessionToken = result.token;
         meetingMonth = result.meetingMonth;
-        sessionStorage.setItem('norvana_access_code', code);
         sessionStorage.setItem('norvana_session_token', result.token);
         closeLoginModal();
         // Expand nav
@@ -1299,12 +1318,19 @@ function doLogin() {
         document.getElementById('signout-btn').style.display = 'block';
         // Switch to orders view
         switchView('orders');
+        if (result.weakCode) showToast('Your access code is short. Please choose one with at least 6 digits in Settings.', 6000);
       } else {
-        document.getElementById('login-error').style.display = 'block';
+        const err = document.getElementById('login-error');
+        err.textContent = result.message || 'Incorrect access code. Try again.';
+        err.style.display = 'block';
       }
     })
     .withFailureHandler(function() {
-      document.getElementById('login-error').style.display = 'block';
+      loginInFlight = false;
+      if (btn) btn.textContent = 'Unlock Dashboard';
+      const err = document.getElementById('login-error');
+      err.textContent = 'Could not reach the server. Please try again.';
+      err.style.display = 'block';
     })
     .checkAccessCode(code);
 }
@@ -1334,35 +1360,50 @@ function doLogin() {
     syncThemeIcons();
   })();
 
-  // Restore dashboard session after page refresh.
-  // Re-validate the stored code against the server (issues a fresh token);
-  // if the access code was changed in Settings the stored code will fail and
-  // the session is cleared, forcing a new login.
+  // Restore dashboard session after page refresh using only the server-issued session token.
+  // The access code itself is never kept in the browser. An expired or revoked token just means signing in again.
   (function() {
-    var storedCode = sessionStorage.getItem('norvana_access_code');
-    if (storedCode) {
+    sessionStorage.removeItem('norvana_access_code'); // left over from older versions
+    var storedToken = sessionStorage.getItem('norvana_session_token');
+    if (storedToken) {
       google.script.run
         .withSuccessHandler(function(result) {
-          if (result.valid) {
+          if (result && result.valid) {
+            dashboardSignedOut = false;
             isLoggedIn   = true;
             sessionToken = result.token;
             meetingMonth = result.meetingMonth;
-            sessionStorage.setItem('norvana_session_token', result.token);
             document.getElementById('bottom-nav').classList.add('logged-in');
             document.getElementById('signout-btn').style.display = 'block';
             switchView('orders');
           } else {
-            sessionStorage.removeItem('norvana_access_code');
             sessionStorage.removeItem('norvana_session_token');
           }
         })
         .withFailureHandler(function() {
-          sessionStorage.removeItem('norvana_access_code');
           sessionStorage.removeItem('norvana_session_token');
         })
-        .checkAccessCode(storedCode);
+        .resumeSession(storedToken);
     }
   })();
+
+  // Wipe everything the dashboard drew (orders, contact details, reports, settings) and the data behind it,
+  // so nothing private stays in the page after sign-out.
+  function clearPrivateScreens() {
+    var wait = function(text) { return '<div class="spinner"><div class="spin"></div>' + text + '</div>'; };
+    [['orders-list', wait('Loading orders...')], ['reports-content', wait('Loading report...')],
+     ['inventory-content', wait('Loading inventory...')], ['settings-content', wait('Loading settings...')],
+     ['panel-body', '']].forEach(function(p) {
+      var el = document.getElementById(p[0]); if (el) el.innerHTML = p[1];
+    });
+    ['stat-new', 'stat-ready', 'stat-completed'].forEach(function(id) {
+      var el = document.getElementById(id); if (el) el.textContent = '-';
+    });
+    var panel = document.getElementById('order-panel'); if (panel) panel.classList.remove('open');
+    allOrders = []; currentOrderId = null; currentItems = [];
+    inventoryCategories = []; activeInventoryCategory = null; window._settingsGroups = null;
+    ordersReportData = null; inventoryReportData = null; chairData = null; chairPreview = null;
+  }
 
   function doSignout() {
   // Revoke the server-side session token
@@ -1371,7 +1412,8 @@ function doLogin() {
     sessionToken = null;
   }
   isLoggedIn = false;
-  allOrders  = [];
+  dashboardSignedOut = true;
+  clearPrivateScreens();
   viewsLoaded = { orders: false, reports: false, inventory: false, settings: false };
   sessionStorage.removeItem('norvana_access_code');
   sessionStorage.removeItem('norvana_session_token');
@@ -1381,11 +1423,11 @@ function doLogin() {
   switchView('order');
 }
 
-// ── ORDER FORM ─────────────────────────────────────────────────
+// -- ORDER FORM --
 function showOrderFormError(msg) {
   var m = (msg && String(msg).trim()) ? esc(String(msg)) : 'Please check your connection and try again.';
   document.getElementById('loading-state').innerHTML =
-    '<div class="empty-state"><div class="empty-icon">⚠️</div>' +
+    '<div class="empty-state"><div class="empty-icon">&#9888;</div>' +
     '<div class="empty-title">Could not load order form</div>' +
     '<div class="empty-sub">' + m + '</div>' +
     '<div class="empty-sub" style="margin-top:12px"><button type="button" class="settings-save-btn" style="max-width:280px;margin:0 auto" onclick="loadFormData()">Try again</button></div></div>';
@@ -1401,6 +1443,7 @@ function loadFormData(retryAttempt) {
       }
       windowData = data.windowData || {};
       catalog    = data.catalog    || [];
+      if (data.litChairEmail) litChairEmail = data.litChairEmail;
       initForm(data.groups || []);
     })
     .withFailureHandler(function(err) {
@@ -1418,20 +1461,31 @@ function loadFormData(retryAttempt) {
 // Category icon SVGs (inline, two-tone)
 const CAT_ICONS = {
   'Books': '<svg viewBox="0 0 24 24" fill="none"><path class="icon-accent" d="M3 5C3 5 6 4 9 5C10.5 5.5 12 6.5 12 6.5V20C12 20 10 19 8 19C6 19 3 20 3 20V5Z" fill="var(--lime-dark)"/><path class="icon-stroke" d="M12 6.5C12 6.5 10.5 5.5 9 5C6 4 3 5 3 5V20C3 20 6 19 8 19C10 19 12 20 12 20M12 6.5C12 6.5 13.5 5.5 15 5C18 4 21 5 21 5V20C21 20 18 19 16 19C14 19 12 20 12 20M12 6.5V20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  'Pamphlets': '<svg viewBox="0 0 24 24" fill="none"><line class="icon-accent" x1="9" y1="10" x2="15" y2="10" stroke="var(--lime-dark)" stroke-width="2" stroke-linecap="round"/><line class="icon-accent" x1="9" y1="13" x2="15" y2="13" stroke="var(--lime-dark)" stroke-width="2" stroke-linecap="round"/><line class="icon-accent" x1="9" y1="16" x2="12" y2="16" stroke="var(--lime-dark)" stroke-width="2" stroke-linecap="round"/><path class="icon-stroke" d="M14 3H7C5.9 3 5 3.9 5 5V19C5 20.1 5.9 21 7 21H17C18.1 21 19 20.1 19 19V8L14 3Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path class="icon-stroke" d="M14 3V8H19" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>',
+  'IPs': '<svg viewBox="0 0 24 24" fill="none"><line class="icon-accent" x1="9" y1="10" x2="15" y2="10" stroke="var(--lime-dark)" stroke-width="2" stroke-linecap="round"/><line class="icon-accent" x1="9" y1="13" x2="15" y2="13" stroke="var(--lime-dark)" stroke-width="2" stroke-linecap="round"/><line class="icon-accent" x1="9" y1="16" x2="12" y2="16" stroke="var(--lime-dark)" stroke-width="2" stroke-linecap="round"/><path class="icon-stroke" d="M14 3H7C5.9 3 5 3.9 5 5V19C5 20.1 5.9 21 7 21H17C18.1 21 19 20.1 19 19V8L14 3Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path class="icon-stroke" d="M14 3V8H19" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>',
   'Keytags': '<svg viewBox="0 0 24 24" fill="none"><path class="icon-accent" d="M12.59 3H7C5.9 3 5 3.9 5 5V10.59C5 11.12 5.21 11.63 5.59 12L12 18.41C12.78 19.19 14.04 19.19 14.82 18.41L19.41 13.82C20.19 13.04 20.19 11.78 19.41 11L13 4.59C12.63 4.21 12.12 4 11.59 4" fill="var(--lime-dark)" opacity="0.7"/><path class="icon-stroke" d="M12.59 3H7C5.9 3 5 3.9 5 5V10.59C5 11.12 5.21 11.63 5.59 12L12 18.41C12.78 19.19 14.04 19.19 14.82 18.41L19.41 13.82C20.19 13.04 20.19 11.78 19.41 11L13 4.59C12.63 4.21 12.12 4 11.59 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" class="icon-stroke"/></svg>',
   'Medallions': '<svg viewBox="0 0 24 24" fill="none"><path class="icon-accent" d="M12 3L9 8H15L12 3Z" fill="var(--lime-dark)"/><line class="icon-accent" x1="9" y1="8" x2="7" y2="12" stroke="var(--lime-dark)" stroke-width="2" stroke-linecap="round"/><line class="icon-accent" x1="15" y1="8" x2="17" y2="12" stroke="var(--lime-dark)" stroke-width="2" stroke-linecap="round"/><circle class="icon-stroke" cx="12" cy="16" r="5" stroke="currentColor" stroke-width="1.75"/><circle cx="12" cy="16" r="2.5" stroke="currentColor" stroke-width="1.5" opacity="0.4" class="icon-stroke"/></svg>',
-  'Special Orders': '<svg viewBox="0 0 24 24" fill="none"><path class="icon-accent" d="M12 5.5L13.5 9.5H17.5L14.5 12L15.5 16L12 13.5L8.5 16L9.5 12L6.5 9.5H10.5L12 5.5Z" fill="var(--lime-dark)"/><path class="icon-stroke" d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  'Special Orders': '<svg viewBox="0 0 24 24" fill="none"><path class="icon-accent" d="M12 5.5L13.5 9.5H17.5L14.5 12L15.5 16L12 13.5L8.5 16L9.5 12L6.5 9.5H10.5L12 5.5Z" fill="var(--lime-dark)"/><path class="icon-stroke" d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'Spanish Lit': '<svg viewBox="0 0 24 24" fill="none"><circle class="icon-accent" cx="12" cy="12" r="8" fill="var(--lime-dark)" opacity="0.5"/><circle class="icon-stroke" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/><ellipse class="icon-stroke" cx="12" cy="12" rx="4" ry="9" stroke="currentColor" stroke-width="1.5"/><line class="icon-stroke" x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.5"/></svg>'
 };
 
 // Category order
-const CAT_ORDER = ['Books', 'Pamphlets', 'Keytags', 'Medallions', 'Special Orders'];
+const CAT_ORDER = ['Books', 'IPs', 'Keytags', 'Medallions', 'Special Orders', 'Spanish Lit'];
+const CAT_TAB_LABELS = { 'Special Orders': 'Special', 'Spanish Lit': 'Spanish' };
+function catTabLabel(cat) { return CAT_TAB_LABELS[cat] || cat; }
+function itemSortScore(item) {
+  var m = item.name.match(/#\s*(\d+)/);
+  if (m) return parseInt(m[1]);
+  if (/Eternity/i.test(item.name)) return 999999;
+  return 100000 + (parseFloat(String(item.itemId).replace(/\D/g, '')) || 0);
+}
 let activeCat = null;
+let formGroups = [];
 
 function initForm(groups) {
+  formGroups = groups;
   setSubText('Group Order Form');
 
-  const groupOptions = '<option value="">Select your group…</option>' +
+  const groupOptions = '<option value="">Select your group...</option>' +
     groups.map(function(g) { return '<option value="' + esc(g) + '">' + esc(g) + '</option>'; }).join('');
 
   const cats = {};
@@ -1439,6 +1493,9 @@ function initForm(groups) {
     if (!cats[item.category]) cats[item.category] = [];
     cats[item.category].push(item);
     qtys[item.itemId] = 0;
+  });
+  Object.keys(cats).forEach(function(c) {
+    cats[c].sort(function(a, b) { return itemSortScore(a) - itemSortScore(b); });
   });
 
   // Build ordered category list (only cats that exist in catalog)
@@ -1453,7 +1510,7 @@ function initForm(groups) {
   const tabsHtml = orderedCats.map(function(cat) {
     const isActive = cat === activeCat;
     const icon = CAT_ICONS[cat] || '';
-    const shortName = cat === 'Special Orders' ? 'Special' : cat;
+    const shortName = catTabLabel(cat);
     return '<button class="cat-tab' + (isActive ? ' active' : '') + '" id="cattab-' + esc(cat) + '" onclick="switchCat(\'' + esc(cat) + '\')">' +
       '<span class="cat-tab-badge" id="catbadge-' + esc(cat) + '"></span>' +
       '<span>' + esc(shortName) + '</span>' +
@@ -1464,7 +1521,7 @@ function initForm(groups) {
   const panelsHtml = orderedCats.map(function(cat) {
     const isActive = cat === activeCat;
     let panelHtml = '<div class="cat-panel' + (isActive ? ' active' : '') + '" id="catpanel-' + esc(cat) + '">';
-    if (cat === 'Pamphlets' || cat === 'Keytags') {
+    if (cat === 'IPs' || cat === 'Keytags') {
       panelHtml += '<div style="display:flex;justify-content:flex-end;padding:6px 0 2px;"><div style="width:106px;text-align:center;font-size:10px;font-weight:600;letter-spacing:0.07em;color:var(--muted);text-transform:uppercase;">Packs (5 ea)</div></div>';
     }
     cats[cat].forEach(function(item) {
@@ -1473,7 +1530,7 @@ function initForm(groups) {
         + '<div class="item-info"><div class="item-name">' + esc(item.name) + '</div>'
         + '<div class="item-price">$' + Number(item.price).toFixed(2) + '</div></div>'
         + '<div class="qty-wrap">'
-        + '<button class="qty-btn" onclick="changeQty(\'' + esc(id) + '\',-1)">−</button>'
+        + '<button class="qty-btn" onclick="changeQty(\'' + esc(id) + '\',-1)">-</button>'
         + '<input class="qty-val" id="qty-' + esc(id) + '" type="number" value="0" min="0" oninput="setQty(\'' + esc(id) + '\',this.value)">'
         + '<button class="qty-btn qty-plus" onclick="changeQty(\'' + esc(id) + '\',1)">+</button>'
         + '</div></div>';
@@ -1499,6 +1556,10 @@ function initForm(groups) {
     + panelsHtml
     + '</div>';
 
+  html += '<div class="special-note"><strong>Need something not listed?</strong> '
+    + 'Contact the Literature Chair for special orders or requests. '
+    + '<a href="mailto:' + esc(litChairEmail) + '" target="_blank">' + esc(litChairEmail) + '</a></div>';
+
   // Subtotal bar
   html += '<div class="subtotal-bar">'
     + '<div><div class="subtotal-label">Estimated Total</div><div class="subtotal-count" id="subtotal-count">0 items</div></div>'
@@ -1507,10 +1568,8 @@ function initForm(groups) {
 
   html += '<div class="error-msg" id="error-msg"></div>';
   html += '<button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">Submit Order</button>';
-  html += '<div class="success-note" id="success-note"></div>';
 
   document.getElementById('view-order').innerHTML = html;
-  document.getElementById('view-order').insertAdjacentHTML('beforeend', FOOTER_PUBLIC);
 }
 
 function switchCat(cat) {
@@ -1596,9 +1655,14 @@ function updateSubmitState() {
   if (btn) btn.disabled = !(group && contact && email && hasItems);
 }
 
+function newRequestId() {
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+  return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
+
 function handleSubmit() {
   const btn = document.getElementById('submit-btn');
-  btn.textContent = 'Submitting…';
+  btn.textContent = 'Submitting...';
   btn.disabled = true;
   document.getElementById('error-msg').style.display = 'none';
 
@@ -1613,6 +1677,7 @@ function handleSubmit() {
     email:        document.getElementById('email').value,
     phone:        (document.getElementById('phone') || {}).value || '',
     items:        items,
+    requestId:    orderRequestId || (orderRequestId = newRequestId()),
   };
 
   google.script.run
@@ -1623,38 +1688,30 @@ function handleSubmit() {
 
 function onOrderSuccess(result) {
   if (result.success) {
-    const note = document.getElementById('success-note');
-    note.style.display = 'block';
-    note.style.opacity = '1';
-    if (result.warning) {
-      note.innerHTML = '✓ <strong>Order submitted!</strong> ' + esc(result.warning);
-    } else {
-      note.innerHTML = '✓ <strong>Order submitted!</strong> A confirmation email is on its way. You\'ll receive a second email when your order is ready for pickup.';
-    }
-    document.getElementById('submit-btn').style.display = 'none';
-    // Auto-dismiss after 5 seconds
-    setTimeout(function() {
-      note.style.opacity = '0';
-      setTimeout(function() {
-        note.style.display = 'none';
-        note.style.opacity = '1';
-        var btn = document.getElementById('submit-btn');
-        if (btn) { btn.style.display = 'block'; btn.textContent = 'Submit Order'; btn.disabled = false; }
-      }, 400);
-    }, 5000);
-    // Reset qtys
-    catalog.forEach(function(i) {
-      qtys[i.itemId] = 0;
-      const el = document.getElementById('qty-' + i.itemId);
-      if (el) el.value = 0;
-      updateRow(i.itemId);
-    });
-    updateTotals();
-    // Orders always reload fresh when the tab is opened
+    orderRequestId = '';
+    const groupName = document.getElementById('group-name').value;
+    const msg = result.warning ? esc(result.warning)
+      : 'A confirmation email is on its way. You\'ll receive a second email when your order is ready for pickup.';
+    document.getElementById('view-order').innerHTML =
+      '<div class="card success-screen">'
+      + '<div class="success-check">&#10003;</div>'
+      + '<div class="success-title">Order submitted!</div>'
+      + '<div class="success-order-id">Order ' + esc(result.orderId || '') + '</div>'
+      + '<div class="success-group">' + esc(groupName) + '</div>'
+      + '<div class="success-msg">' + msg + '</div>'
+      + '<button type="button" class="submit-btn" onclick="startNewOrder()">Start New Order</button>'
+      + '</div>';
+    window.scrollTo(0, 0);
   } else {
     showOrderError(result.error || 'An error occurred. Please try again.');
     resetSubmitBtn();
   }
+}
+
+function startNewOrder() {
+  orderRequestId = '';
+  initForm(formGroups);
+  window.scrollTo(0, 0);
 }
 
 function onOrderError(err) {
@@ -1672,26 +1729,25 @@ function resetSubmitBtn() {
   if (btn) { btn.textContent = 'Submit Order'; btn.disabled = false; }
 }
 
-// ── DASHBOARD: Orders ──────────────────────────────────────────
+// -- DASHBOARD: Orders --
 function loadOrders() {
   google.script.run
     .withSuccessHandler(renderOrders)
     .withFailureHandler(function(e) {
       document.getElementById('orders-list').innerHTML =
-        '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Could not load orders</div><div class="empty-sub">' + esc(e.message) + '</div></div>';
-      document.getElementById('footer-orders').innerHTML = FOOTER_DASH;
+        '<div class="empty-state"><div class="empty-icon">&#9888;</div><div class="empty-title">Could not load orders</div><div class="empty-sub">' + esc(e.message) + '</div></div>';
     })
     .getOrders(meetingMonth, sessionToken);
 }
 
 function renderOrders(orders) {
+  if (dashboardSignedOut) return;
   if (!orders || orders.error) {
     allOrders = [];
     viewsLoaded.orders = true;
     document.getElementById('orders-list').innerHTML =
       '<div class="empty-state"><div class="empty-title">Session expired</div>' +
       '<div class="empty-sub">Please open the dashboard login again and re-enter your access code.</div></div>';
-    document.getElementById('footer-orders').innerHTML = FOOTER_DASH;
     updateStats();
     return;
   }
@@ -1741,7 +1797,6 @@ function renderOrderList() {
   if (filtered.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.2 0 4 1.8 4 4v8Z"/><polyline points="15,9 18,9 18,11"/><path d="M6.5 5C9 5 11 7 11 9.5V17a2 2 0 0 1-2 2"/><line x1="6" x2="7" y1="10" y2="10"/></svg></div><div class="empty-title">No orders</div><div class="empty-sub">No ' +
       (currentFilter === 'All' ? 'matching ' : currentFilter.toLowerCase() + ' ') + 'submitted orders</div></div>';
-    document.getElementById('footer-orders').innerHTML = FOOTER_DASH;
     return;
   }
 
@@ -1765,11 +1820,10 @@ function renderOrderList() {
       '</div>' +
       '<div class="card-actions">' +
       checkBtn +
-      '<button type="button" class="order-delete-icon" title="Delete order" aria-label="Delete order" onclick="event.stopPropagation();confirmDeleteOrder(\'' + esc(o.orderId) + '\')">' + trashSvg + '</button>' +
+      (o.status === 'Completed' ? '' : '<button type="button" class="order-delete-icon" title="Delete order" aria-label="Delete order" onclick="event.stopPropagation();confirmDeleteOrder(\'' + esc(o.orderId) + '\')">' + trashSvg + '</button>') +
       '</div></div>' +
       '</div>';
   }).join('');
-  document.getElementById('footer-orders').innerHTML = FOOTER_DASH;
 }
 
 function markPickedUp(orderId) {
@@ -1778,17 +1832,17 @@ function markPickedUp(orderId) {
   google.script.run
     .withSuccessHandler(function(result) {
       if (result && result.success) {
-        order.status = 'Completed';
-        viewsLoaded.reports = false;
+        order.status = 'Completed'; order.revision = result.revision;
+        viewsLoaded.reports = false; viewsLoaded.inventory = false;
         updateStats();
         renderOrderList();
-        showToast('✓ Marked as Picked Up', 3000);
+        showToast('&#10003; Marked as Picked Up', 3000);
       } else {
         alert((result && result.error) ? result.error : 'Could not mark as completed.');
       }
     })
     .withFailureHandler(function(e) { alert(e.message || 'Error.'); })
-    .completeOrder(orderId, sessionToken);
+    .completeOrder(orderId, sessionToken, order.revision);
 }
 
 function undoPickedUp(orderId) {
@@ -1797,8 +1851,8 @@ function undoPickedUp(orderId) {
   google.script.run
     .withSuccessHandler(function(result) {
       if (result && result.success) {
-        order.status = 'Ready';
-        viewsLoaded.reports = false;
+        order.status = 'Ready'; order.revision = result.revision;
+        viewsLoaded.reports = false; viewsLoaded.inventory = false;
         updateStats();
         renderOrderList();
         showToast('Order moved back to Ready', 3000);
@@ -1807,10 +1861,10 @@ function undoPickedUp(orderId) {
       }
     })
     .withFailureHandler(function(e) { alert(e.message || 'Error.'); })
-    .uncompleteOrder(orderId, sessionToken);
+    .uncompleteOrder(orderId, sessionToken, order.revision);
 }
 
-// ── DASHBOARD: Order Detail ────────────────────────────────────
+// -- DASHBOARD: Order Detail --
 function openOrder(orderId) {
   currentOrderId = orderId;
   currentItems   = []; // reset before async fetch to prevent stale totals
@@ -1849,7 +1903,8 @@ function loadFulfillDraftMap(orderId) {
   try {
     var raw = sessionStorage.getItem('norvana_fulfill_' + orderId);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const draft = JSON.parse(raw), order = allOrders.find(o => o.orderId === orderId);
+    return order && draft.revision === order.revision ? draft.quantities : null;
   } catch (e) {
     return null;
   }
@@ -1861,10 +1916,11 @@ function saveFulfillDraft() {
   currentItems.forEach(function(item) {
     if (item.sheetRow == null) return;
     var inp = document.getElementById(fulfillDomId(item.sheetRow) + '-qty');
-    if (inp) map[String(item.sheetRow)] = Math.max(0, parseInt(inp.value, 10) || 0);
+    if (inp) map[item.rowId] = Math.max(0, parseInt(inp.value, 10) || 0);
   });
   try {
-    sessionStorage.setItem('norvana_fulfill_' + currentOrderId, JSON.stringify(map));
+    const order = allOrders.find(o => o.orderId === currentOrderId);
+    if (order && order.status === 'New') sessionStorage.setItem('norvana_fulfill_' + currentOrderId, JSON.stringify({ revision: order.revision, quantities: map }));
   } catch (e) {}
 }
 
@@ -1887,12 +1943,15 @@ function clearAllFulfillDraftsFromStorage() {
 }
 
 function renderOrderPanel(data) {
+  if (dashboardSignedOut) return;
   const oid = String(currentOrderId || '').trim();
   const raw = (data && data.items) ? data.items : [];
   currentItems = raw.filter(function(it) {
     return String((it.orderId != null ? it.orderId : '')).trim() === oid;
   });
   const order  = allOrders.find(function(o) { return o.orderId === currentOrderId; });
+  if (data && data.error) { document.getElementById('panel-body').textContent = data.error; return; }
+  if (order && data) { order.revision = data.revision; order.status = data.status; }
   const isLocked = order && (order.status === 'Ready' || order.status === 'Completed');
   const draftMap = (!isLocked) ? loadFulfillDraftMap(oid) : null;
 
@@ -1909,8 +1968,8 @@ function renderOrderPanel(data) {
       const sid = fulfillDomId(item.sheetRow);
       const ordered   = Number(item.qtyOrdered);
       var fulfilledNum;
-      if (!isLocked && draftMap && Object.prototype.hasOwnProperty.call(draftMap, String(item.sheetRow))) {
-        fulfilledNum = Number(draftMap[String(item.sheetRow)]);
+      if (!isLocked && draftMap && Object.prototype.hasOwnProperty.call(draftMap, item.rowId)) {
+        fulfilledNum = Number(draftMap[item.rowId]);
       } else if (item.qtyFulfilled === '' || item.qtyFulfilled === null || item.qtyFulfilled === undefined) {
         fulfilledNum = ordered;
       } else {
@@ -1919,15 +1978,19 @@ function renderOrderPanel(data) {
       const fulfilled = fulfilledNum;
       const isPartial = fulfilled < ordered;
       const lineTotal = (fulfilled * Number(item.price)).toFixed(2);
+      const pack = Number(item.packSize) || 1;
+      const stockText = item.stock == null ? 'Not recorded'
+        : pack > 1 ? Math.floor(Number(item.stock) / pack) + ' packs (' + item.stock + ' singles)'
+        : item.stock;
       html += '<div class="fulfill-item' + (isPartial ? ' partial' : '') + '" id="' + sid + '-wrap">' +
         '<div class="fulfill-item-top"><div class="fulfill-item-name">' + esc(item.name) + '</div>' +
         '<div class="fulfill-item-price" id="' + sid + '-price">$' + lineTotal + '</div></div>' +
-        '<div class="fulfill-item-unit-price">$' + Number(item.price).toFixed(2) + ' each</div>' +
+        '<div class="fulfill-item-unit-price">$' + Number(item.price).toFixed(2) + (pack > 1 ? ' per pack' : ' each') + ' | Available: ' + stockText + '</div>' +
         '<div class="fulfill-row">' +
         '<div class="fulfill-col"><div class="fulfill-col-label">Ordered</div><div class="fulfill-col-val">' + ordered + '</div></div>' +
         '<div class="fulfill-input-wrap"><div class="fulfill-col-label">Fulfilled</div>' +
         '<div class="qty-wrap">' +
-        '<button class="qty-btn"' + (isLocked ? ' disabled' : '') + ' onclick="changeFulfill(\'' + sid + '\',-1)">−</button>' +
+        '<button class="qty-btn"' + (isLocked ? ' disabled' : '') + ' onclick="changeFulfill(\'' + sid + '\',-1)">-</button>' +
         '<input class="qty-val" id="' + sid + '-qty" type="number" inputmode="numeric" value="' + fulfilled + '" min="0"' +
         (isLocked ? ' disabled' : '') + ' oninput="updatePanelTotal(); saveFulfillDraft()">' +
         '<button class="qty-btn qty-plus"' + (isLocked ? ' disabled' : '') + ' onclick="changeFulfill(\'' + sid + '\',1)">+</button>' +
@@ -1953,10 +2016,11 @@ function renderOrderPanel(data) {
   if (!isLocked) {
     html += '<button class="mark-ready-btn" id="mark-ready-btn" onclick="markReady()">Ready for Pickup</button>';
   } else if (order && order.status === 'Completed') {
-    html += '<button class="mark-ready-btn done" disabled>✓ Picked Up</button>';
+    html += '<button class="mark-ready-btn done" disabled>&#10003; Picked Up</button>';
     html += '<button class="undo-pickup-btn" onclick="undoPickupFromPanel()">Undo Pickup</button>';
   } else {
-    html += '<button class="mark-ready-btn done" disabled>✓ Ready for Pickup</button>';
+    html += '<button class="mark-ready-btn done" disabled>&#10003; Ready for Pickup</button>';
+    html += '<button class="undo-pickup-btn" id="reopen-btn" onclick="reopenFromPanel()">Reopen for editing</button>';
     html += '<button class="mark-complete-btn" style="width:100%;margin-top:10px;border-radius:12px;padding:14px;font-size:15px" onclick="markPickupFromPanel()">Mark Picked Up</button>';
   }
 
@@ -1983,7 +2047,8 @@ function updatePanelTotal() {
     if (item.sheetRow == null) return;
     const input = document.getElementById(fulfillDomId(item.sheetRow) + '-qty');
     if (input) {
-      const qty = Math.max(0, parseInt(input.value, 10) || 0);
+      const qty = Math.min(Number(item.qtyOrdered), Math.max(0, parseInt(input.value, 10) || 0));
+      input.value = qty;
       const price = Number(item.price);
       const lineTotal = Math.round(qty * price * 100) / 100;
       total = Math.round((total + lineTotal) * 100) / 100;
@@ -2001,6 +2066,21 @@ function updatePanelTotal() {
 }
 
 var toastTimer = null;
+function showNotice(msg) {
+  var box = document.getElementById('notice-modal'), text = document.getElementById('notice-text');
+  if (!box || !text) return;
+  text.textContent = String(msg == null ? '' : msg);
+  box.classList.add('open');
+  var ok = document.getElementById('notice-ok'); if (ok && ok.focus) ok.focus();
+}
+function closeNotice() {
+  var box = document.getElementById('notice-modal');
+  if (box) box.classList.remove('open');
+}
+// Browsers label every alert() from an embedded page with a long "embedded page at ... says" header.
+// Route alert() through the in-page box instead; confirm() questions stay native because they must pause for an answer.
+window.alert = showNotice;
+
 function showToast(msg, duration) {
   var t = document.getElementById('toast');
   t.textContent = msg;
@@ -2014,6 +2094,7 @@ function confirmDeleteOrder(orderId) {
   if (!oid) return;
   var order = allOrders.find(function(o) { return o.orderId === oid; });
   if (!order) return;
+  if (order.status === 'Completed') { alert('Use Undo Pickup before deleting this order.'); return; }
   var lineHint = (currentOrderId === oid && currentItems.length)
     ? ('\n\nThis will remove ' + currentItems.length + ' line row(s) from Order Items.')
     : '\n\nAll rows for this order will be removed from Order Items.';
@@ -2031,7 +2112,7 @@ function confirmDeleteOrder(orderId) {
         } else {
           renderOrderList();
         }
-        viewsLoaded.reports = false;
+        viewsLoaded.reports = false; viewsLoaded.inventory = false;
         updateStats();
         showToast(result.warning ? String(result.warning) : 'Order deleted', result.warning ? 5000 : 3000);
       } else {
@@ -2041,12 +2122,15 @@ function confirmDeleteOrder(orderId) {
     .withFailureHandler(function(e) {
       alert(e.message || 'Delete failed.');
     })
-    .deleteOrder(oid, sessionToken);
+    .deleteOrder(oid, sessionToken, order.revision);
 }
 
 function markReady() {
   const btn = document.getElementById('mark-ready-btn');
   if (!btn) return;
+  if (btn.disabled) return;
+  const savingOrderId = currentOrderId;
+  const savingRevision = allOrders.find(o => o.orderId === savingOrderId).revision;
   btn.textContent = 'Saving...';
   btn.disabled = true;
 
@@ -2061,19 +2145,19 @@ function markReady() {
   google.script.run
     .withSuccessHandler(function(result) {
       if (result.success) {
-        var doneId = currentOrderId;
+        var doneId = savingOrderId;
         clearFulfillDraft(doneId);
         // Update local state
         const order = allOrders.find(function(o) { return o.orderId === doneId; });
-        if (order) order.status = 'Ready';
+        if (order) { order.status = 'Ready'; order.revision = result.revision; order.fulfilledTotal = result.fulfilledTotal; }
         updateStats();
-        viewsLoaded.reports = false;
-        // Close panel, go back to orders list, show toast (skip draft save — already cleared)
+        viewsLoaded.reports = false; viewsLoaded.inventory = false;
+        // Close panel, go back to orders list, show toast (skip draft save -- already cleared)
         closeOrderPanel(true);
         if (result.alreadyDone) {
           showToast('Order was already marked ready.', 3500);
         } else {
-          showToast('✓ Ready for Pickup — Confirmation email sent', 4000);
+          showToast(result.warning || 'Ready for Pickup - Confirmation email sent', result.warning ? 8000 : 4000);
         }
       } else {
         btn.textContent = 'Ready for Pickup';
@@ -2086,7 +2170,7 @@ function markReady() {
       btn.disabled = false;
       alert('Failed: ' + e.message);
     })
-    .fulfillOrder(currentOrderId, fulfilled, parseFloat(total), sessionToken);
+    .fulfillOrder(savingOrderId, fulfilled, parseFloat(total), sessionToken, savingRevision);
 }
 
 function markPickupFromPanel() {
@@ -2096,17 +2180,17 @@ function markPickupFromPanel() {
     .withSuccessHandler(function(result) {
       if (result && result.success) {
         var order = allOrders.find(function(o) { return o.orderId === oid; });
-        if (order) order.status = 'Completed';
-        viewsLoaded.reports = false;
+        if (order) { order.status = 'Completed'; order.revision = result.revision; }
+        viewsLoaded.reports = false; viewsLoaded.inventory = false;
         updateStats();
         closeOrderPanel(true);
-        showToast('✓ Marked as Picked Up', 3000);
+        showToast('&#10003; Marked as Picked Up', 3000);
       } else {
         alert((result && result.error) ? result.error : 'Could not mark as completed.');
       }
     })
     .withFailureHandler(function(e) { alert(e.message || 'Error.'); })
-    .completeOrder(oid, sessionToken);
+    .completeOrder(oid, sessionToken, allOrders.find(o => o.orderId === oid).revision);
 }
 
 function undoPickupFromPanel() {
@@ -2116,8 +2200,8 @@ function undoPickupFromPanel() {
     .withSuccessHandler(function(result) {
       if (result && result.success) {
         var order = allOrders.find(function(o) { return o.orderId === oid; });
-        if (order) order.status = 'Ready';
-        viewsLoaded.reports = false;
+        if (order) { order.status = 'Ready'; order.revision = result.revision; order.fulfilledTotal = result.fulfilledTotal; }
+        viewsLoaded.reports = false; viewsLoaded.inventory = false;
         updateStats();
         closeOrderPanel(true);
         showToast('Order moved back to Ready', 3000);
@@ -2126,7 +2210,7 @@ function undoPickupFromPanel() {
       }
     })
     .withFailureHandler(function(e) { alert(e.message || 'Error.'); })
-    .uncompleteOrder(oid, sessionToken);
+    .uncompleteOrder(oid, sessionToken, allOrders.find(o => o.orderId === oid).revision);
 }
 
 function closeOrderPanel(skipDraftSave) {
@@ -2135,526 +2219,10 @@ function closeOrderPanel(skipDraftSave) {
   renderOrderList();
 }
 
-// ── DASHBOARD: Reports ─────────────────────────────────────────
+// -- DASHBOARD: Reports --
 
-var reportData        = null;
-var reportFilterStatus = 'All';
-var reportFilterGroup  = 'All';
-var reportMode         = 'orders';   // 'orders' | 'summary' | 'annual'
-var reportMonth        = '';         // selected month (may differ from meetingMonth)
-var availableMonths    = [];
-var summaryData        = null;
-var annualData         = null;
+// Report controls and exports are implemented in ReportUI.html.
 
-function loadReports() {
-  document.getElementById('reports-content').innerHTML =
-    '<div class="spinner"><div class="spin"></div>Loading report...</div>';
-  reportMonth = meetingMonth;
-  reportMode  = 'orders';
-  reportData  = null; summaryData = null; annualData = null;
-  // Load available months first, then the report for the current month
-  google.script.run
-    .withSuccessHandler(function(months) {
-      availableMonths = Array.isArray(months) ? months : [];
-      // Ensure current meetingMonth appears in list even if no orders yet
-      if (availableMonths.indexOf(reportMonth) === -1 && reportMonth && reportMonth !== 'Current') {
-        availableMonths.unshift(reportMonth);
-      }
-      loadReportForCurrentMonth();
-    })
-    .withFailureHandler(function() {
-      availableMonths = [];
-      loadReportForCurrentMonth();
-    })
-    .getAvailableMonths(sessionToken);
-}
-
-function loadReportForCurrentMonth() {
-  renderReportsShell();  // draw UI skeleton immediately
-  fetchOrdersReport();
-}
-
-function renderReportsShell() {
-  var monthOpts = availableMonths.map(function(m) {
-    return '<option value="' + esc(m) + '"' + (m === reportMonth ? ' selected' : '') + '>' + esc(m) + '</option>';
-  }).join('');
-  if (monthOpts === '') {
-    monthOpts = '<option value="' + esc(reportMonth) + '" selected>' + esc(reportMonth) + '</option>';
-  }
-
-  var html = '<div style="padding-top:16px">' +
-    '<div class="report-month-label">Meeting month</div>' +
-    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
-    '<select class="report-month-select" style="flex:1" onchange="onReportMonthChange(this.value)">' + monthOpts + '</select>' +
-    '<div id="report-exports"></div>' +
-    '</div>' +
-    '<div class="report-mode-tabs">' +
-    '<button class="report-mode-tab' + (reportMode==='orders'?' active':'') + '" onclick="setReportMode(\'orders\')">Orders</button>' +
-    '<button class="report-mode-tab' + (reportMode==='summary'?' active':'') + '" onclick="setReportMode(\'summary\')">Summary</button>' +
-    '<button class="report-mode-tab' + (reportMode==='annual'?' active':'') + '" onclick="setReportMode(\'annual\')">Annual</button>' +
-    '</div>' +
-    '<div id="report-panel"><div class="spinner"><div class="spin"></div>Loading...</div></div>' +
-    '<div id="footer-reports"></div>' +
-    '</div>';
-
-  document.getElementById('reports-content').innerHTML = html;
-}
-
-function onReportMonthChange(month) {
-  reportMonth = month;
-  reportData = null; summaryData = null;
-  document.getElementById('report-panel').innerHTML =
-    '<div class="spinner"><div class="spin"></div>Loading...</div>';
-  updateModeTabs();
-  if (reportMode === 'orders') {
-    fetchOrdersReport();
-  } else if (reportMode === 'summary') {
-    fetchSummaryReport();
-  } else {
-    renderAnnualPanel();
-  }
-}
-
-function setReportMode(mode) {
-  reportMode = mode;
-  updateModeTabs();
-  if (mode === 'orders') {
-    if (reportData) { renderOrdersPanel(); } else { fetchOrdersReport(); }
-  } else if (mode === 'summary') {
-    if (summaryData) { renderSummaryPanel(); } else { fetchSummaryReport(); }
-  } else {
-    if (annualData) { renderAnnualPanel(); } else { fetchAnnualReport(); }
-  }
-}
-
-function updateModeTabs() {
-  var tabs = document.querySelectorAll('.report-mode-tab');
-  var modes = ['orders', 'summary', 'annual'];
-  tabs.forEach(function(tab, i) {
-    tab.className = 'report-mode-tab' + (modes[i] === reportMode ? ' active' : '');
-  });
-}
-
-// ── Fetch helpers ──
-
-function fetchOrdersReport() {
-  setReportExports('');
-  google.script.run
-    .withSuccessHandler(function(data) {
-      viewsLoaded.reports = true;
-      if (!data || data.error) { renderPanelError(); return; }
-      if (!Array.isArray(data.rows)) data.rows = [];
-      reportData = data;
-      reportFilterStatus = 'All';
-      reportFilterGroup  = 'All';
-      if (reportMode === 'orders') renderOrdersPanel();
-    })
-    .withFailureHandler(renderPanelError)
-    .getMonthlyReport(reportMonth, sessionToken);
-}
-
-function fetchSummaryReport() {
-  setReportExports('');
-  document.getElementById('report-panel').innerHTML =
-    '<div class="spinner"><div class="spin"></div>Loading summary...</div>';
-  google.script.run
-    .withSuccessHandler(function(data) {
-      if (!data || data.error) { renderPanelError(); return; }
-      summaryData = data;
-      if (reportMode === 'summary') renderSummaryPanel();
-    })
-    .withFailureHandler(renderPanelError)
-    .getItemSummaryReport(reportMonth, sessionToken);
-}
-
-function fetchAnnualReport() {
-  setReportExports('');
-  document.getElementById('report-panel').innerHTML =
-    '<div class="spinner"><div class="spin"></div>Loading annual data...</div>';
-  google.script.run
-    .withSuccessHandler(function(data) {
-      if (!data || data.error) { renderPanelError(); return; }
-      annualData = data;
-      if (reportMode === 'annual') renderAnnualPanel();
-    })
-    .withFailureHandler(renderPanelError)
-    .getAnnualSummary(sessionToken);
-}
-
-function renderPanelError() {
-  var panel = document.getElementById('report-panel');
-  if (panel) panel.innerHTML =
-    '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Could not load data</div></div>';
-}
-
-function setReportExports(html) {
-  var el = document.getElementById('report-exports');
-  if (el) el.innerHTML = html || '';
-}
-
-var _exportMenuOpen = false;
-
-function exportDropdownHTML(pdfFnName, sheetsUrl) {
-  return '<div class="report-export-wrap" id="report-export-wrap">' +
-    '<button class="filter-tab" id="report-export-toggle" onclick="toggleExportMenu()" aria-haspopup="true">Export</button>' +
-    '<div class="report-export-menu" id="report-export-menu">' +
-    '<button class="report-export-item" onclick="closeExportMenu();' + pdfFnName + '()">PDF</button>' +
-    '<button class="report-export-item" onclick="closeExportMenu();window.open(\'' + sheetsUrl + '\',\'_blank\')">Open in Sheets</button>' +
-    '</div>' +
-    '</div>';
-}
-
-function toggleExportMenu() {
-  var menu = document.getElementById('report-export-menu');
-  if (!menu) return;
-  _exportMenuOpen = !menu.classList.contains('open');
-  menu.classList.toggle('open', _exportMenuOpen);
-}
-
-function closeExportMenu() {
-  var menu = document.getElementById('report-export-menu');
-  if (menu) menu.classList.remove('open');
-  _exportMenuOpen = false;
-}
-
-document.addEventListener('click', function(e) {
-  if (!_exportMenuOpen) return;
-  var wrap = document.getElementById('report-export-wrap');
-  if (wrap && !wrap.contains(e.target)) closeExportMenu();
-});
-
-// ── Orders panel ──
-
-function renderOrdersPanel() {
-  setReportExports(exportDropdownHTML('exportOrdersPDF', 'https://docs.google.com/spreadsheets/d/1TFcx55RMampRYUpVhUP3Nzp5hGERJB2F3GnLFvt7A40/edit#gid=1357782997'));
-  var data = reportData;
-  if (!data) return;
-
-  var groups = ['All'];
-  data.rows.forEach(function(r) {
-    if (groups.indexOf(r.groupName) === -1) groups.push(r.groupName);
-  });
-
-  var rows = data.rows.filter(function(r) {
-    return reportFilterGroup === 'All' || r.groupName === reportFilterGroup;
-  });
-
-  var collected = rows.filter(function(r) { return r.status === 'Completed'; })
-    .reduce(function(s, r) { return s + Number(r.fulfilledTotal || 0); }, 0);
-  var pending = rows.filter(function(r) { return r.status !== 'Completed'; })
-    .reduce(function(s, r) { return s + Number(r.estimatedTotal || 0); }, 0);
-
-  var groupOpts = groups.map(function(g) {
-    var label = g === 'All' ? 'All groups' : esc(g);
-    return '<option value="' + esc(g) + '"' + (reportFilterGroup === g ? ' selected' : '') + '>' + label + '</option>';
-  }).join('');
-
-  var html =
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
-    '<div style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:0 1px 3px rgba(46,49,146,0.05)">' +
-    '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:3px">Collected</div>' +
-    '<div style="font-size:18px;font-weight:600;color:#1dc9a4;line-height:1">$' + collected.toFixed(2) + '</div></div>' +
-    '<div style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:0 1px 3px rgba(46,49,146,0.05)">' +
-    '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:3px">Pending</div>' +
-    '<div style="font-size:18px;font-weight:600;color:var(--lime-dark);line-height:1">$' + pending.toFixed(2) + '</div></div>' +
-    '</div>' +
-    '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">' +
-    '<select class="report-filter-select" style="width:auto" onchange="reportFilterGroup=this.value;renderOrdersPanel()">' +
-    groupOpts + '</select>' +
-    '</div>' +
-    '<div class="report-card">';
-
-  if (rows.length === 0) {
-    html += '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No orders match the selected filters.</div>';
-  } else {
-    rows.forEach(function(r) {
-      var isCollected = r.status === 'Completed';
-      var amount = isCollected ? '$' + Number(r.fulfilledTotal || 0).toFixed(2) : '$' + Number(r.estimatedTotal || 0).toFixed(2);
-      html += '<div class="report-row">' +
-        '<div class="report-row-name"><div>' + esc(r.groupName) + '</div>' +
-        '<div class="report-row-sub">' + r.itemsOrdered + ' ordered · ' + (r.itemsFulfilled || '—') + ' fulfilled</div></div>' +
-        '<div style="text-align:right"><div class="status-indicator status-' + esc(r.status) + '">' + esc(r.status) + '</div>' +
-        '<div class="report-amount">' + amount + '</div></div></div>';
-    });
-    html += '<div class="report-footer">' +
-      '<span>Total collected (' + rows.filter(function(r){return r.status==='Completed';}).length + ' orders)</span>' +
-      '<span>$' + collected.toFixed(2) + '</span></div>';
-  }
-
-  html += '</div>';
-  document.getElementById('report-panel').innerHTML = html;
-  document.getElementById('footer-reports').innerHTML = FOOTER_DASH;
-}
-
-// ── Summary panel ──
-
-function renderSummaryPanel() {
-  setReportExports(exportDropdownHTML('exportSummaryPDF', 'https://docs.google.com/spreadsheets/d/1TFcx55RMampRYUpVhUP3Nzp5hGERJB2F3GnLFvt7A40/edit#gid=2091637984'));
-  var data = summaryData;
-  if (!data) { fetchSummaryReport(); return; }
-
-  // Only items with at least one order
-  var items = (data.items || []).filter(function(i) { return i.qtyOrdered > 0; });
-  if (items.length === 0) {
-    document.getElementById('report-panel').innerHTML =
-      '<div class="empty-state"><div class="empty-title">No items for this month</div></div>';
-    document.getElementById('footer-reports').innerHTML = FOOTER_DASH;
-    return;
-  }
-
-  // Group by category, preserving preferred order
-  var preferredOrder = ['Books','Pamphlets','Keytags','Medallions','Special Orders'];
-  var cats = {};
-  items.forEach(function(item) {
-    if (!cats[item.category]) cats[item.category] = [];
-    cats[item.category].push(item);
-  });
-  var catOrder = preferredOrder.filter(function(c) { return cats[c]; });
-  Object.keys(cats).forEach(function(c) {
-    if (catOrder.indexOf(c) === -1) catOrder.push(c);
-  });
-
-  var totalQtyOrdered    = items.reduce(function(s, i) { return s + i.qtyOrdered; }, 0);
-  var totalEstimated     = items.reduce(function(s, i) { return s + i.estimatedValue; }, 0);
-
-  var html =
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">' +
-    '<div class="stat-tile"><div class="stat-num" style="font-size:22px">' + totalQtyOrdered + '</div><div class="stat-label">Total Items Ordered</div></div>' +
-    '<div class="stat-tile"><div class="stat-num report-stat-pending">$' + totalEstimated.toFixed(2) + '</div><div class="stat-label">Estimated Total</div></div>' +
-    '</div>';
-
-  catOrder.forEach(function(cat) {
-    var catItems = cats[cat];
-    var catQty   = catItems.reduce(function(s, i) { return s + i.qtyOrdered; }, 0);
-    var catVal   = catItems.reduce(function(s, i) { return s + i.estimatedValue; }, 0);
-    var catId    = 'sumcat_' + cat.replace(/\W/g,'_');
-    html += '<div class="report-card" style="margin-bottom:12px">' +
-      '<div class="summary-cat-header" onclick="toggleSumCat(\'' + catId + '\')">' +
-      '<div class="report-card-title" style="flex:1;min-width:0">' + esc(cat) + '</div>' +
-      '<div class="summary-cat-qty">' + catQty + '</div>' +
-      '<div class="summary-cat-val">$' + catVal.toFixed(2) + '</div>' +
-      '<div class="summary-cat-chev"><svg class="summary-cat-chevron open" id="chev_' + catId + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div>' +
-      '</div>' +
-      '<div id="' + catId + '">';
-
-    catItems.forEach(function(item) {
-      html += '<div class="summary-item-row">' +
-        '<div class="summary-item-name">' + esc(item.name) + '</div>' +
-        '<div class="summary-item-qty">' + item.qtyOrdered + '</div>' +
-        '<div class="summary-item-val">$' + item.estimatedValue.toFixed(2) + '</div>' +
-        '<div style="width:16px;flex-shrink:0"></div>' +
-        '</div>';
-    });
-
-    html += '</div></div>';
-  });
-
-  document.getElementById('report-panel').innerHTML = html;
-  document.getElementById('footer-reports').innerHTML = FOOTER_DASH;
-}
-
-function toggleSumCat(catId) {
-  var el = document.getElementById(catId);
-  var chev = document.getElementById('chev_' + catId);
-  if (!el) return;
-  var hidden = el.style.display === 'none';
-  el.style.display = hidden ? '' : 'none';
-  if (chev) chev.className = 'summary-cat-chevron' + (hidden ? ' open' : '');
-}
-
-// ── Annual panel ──
-
-function renderAnnualPanel() {
-  setReportExports(exportDropdownHTML('exportAnnualPDF', 'https://docs.google.com/spreadsheets/d/1TFcx55RMampRYUpVhUP3Nzp5hGERJB2F3GnLFvt7A40/edit#gid=499648020'));
-  if (!annualData) { fetchAnnualReport(); return; }
-
-  var months = annualData.months || [];
-  if (months.length === 0) {
-    document.getElementById('report-panel').innerHTML =
-      '<div class="empty-state"><div class="empty-title">No data yet</div></div>';
-    document.getElementById('footer-reports').innerHTML = FOOTER_DASH;
-    return;
-  }
-
-  var totEst = 0, totFul = 0, totOrders = 0;
-  months.forEach(function(m) { totEst += m.estimatedTotal; totFul += m.fulfilledTotal; totOrders += m.orderCount; });
-
-  var rows = months.map(function(m) {
-    return '<tr><td>' + esc(m.meetingMonth) + '</td>' +
-      '<td style="text-align:right">' + m.orderCount + '</td>' +
-      '<td style="text-align:right">$' + Number(m.estimatedTotal).toFixed(2) + '</td>' +
-      '<td style="text-align:right">$' + Number(m.fulfilledTotal).toFixed(2) + '</td></tr>';
-  }).join('');
-
-  var html = '<table class="annual-table">' +
-    '<thead><tr><th>Month</th><th style="text-align:right">Orders</th><th style="text-align:right">Ordered</th><th style="text-align:right">Fulfilled</th></tr></thead>' +
-    '<tbody>' + rows + '</tbody>' +
-    '<tfoot><tr><td>Total (' + months.length + ' months)</td><td style="text-align:right">' + totOrders + '</td>' +
-    '<td style="text-align:right">$' + totEst.toFixed(2) + '</td>' +
-    '<td style="text-align:right">$' + totFul.toFixed(2) + '</td></tr></tfoot>' +
-    '</table>';
-
-  document.getElementById('report-panel').innerHTML = html;
-  document.getElementById('footer-reports').innerHTML = FOOTER_DASH;
-}
-
-// ── Export functions ──
-
-function exportCSV() {
-  google.script.run
-    .withSuccessHandler(function(url) { window.open(url, '_blank'); })
-    .exportReportCSV(reportMonth, reportFilterStatus, reportFilterGroup, sessionToken);
-}
-
-function exportOrdersPDF() {
-  if (!reportData) return;
-  var rows = reportData.rows.filter(function(r) {
-    return reportFilterGroup === 'All' || r.groupName === reportFilterGroup;
-  });
-  var collected = rows.filter(function(r){return r.status==='Completed';}).reduce(function(s,r){return s+Number(r.fulfilledTotal||0);},0);
-  var pending   = rows.filter(function(r){return r.status!=='Completed';}).reduce(function(s,r){return s+Number(r.estimatedTotal||0);},0);
-
-  var tableRows = rows.map(function(r) {
-    var isCollected = r.status === 'Completed';
-    var amount = isCollected ? '$'+Number(r.fulfilledTotal||0).toFixed(2) : '$'+Number(r.estimatedTotal||0).toFixed(2);
-    return '<tr><td>'+esc(r.groupName)+'</td><td style="text-align:center">'+r.itemsOrdered+'</td><td style="text-align:center">'+(r.itemsFulfilled||'—')+'</td><td style="text-align:right">'+amount+'</td><td style="text-align:center">'+esc(r.status)+'</td></tr>';
-  }).join('');
-
-  var win = window.open('', '_blank');
-  win.document.write('<!DOCTYPE html><html><head><title>NORVANA Orders — '+esc(reportMonth)+'</title>' +
-    '<style>body{font-family:Arial,sans-serif;padding:24px;color:#1a1a3e}h1{font-size:20px;margin-bottom:4px}' +
-    '.sub{color:#666;font-size:13px;margin-bottom:16px}.summary{display:flex;gap:24px;margin-bottom:20px}' +
-    '.sum-box{border:1px solid #ddd;border-radius:8px;padding:10px 16px;min-width:120px}' +
-    '.sum-val{font-size:20px;font-weight:300}.sum-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#888}' +
-    'table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1a1a3e;color:white;padding:8px 10px;text-align:left}' +
-    'td{padding:8px 10px;border-bottom:1px solid #eee}tr:last-child td{border-bottom:none}' +
-    'tfoot td{font-weight:700;border-top:2px solid #1a1a3e;border-bottom:none}' +
-    '@media print{button{display:none}}' +
-    '</style></head><body>' +
-    '<h1>NORVANA Literature Orders</h1>' +
-    '<div class="sub">' + esc(reportMonth) + ' · ' + rows.length + ' orders</div>' +
-    '<div class="summary">' +
-    '<div class="sum-box"><div class="sum-val">$'+collected.toFixed(2)+'</div><div class="sum-lbl">Collected</div></div>' +
-    '<div class="sum-box"><div class="sum-val" style="color:#c8d455">$'+pending.toFixed(2)+'</div><div class="sum-lbl">Pending</div></div>' +
-    '</div>' +
-    '<table><thead><tr><th>Group</th><th style="text-align:center">Ordered</th><th style="text-align:center">Fulfilled</th><th style="text-align:right">Amount</th><th style="text-align:center">Status</th></tr></thead>' +
-    '<tbody>'+tableRows+'</tbody>' +
-    '<tfoot><tr><td colspan="3">Total collected ('+rows.filter(function(r){return r.status==='Completed';}).length+' orders)</td><td style="text-align:right">$'+collected.toFixed(2)+'</td><td></td></tr></tfoot>' +
-    '</table>' +
-    '<br><button onclick="window.print()">Print / Save as PDF</button>' +
-    '</body></html>');
-  win.document.close();
-}
-
-function exportSummaryCSV() {
-  if (!summaryData) return;
-  var items = (summaryData.items || []).filter(function(i) { return i.qtyOrdered > 0; });
-  var preferredOrder = ['Books','Pamphlets','Keytags','Medallions','Special Orders'];
-  var cats = {};
-  items.forEach(function(i) { if (!cats[i.category]) cats[i.category] = []; cats[i.category].push(i); });
-  var catOrder = preferredOrder.filter(function(c) { return cats[c]; });
-  Object.keys(cats).forEach(function(c) { if (catOrder.indexOf(c) === -1) catOrder.push(c); });
-
-  var lines = ['Category,Item,Unit Price,Qty Ordered,Estimated Total'];
-  catOrder.forEach(function(cat) {
-    cats[cat].forEach(function(item) {
-      lines.push(['"'+cat+'"', '"'+item.name.replace(/"/g,'""')+'"', item.price.toFixed(2), item.qtyOrdered, item.estimatedValue.toFixed(2)].join(','));
-    });
-  });
-  var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  var url  = URL.createObjectURL(blob);
-  var a    = document.createElement('a');
-  a.href = url; a.download = 'NORVANA_Summary_' + reportMonth.replace(/\s/g,'_') + '.csv'; a.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportSummaryPDF() {
-  if (!summaryData) return;
-  var items = (summaryData.items || []).filter(function(i) { return i.qtyOrdered > 0; });
-  var preferredOrder = ['Books','Pamphlets','Keytags','Medallions','Special Orders'];
-  var cats = {};
-  items.forEach(function(i) { if (!cats[i.category]) cats[i.category] = []; cats[i.category].push(i); });
-  var catOrder = preferredOrder.filter(function(c) { return cats[c]; });
-  Object.keys(cats).forEach(function(c) { if (catOrder.indexOf(c) === -1) catOrder.push(c); });
-
-  var tableRows = '';
-  catOrder.forEach(function(cat) {
-    tableRows += '<tr style="background:#eeeeff;font-weight:700"><td colspan="3">' + esc(cat) + '</td></tr>';
-    cats[cat].forEach(function(item) {
-      tableRows += '<tr><td style="padding-left:20px">'+esc(item.name)+'</td>' +
-        '<td style="text-align:center">'+item.qtyOrdered+'</td>' +
-        '<td style="text-align:right">$'+item.estimatedValue.toFixed(2)+'</td></tr>';
-    });
-  });
-
-  var win = window.open('', '_blank');
-  win.document.write('<!DOCTYPE html><html><head><title>NORVANA Summary — '+esc(reportMonth)+'</title>' +
-    '<style>body{font-family:Arial,sans-serif;padding:24px;color:#1a1a3e}h1{font-size:20px;margin-bottom:4px}' +
-    '.sub{color:#666;font-size:13px;margin-bottom:16px}' +
-    'table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1a1a3e;color:white;padding:8px 10px;text-align:left}' +
-    'td{padding:7px 10px;border-bottom:1px solid #eee}' +
-    '@media print{button{display:none}}' +
-    '</style></head><body>' +
-    '<h1>NORVANA Item Summary</h1>' +
-    '<div class="sub">' + esc(reportMonth) + ' · ' + items.length + ' items</div>' +
-    '<table><thead><tr><th>Item</th><th style="text-align:center">Qty Ordered</th><th style="text-align:right">Estimated Total</th></tr></thead>' +
-    '<tbody>'+tableRows+'</tbody></table>' +
-    '<br><button onclick="window.print()">Print / Save as PDF</button>' +
-    '</body></html>');
-  win.document.close();
-}
-
-function exportAnnualCSV() {
-  if (!annualData) return;
-  var months = annualData.months || [];
-  var lines = ['Month,Orders,Ordered Total,Fulfilled Total'];
-  months.forEach(function(m) {
-    lines.push(['"'+m.meetingMonth+'"', m.orderCount, m.estimatedTotal.toFixed(2), m.fulfilledTotal.toFixed(2)].join(','));
-  });
-  var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  var url  = URL.createObjectURL(blob);
-  var a    = document.createElement('a');
-  a.href = url; a.download = 'NORVANA_Annual_Summary.csv'; a.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportAnnualPDF() {
-  if (!annualData) return;
-  var months = annualData.months || [];
-  var totEst = 0, totFul = 0, totOrd = 0;
-  months.forEach(function(m) { totEst += m.estimatedTotal; totFul += m.fulfilledTotal; totOrd += m.orderCount; });
-
-  var tableRows = months.map(function(m) {
-    return '<tr><td>'+esc(m.meetingMonth)+'</td><td style="text-align:right">'+m.orderCount+'</td>' +
-      '<td style="text-align:right">$'+Number(m.estimatedTotal).toFixed(2)+'</td>' +
-      '<td style="text-align:right">$'+Number(m.fulfilledTotal).toFixed(2)+'</td></tr>';
-  }).join('');
-
-  var win = window.open('', '_blank');
-  win.document.write('<!DOCTYPE html><html><head><title>NORVANA Annual Summary</title>' +
-    '<style>body{font-family:Arial,sans-serif;padding:24px;color:#1a1a3e}h1{font-size:20px;margin-bottom:4px}' +
-    '.sub{color:#666;font-size:13px;margin-bottom:16px}' +
-    'table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1a1a3e;color:white;padding:8px 10px;text-align:left}' +
-    'td{padding:8px 10px;border-bottom:1px solid #eee}' +
-    'tfoot td{font-weight:700;border-top:2px solid #1a1a3e;border-bottom:none;background:#f5f7a0}' +
-    '@media print{button{display:none}}' +
-    '</style></head><body>' +
-    '<h1>NORVANA Annual Summary</h1>' +
-    '<div class="sub">All months</div>' +
-    '<table><thead><tr><th>Month</th><th style="text-align:right">Orders</th><th style="text-align:right">Ordered</th><th style="text-align:right">Fulfilled</th></tr></thead>' +
-    '<tbody>'+tableRows+'</tbody>' +
-    '<tfoot><tr><td>Total ('+months.length+' months)</td><td style="text-align:right">'+totOrd+'</td>' +
-    '<td style="text-align:right">$'+totEst.toFixed(2)+'</td><td style="text-align:right">$'+totFul.toFixed(2)+'</td></tr></tfoot>' +
-    '</table>' +
-    '<br><button onclick="window.print()">Print / Save as PDF</button>' +
-    '</body></html>');
-  win.document.close();
-}
-
-// Keep old exportPDF name as alias for backwards compat
-function exportPDF() { exportOrdersPDF(); }
-
-// ── DASHBOARD: Inventory ───────────────────────────────────────
 function loadInventory() {
   google.script.run
     .withSuccessHandler(renderInventory)
@@ -2665,22 +2233,29 @@ function loadInventory() {
     .getCatalogAll(sessionToken);
 }
 
+let inventoryCategories = [];
+let activeInventoryCategory = null;
+
 function renderInventory(items) {
+  if (dashboardSignedOut) return;
   viewsLoaded.inventory = true;
 
-  const okItems  = items.filter(function(i) { return Number(i.stock) > 5; });
-  const lowItems = items.filter(function(i) { return Number(i.stock) > 0 && Number(i.stock) <= 5; });
-  const outItems = items.filter(function(i) { return Number(i.stock) === 0; });
+  const okItems  = items.filter(function(i) { var t = Number(i.lowAt) || 5; return Number(i.stock) > t; });
+  const lowItems = items.filter(function(i) { var t = Number(i.lowAt) || 5; return Number(i.stock) > 0 && Number(i.stock) <= t; });
+  const outItems = items.filter(function(i) { return Number(i.stock) <= 0; });
 
   const cats = {};
   items.forEach(function(item) {
     if (!cats[item.category]) cats[item.category] = [];
     cats[item.category].push(item);
   });
+  Object.keys(cats).forEach(function(c) {
+    cats[c].sort(function(a, b) { return itemSortScore(a) - itemSortScore(b); });
+  });
 
   let html = '<div style="padding-top:16px">'
-    + '<div class="view-sub">Manage stock, prices, and catalog items</div>'
     + '<div style="height:12px"></div>'
+    + '<button class="save-inv-btn" style="margin-bottom:16px" onclick="openInventoryReport()">View Inventory Report</button>'
     + '<div class="inv-summary">'
     + '<div class="inv-tile inv-tile-ok" onclick="filterInventory(\'ok\',this)">'
     + '<div class="inv-tile-num">' + okItems.length + '</div>'
@@ -2701,24 +2276,34 @@ function renderInventory(items) {
     + '</div>'
     + '<div style="height:10px"></div>';
 
-  const catOrder = ['Books','Pamphlets','Keytags','Medallions','Special Orders'];
+  const catOrder = CAT_ORDER;
   const allCats = catOrder.filter(function(c) { return cats[c]; }).concat(
     Object.keys(cats).filter(function(c) { return catOrder.indexOf(c) === -1; })
   );
 
-  allCats.forEach(function(cat) {
-    html += '<div class="report-card" style="margin-bottom:10px">'
-      + '<div class="report-card-header"><div class="report-card-title">' + esc(cat) + '</div></div>';
+  inventoryCategories = allCats;
+  if (allCats.indexOf(activeInventoryCategory) === -1) activeInventoryCategory = allCats[0] || null;
+  html += '<div class="cat-tabs" aria-label="Inventory categories">' + allCats.map(function(cat, index) {
+    const selected = cat === activeInventoryCategory;
+    return '<button type="button" class="cat-tab' + (selected ? ' active' : '') + '" id="inv-cat-' + index + '" aria-pressed="' + selected + '" onclick="switchInventoryCategory(' + index + ')">' + esc(catTabLabel(cat)) + '</button>';
+  }).join('') + '</div>';
+
+  allCats.forEach(function(cat, index) {
+    html += '<div class="report-card inventory-category' + (cat === activeInventoryCategory ? '' : ' hidden') + '" id="inv-category-' + index + '" style="margin-bottom:10px">'
+      + '<div class="report-card-header"><div class="report-card-title">' + esc(cat === 'Spanish Lit' ? 'Spanish' : cat) + '</div></div>';
     cats[cat].forEach(function(item) {
       const stock = Number(item.stock);
       const isOff = item.active === false || item.active === 'false' || item.active === 'FALSE';
-      const dotCls = stock === 0 ? 'dot-out' : stock <= 5 ? 'dot-low' : 'dot-ok';
-      const inpCls = stock === 0 ? 'out' : stock <= 5 ? 'low' : '';
-      const statusKey = isOff ? 'off' : stock === 0 ? 'out' : stock <= 5 ? 'low' : 'ok';
+      const lowAt = Number(item.lowAt) || 5;
+      const dotCls = stock <= 0 ? 'dot-out' : stock <= lowAt ? 'dot-low' : 'dot-ok';
+      const inpCls = stock <= 0 ? 'out' : stock <= lowAt ? 'low' : '';
+      const statusKey = isOff ? 'off' : stock <= 0 ? 'out' : stock <= lowAt ? 'low' : 'ok';
       html += '<div class="inv-row" data-status="' + statusKey + '" id="invrow-' + esc(item.itemId) + '">'
         + '<div class="inv-status-dot ' + dotCls + '"></div>'
         + '<div class="inv-name-wrap">'
         + '<div class="inv-name">' + esc(item.name) + '</div>'
+        + (Number(item.packSize) > 1 ? '<div class="report-help">Count singles (' + Number(item.packSize) + ' per pack)</div>' : '')
+        + '<label class="report-help"><input type="checkbox" ' + (isOff ? '' : 'checked') + ' onchange="toggleItem(this,\'' + esc(item.itemId) + '\')"> Active for new orders</label>'
         + '</div>'
         + '<div class="inv-price-wrap">'
         + '<div class="inv-field-label">Price</div>'
@@ -2728,10 +2313,10 @@ function renderInventory(items) {
         + ' data-item-id="' + esc(item.itemId) + '">'
         + '</div></div>'
         + '<div class="inv-stock-wrap">'
-        + '<div class="inv-field-label">Stock</div>'
+        + '<div class="inv-field-label">Count</div>'
         + '<input class="inv-stock-input ' + inpCls + '" id="inv-' + esc(item.itemId) + '"'
-        + ' type="text" inputmode="numeric" value="' + stock + '"'
-        + ' data-item-id="' + esc(item.itemId) + '" oninput="updateInvStyle(this)">'
+        + ' type="number" step="1" value="' + stock + '"'
+        + ' data-item-id="' + esc(item.itemId) + '" data-original="' + stock + '" data-low-at="' + lowAt + '" oninput="updateInvStyle(this)">'
         + '</div>'
         + '</div>';
     });
@@ -2740,7 +2325,18 @@ function renderInventory(items) {
 
   html += '<button class="save-inv-btn" onclick="saveInventory()">Save Stock & Prices</button></div>';
   document.getElementById('inventory-content').innerHTML = html;
-  document.getElementById('inventory-content').insertAdjacentHTML('beforeend', FOOTER_DASH);
+}
+
+function switchInventoryCategory(index) {
+  if (!inventoryCategories[index]) return;
+  activeInventoryCategory = inventoryCategories[index];
+  inventoryCategories.forEach(function(cat, i) {
+    const selected = i === index;
+    const button = document.getElementById('inv-cat-' + i);
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    document.getElementById('inv-category-' + i).classList.toggle('hidden', !selected);
+  });
 }
 
 function filterInventory(filter, el) {
@@ -2768,39 +2364,73 @@ function filterInventory(filter, el) {
 
 function updateInvStyle(input) {
   const v = parseInt(input.value) || 0;
+  const lowAt = parseInt(input.dataset.lowAt) || 5;
   input.classList.remove('low','out');
-  if (v === 0) input.classList.add('out');
-  else if (v <= 5) input.classList.add('low');
+  if (v <= 0) input.classList.add('out');
+  else if (v <= lowAt) input.classList.add('low');
   const row = input.closest('.inv-row');
   if (row) {
     const dot = row.querySelector('.inv-status-dot');
     if (dot) {
-      dot.className = 'inv-status-dot ' + (v === 0 ? 'dot-out' : v <= 5 ? 'dot-low' : 'dot-ok');
+      dot.className = 'inv-status-dot ' + (v <= 0 ? 'dot-out' : v <= lowAt ? 'dot-low' : 'dot-ok');
     }
   }
+}
+
+function refreshInventoryTiles() {
+  var ok = 0, low = 0, out = 0;
+  document.querySelectorAll('.inv-row').forEach(function(row) {
+    var inp = row.querySelector('.inv-stock-input');
+    if (!inp) return;
+    var v = parseInt(inp.value) || 0;
+    var lowAt = parseInt(inp.dataset.lowAt) || 5;
+    var isOff = row.dataset.status === 'off';
+    if (isOff) return;
+    if (v <= 0) { out++; row.dataset.status = 'out'; }
+    else if (v <= lowAt) { low++; row.dataset.status = 'low'; }
+    else { ok++; row.dataset.status = 'ok'; }
+  });
+  var okTile = document.querySelector('.inv-tile-ok .inv-tile-num');
+  var lowTile = document.querySelector('.inv-tile-low .inv-tile-num');
+  var outTile = document.querySelector('.inv-tile-out .inv-tile-num');
+  if (okTile) okTile.textContent = ok;
+  if (lowTile) lowTile.textContent = low;
+  if (outTile) outTile.textContent = out;
 }
 
 function saveInventory() {
   const stockInputs = document.querySelectorAll('.inv-stock-input');
   const priceInputs = document.querySelectorAll('.inv-price-input');
-  const stockUpdates = Array.from(stockInputs).map(function(inp) {
-    return { itemId: inp.dataset.itemId, stock: parseInt(inp.value) || 0 };
+  const stockUpdates = Array.from(stockInputs).filter(inp => inp.value.trim() !== inp.dataset.original).map(function(inp) {
+    return { itemId: inp.dataset.itemId, stock: inp.value.trim() === '' ? '' : Number(inp.value) };
   });
+  if (stockUpdates.some(u => u.stock === '' || !Number.isInteger(u.stock))) { alert('Enter whole-number stock counts, including negative counts when needed.'); return; }
   const priceUpdates = Array.from(priceInputs).map(function(inp) {
     return { itemId: inp.dataset.itemId, price: parseFloat(inp.value) || 0 };
   });
-  const btn = document.querySelector('.save-inv-btn');
+  const btn = document.querySelector('[onclick="saveInventory()"]');
+  if (btn.disabled) return;
   btn.textContent = 'Saving...'; btn.disabled = true;
   google.script.run
-    .withSuccessHandler(function() {
+    .withSuccessHandler(function(result) {
+      if (!result || !result.success) { btn.disabled = false; btn.textContent = 'Save Stock & Prices'; alert(result && result.error || 'Stock save failed.'); return; }
       google.script.run
         .withSuccessHandler(function() {
-          btn.textContent = '✓ Saved';
+          btn.textContent = 'Saved - refreshing...';
+          viewsLoaded.reports = false;
           viewsLoaded.inventory = false;
-          setTimeout(function() {
-            btn.textContent = 'Save Stock & Prices';
-            btn.disabled = false;
-          }, 2000);
+          google.script.run
+            .withSuccessHandler(function(items) {
+              renderInventory(items);
+              btn.textContent = 'Save Stock & Prices';
+              btn.disabled = false;
+            })
+            .withFailureHandler(function() {
+              refreshInventoryTiles();
+              btn.textContent = 'Save Stock & Prices';
+              btn.disabled = false;
+            })
+            .getCatalogAll(sessionToken);
         })
         .withFailureHandler(function() {
           btn.textContent = 'Price save failed'; btn.disabled = false;
@@ -2808,7 +2438,7 @@ function saveInventory() {
         .updateCatalogPrices(priceUpdates, sessionToken);
     })
     .withFailureHandler(function() {
-      btn.textContent = 'Save failed — try again';
+      btn.textContent = 'Save failed - try again';
       btn.disabled = false;
     })
     .updateStockCounts(stockUpdates, sessionToken);
@@ -2860,7 +2490,7 @@ function addItem(cat) {
     .addCatalogItem({ category: cat, name: name, price: price }, sessionToken);
 }
 
-// ── DASHBOARD: Settings ────────────────────────────────────────
+// -- DASHBOARD: Settings --
 function loadSettings() {
   google.script.run
     .withSuccessHandler(function(data) {
@@ -2879,6 +2509,7 @@ function loadSettings() {
 }
 
 function renderSettings(data, groups) {
+  if (dashboardSignedOut) return;
   viewsLoaded.settings = true;
 
   if (!data || data.error) {
@@ -2919,9 +2550,11 @@ function renderSettings(data, groups) {
     '<div class="report-card" style="padding:16px;margin-bottom:14px">' +
     '<div class="settings-section-label">Access</div>' +
     '<div class="settings-field"><label>Dashboard Access Code</label>' +
-    '<input class="settings-input" id="setting-code" type="password" inputmode="numeric" value="' + esc(data.accessCode) + '"></div>' +
+    '<input class="settings-input" id="setting-code" type="password" inputmode="numeric" autocomplete="new-password" placeholder="Leave blank to keep the current code" value="">' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:4px">To change it, enter a new numeric code of at least 6 digits. Everyone else signed in will be signed out.</div></div>' +
     '<div class="settings-field"><label>Lit Chair Email</label>' +
     '<input class="settings-input" id="setting-email" type="email" value="' + esc(data.email) + '"></div>' +
+    '<div class="settings-field"><label>Secretary Email</label><input class="settings-input" id="setting-secretary" type="email" value="' + esc(data.secretaryEmail || '') + '"></div>' +
     '<button class="settings-save-btn" onclick="saveGlobalSettings()">Save</button></div>' +
 
     // Schedule
@@ -2935,7 +2568,7 @@ function renderSettings(data, groups) {
     '</div>' + scheduleRows +
     '</div>' +
     '<div class="add-month-row" style="padding:10px 16px 0">' +
-    '<input class="add-month-input" type="text" id="new-month-input" placeholder="e.g. January 2027">' +
+    '<input class="add-month-input" type="text" id="new-month-input" placeholder="e.g. ' + esc(nextScheduleMonth_(data.schedule)) + '">' +
     '<button class="add-month-btn" onclick="addScheduleMonth()">+ Add Month</button>' +
     '</div>' +
     '<div style="padding:10px 16px 16px">' +
@@ -2954,7 +2587,6 @@ function renderSettings(data, groups) {
     '</div>';
 
   document.getElementById('settings-content').innerHTML = html;
-  document.getElementById('settings-content').insertAdjacentHTML('beforeend', FOOTER_DASH);
   // Store groups in memory for delete operations
   window._settingsGroups = groups.slice();
 }
@@ -2965,14 +2597,21 @@ function saveGlobalSettings() {
   const btn   = document.querySelector('[onclick="saveGlobalSettings()"]');
   btn.textContent = 'Saving...'; btn.disabled = true;
   google.script.run
-    .withSuccessHandler(function() {
-      btn.textContent = '✓ Saved';
+    .withSuccessHandler(function(result) {
+      if (result && result.success === false) { btn.textContent = 'Save'; btn.disabled = false; alert(result.error); return; }
+      if (result && result.newToken) {
+        sessionToken = result.newToken;
+        sessionStorage.setItem('norvana_session_token', result.newToken);
+        document.getElementById('setting-code').value = '';
+        showToast('Access code updated. Anyone else signed in has been signed out.', 5000);
+      }
+      btn.textContent = '\u2713 Saved';
       setTimeout(function() { btn.textContent = 'Save'; btn.disabled = false; }, 2000);
     })
     .withFailureHandler(function() {
       btn.textContent = 'Save failed'; btn.disabled = false;
     })
-    .saveGlobalSettings(code, email, sessionToken);
+    .saveGlobalSettings(code, email, sessionToken, document.getElementById('setting-secretary').value.trim());
 }
 
 function saveSchedule() {
@@ -2989,8 +2628,9 @@ function saveSchedule() {
   const btn = document.querySelector('[onclick="saveSchedule()"]');
   btn.textContent = 'Saving...'; btn.disabled = true;
   google.script.run
-    .withSuccessHandler(function() {
-      btn.textContent = '✓ Saved';
+    .withSuccessHandler(function(result) {
+      if (result && result.success === false) { btn.textContent = 'Save'; btn.disabled = false; alert(result.error); return; }
+      btn.textContent = '\u2713 Saved';
       setTimeout(function() { btn.textContent = 'Save Schedule'; btn.disabled = false; }, 2000);
     })
     .withFailureHandler(function() {
@@ -2999,11 +2639,25 @@ function saveSchedule() {
     .saveSchedule(schedule, sessionToken);
 }
 
-// ── Schedule / Groups / Helpers ────────────────────────────
+// -- Schedule / Groups / Helpers --
+// Month after the latest one in the schedule, e.g. "January 2028".
+function nextScheduleMonth_(schedule) {
+  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  let latest = -1;
+  (schedule || []).forEach(function(row) {
+    const m = String(row.month || '').trim().match(/^([A-Za-z]+)\s+(\d{4})$/);
+    const idx = m ? names.indexOf(m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()) : -1;
+    if (idx >= 0) latest = Math.max(latest, Number(m[2]) * 12 + idx);
+  });
+  if (latest < 0) { const now = new Date(); latest = now.getFullYear() * 12 + now.getMonth(); }
+  const next = latest + 1;
+  return names[next % 12] + ' ' + Math.floor(next / 12);
+}
+
 function addScheduleMonth() {
   const input = document.getElementById('new-month-input');
   const val   = input ? input.value.trim() : '';
-  if (!val) { alert('Please enter a month, e.g. January 2027'); return; }
+  if (!val) { alert('Please enter a month, e.g. ' + input.placeholder.replace(/^e\.g\. /, '')); return; }
   const btn = document.querySelector('[onclick="addScheduleMonth()"]');
   if (btn) { btn.textContent = 'Adding...'; btn.disabled = true; }
   google.script.run
@@ -3076,7 +2730,7 @@ function deleteGroup(idx) {
     .saveGroups(groups, sessionToken);
 }
 
-// ── Helpers ─────────────────────────────────────────────
+// -- Helpers --
 function esc(s) {
   if (s === null || s === undefined) return '';
   return String(s)
@@ -3084,5 +2738,6 @@ function esc(s) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
+<?!= HtmlService.createHtmlOutputFromFile('ReportUI').getContent(); ?>
 </body>
 </html>

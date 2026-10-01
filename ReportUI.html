@@ -1,0 +1,226 @@
+<style>
+.report-actions,.report-controls,.report-views{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:12px 0}
+.report-actions button,.report-views button{font:inherit;font-size:13px;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--white);color:var(--blue);cursor:pointer}
+body.dark .report-actions button,body.dark .report-views button{color:var(--onyx)}body.dark .report-views button.active{background:#2e3175;color:white}
+.report-actions button:disabled{opacity:.5;cursor:default}.report-views button.active{background:var(--blue);color:white}
+.report-controls label{display:flex;flex-direction:column;gap:5px;flex:1;min-width:130px;font-size:12px;color:var(--muted)}
+.report-controls input,.report-controls select,.report-controls textarea{font:inherit;font-size:14px;width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--onyx)}
+.report-controls .notes-field{flex-basis:100%}.report-table-wrap{overflow-x:auto}.report-table{width:100%;border-collapse:collapse;font-size:13px}
+.report-table th,.report-table td{padding:10px;text-align:right;border-bottom:1px solid var(--border)}.report-table th:first-child,.report-table td:first-child{text-align:left;min-width:110px}
+.report-table th{background:var(--snow);font-size:11px}.report-table td{font-variant-numeric:tabular-nums}.report-table th,.report-table td{overflow-wrap:anywhere}
+.report-help{font-size:12px;color:var(--muted);margin:8px 0}.report-totals{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}.report-total{flex:1;min-width:100px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--white)}.report-total span{display:block;font-size:11px;color:var(--muted)}.report-total strong{display:block;font-size:19px;margin-top:4px}
+.chair-paper{padding:16px}.chair-paper dl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0}.chair-paper dt{font-size:12px;color:var(--muted)}.chair-paper dd{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}.chair-paper .chair-notes{grid-column:1/-1}.report-badge{font-size:11px;padding:4px 8px;border-radius:20px;background:var(--snow);border:1px solid var(--border)}.report-preview-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:12px 0}.report-review{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:var(--snow);border:1px solid var(--border);border-radius:10px}.report-stock-date{font-size:12px;color:var(--muted);margin-bottom:10px}
+@media(max-width:480px){.report-table th,.report-table td{padding:8px 6px;font-size:11px}.report-actions button{flex:1}.report-total strong{font-size:17px}}
+</style>
+<script>
+var requestedReportMode=null, reportMode='orders', reportMonth='', availableMonths=[], reportYear='', reportPeriod='monthly', reportView='group', reportGroup='';
+var ordersReportData=null, inventoryReportData=null, chairData=null, chairPreview=null;
+var inventoryReportCategory=null;
+function inventoryReportCategories(){
+  const categories=[...new Set(inventoryReportData.items.map(i=>i.category||'Other'))];
+  const order=['Books','Pamphlets','Keytags','Medallions','Special Orders'];
+  return order.filter(c=>categories.includes(c)).concat(categories.filter(c=>!order.includes(c)));
+}
+function inventoryReportItems(){return inventoryReportData.items.filter(i=>(i.category||'Other')===inventoryReportCategory);}
+function inventoryReportTitle(){return 'Inventory'+(inventoryReportCategory?' - '+inventoryReportCategory:'');}
+function selectInventoryReportCategory(index){const cats=inventoryReportCategories();if(cats[index]){inventoryReportCategory=cats[index];renderInventoryReport();}}
+var reportRequest=0, chairSendPending=false, chairWritePending=false, chairPreviewSequence=0, chairDirty=false, chairDisplay='draft', chairPreferredDisplay=null;
+const REPORT_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function reportMonthInput(label){const p=String(label).split(' '), i=REPORT_MONTH_NAMES.indexOf(p[0]);return i<0?'':p[1]+'-'+String(i+1).padStart(2,'0');}
+function reportMonthLabel(value){const p=String(value).split('-');return p.length===2&&Number(p[1])>=1&&Number(p[1])<=12?REPORT_MONTH_NAMES[Number(p[1])-1]+' '+p[0]:'';}
+function reportMoney(n){return '$'+Number(n||0).toFixed(2);}
+function reportOption(value,label,selected){return '<option value="'+esc(value)+'"'+(value===selected?' selected':'')+'>'+esc(label)+'</option>';}
+function reportCanLeave(){return !chairWritePending&&(!chairDirty||confirm('Discard unsaved changes?'));}
+function openInventoryReport(){requestedReportMode='inventory';viewsLoaded.reports=false;switchView('reports');}
+function loadReports(){
+  reportMode=requestedReportMode||'orders';requestedReportMode=null;
+  if(!reportMonthInput(reportMonth)){const n=new Date();reportMonth=reportMonthInput(meetingMonth)?meetingMonth:REPORT_MONTH_NAMES[n.getMonth()]+' '+n.getFullYear();}
+  reportYear=reportYear||reportMonth.split(' ')[1];chairDirty=false;
+  renderReportsShell();fetchReport();
+  google.script.run.withSuccessHandler(months=>{availableMonths=Array.isArray(months)?months:[];if(reportMode==='orders')renderOrdersControls();}).withFailureHandler(()=>{}).getAvailableMonths(sessionToken);
+}
+function renderReportsShell(){
+  document.getElementById('reports-content').innerHTML='<div style="padding-top:16px"><div class="report-mode-tabs">'+
+    [['orders','Orders'],['inventory','Inventory'],['chair','Chair Report']].map(([key,label])=>'<button class="report-mode-tab'+(reportMode===key?' active':'')+'" onclick="setReportMode(\''+key+'\')">'+label+'</button>').join('')+
+    '</div><div id="report-controls"></div><div id="report-panel"></div><div id="footer-reports"></div></div>';
+}
+function setReportMode(mode){
+  if(!['orders','inventory','chair'].includes(mode)||!reportCanLeave())return;
+  reportMode=mode;chairDirty=false;renderReportsShell();fetchReport();
+}
+function onReportMonthChange(value){
+  const month=reportMonthLabel(value)||value;
+  if(!reportMonthInput(month)||!reportCanLeave()){const input=document.getElementById('report-month');if(input)input.value=reportMonthInput(reportMonth);return;}
+  reportMonth=month;reportYear=month.split(' ')[1];if(reportMode==='orders')reportGroup='';chairDirty=false;fetchReport();
+}
+function changeOrdersPeriod(value){if(value==='annual')reportYear=reportMonth.split(' ')[1];else if(reportPeriod==='annual')reportMonth=reportMonth.split(' ')[0]+' '+reportYear;reportPeriod=value;reportGroup='';fetchReport();}
+function changeOrdersYear(value){reportYear=value;reportGroup='';fetchReport();}
+function setOrdersView(view){reportView=view;renderOrdersControls();renderOrdersResults();}
+function changeReportGroup(value){reportGroup=value;fetchReport();}
+function renderOrdersControls(){
+  const years=[...new Set(availableMonths.map(m=>m.split(' ').pop()).concat([reportYear,String(new Date().getFullYear())]))].filter(y=>/^\d{4}$/.test(y)).sort().reverse();
+  const groups=ordersReportData?ordersReportData.groups:reportGroup?[reportGroup]:[];
+  document.getElementById('report-controls').innerHTML='<div class="report-controls"><label>Period<select onchange="changeOrdersPeriod(this.value)">'+reportOption('monthly','Monthly',reportPeriod)+reportOption('annual','Annual',reportPeriod)+'</select></label>'+
+    (reportPeriod==='annual'?'<label>Year<select onchange="changeOrdersYear(this.value)">'+years.map(y=>reportOption(y,y,reportYear)).join('')+'</select></label>':'<label>Month<input id="report-month" type="month" value="'+reportMonthInput(reportMonth)+'" onchange="onReportMonthChange(this.value)"></label>')+
+    '<label>Group<select onchange="changeReportGroup(this.value)">'+reportOption('','All groups',reportGroup)+groups.map(g=>reportOption(g,g,reportGroup)).join('')+'</select></label></div>'+
+    '<div class="report-views"><button class="'+(reportView==='group'?'active':'')+'" onclick="setOrdersView(\'group\')">By Group</button><button class="'+(reportView==='item'?'active':'')+'" onclick="setOrdersView(\'item\')">By Item</button></div>';
+}
+function fetchReport(){
+  const request=++reportRequest,mode=reportMode;chairPreview=null;chairPreviewSequence++;
+  ordersReportData=null;inventoryReportData=null;chairData=null;
+  if(mode==='orders')renderOrdersControls();else document.getElementById('report-controls').innerHTML='';
+  document.getElementById('report-panel').innerHTML='<div class="spinner"><div class="spin"></div>Loading...</div>';
+  const runner=google.script.run.withSuccessHandler(data=>{
+    if(request!==reportRequest||mode!==reportMode||dashboardSignedOut)return;
+    if(!data||data.error){document.getElementById('report-panel').textContent=data&&data.error||'Could not load report.';return;}
+    viewsLoaded.reports=true;
+    if(mode==='orders'){ordersReportData=data;renderOrdersControls();renderOrdersResults();}
+    else if(mode==='inventory'){inventoryReportData=data;renderInventoryReport();}
+    else{chairData=data;chairDirty=false;chairDisplay=chairPreferredDisplay||(data.finalized?'final':'draft');chairPreferredDisplay=null;renderChairReport();}
+  }).withFailureHandler(e=>{if(request===reportRequest)document.getElementById('report-panel').textContent=e.message;});
+  if(mode==='orders')runner.getOrdersReport(reportPeriod,reportPeriod==='annual'?reportYear:reportMonth,reportGroup,sessionToken);
+  else if(mode==='inventory')runner.getStockReport(sessionToken);
+  else runner.getChairReport(reportMonth,sessionToken);
+}
+function fetchSpecialReport(){fetchReport();}
+function reportTable(headers,rows){return '<div class="report-table-wrap"><table class="report-table"><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>'<tr>'+r.map(v=>'<td>'+esc(v)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+headers.length+'">No records</td></tr>')+'</tbody></table></div>';}
+function ordersTableData(){
+  const d=ordersReportData;
+  if(reportView==='item')return {headers:['Item','Requested','Fulfilled','Estimated Value','Fulfilled Value'],rows:d.items.map(i=>[i.name,i.requested,i.fulfilled,reportMoney(i.estimated),reportMoney(i.fulfilledValue)])};
+  if(d.period==='annual')return {headers:['Group','Orders','Requested','Fulfilled','Estimated Value','Pending','Collected'],rows:d.byGroup.map(g=>[g.groupName,g.orderCount,g.requested,g.fulfilled,reportMoney(g.estimated),reportMoney(g.pending),reportMoney(g.collected)])};
+  return {headers:['Group','Order','Status','Requested','Fulfilled','Estimated Value','Amount'],rows:d.orders.map(o=>[o.groupName,o.orderId,o.status,o.requested,o.fulfilled,reportMoney(o.estimated),reportMoney(o.amount)])};
+}
+function ordersMonthData(){return {headers:['Month','Orders','Requested','Fulfilled','Estimated Value','Pending','Collected'],rows:ordersReportData.months.map(m=>[m.month,m.orderCount,m.requested,m.fulfilled,reportMoney(m.estimated),reportMoney(m.pending),reportMoney(m.collected)])};}
+function ordersTotalsHTML(){const t=ordersReportData.totals;return '<div class="report-totals">'+[['Collected',t.collected],['Pending',t.pending],['Estimated Value',t.estimated]].map(([label,n])=>'<div class="report-total"><span>'+label+'</span><strong>'+reportMoney(n)+'</strong></div>').join('')+'</div>';}
+function ordersHelp(){return reportView==='item'?'Fulfilled Value includes Ready and Completed.':'Pending: New estimates + Ready amounts. Collected: Completed.';}
+function renderOrdersResults(){
+  if(!ordersReportData)return;
+  const table=ordersTableData(),months=ordersMonthData();
+  document.getElementById('report-panel').innerHTML=ordersTotalsHTML()+'<div class="report-actions"><button onclick="printOrdersReport()">Print / PDF</button><button onclick="exportOrdersCSV()">CSV</button></div><p class="report-help">'+ordersHelp()+'</p>'+reportTable(table.headers,table.rows)+
+    (ordersReportData.period==='annual'?'<details style="margin-top:16px"><summary>Monthly breakdown</summary>'+reportTable(months.headers,months.rows)+'</details>':'');
+}
+function ordersTitle(){return 'Orders - '+(reportView==='item'?'By Item':'By Group');}
+function ordersPeriodLabel(){return ordersReportData.selection+(ordersReportData.group?' | '+ordersReportData.group:' | All groups');}
+function printOrdersReport(){if(!ordersReportData)return;const t=ordersTableData(),m=ordersMonthData();printReportPage(ordersTitle(),'<h1>NORVANA</h1><h2>'+ordersTitle()+'</h2><p>'+esc(ordersPeriodLabel())+'</p>'+ordersTotalsHTML()+'<p>'+ordersHelp()+'</p>'+reportTable(t.headers,t.rows)+(ordersReportData.period==='annual'?'<h3>Monthly breakdown</h3>'+reportTable(m.headers,m.rows):''));}
+function ordersCSVRows(){const d=ordersReportData,t=ordersTableData(),m=ordersMonthData();return [['NORVANA',ordersTitle()],['Period',d.selection],['Group',d.group||'All groups'],['Collected',d.totals.collected],['Pending',d.totals.pending],['Estimated Value',d.totals.estimated],[ordersHelp()],[],t.headers,...t.rows,...(d.period==='annual'?[[],['Monthly breakdown'],m.headers,...m.rows]:[])];}
+function exportOrdersCSV(){if(ordersReportData)downloadReportCSV('NORVANA '+ordersTitle()+' '+ordersReportData.selection,ordersCSVRows());}
+function inventoryReportHTML(){const d=inventoryReportData;return '<p class="report-stock-date">Stock as of '+esc(new Date(d.stockAsOf).toLocaleString())+'</p>'+reportTable(['Item','Count'],inventoryReportItems().map(i=>[i.name,i.stock]));}
+function renderInventoryReport(){
+  const cats=inventoryReportCategories();
+  if(!cats.includes(inventoryReportCategory))inventoryReportCategory=cats[0]||null;
+  document.getElementById('report-controls').innerHTML='<div class="cat-tabs" aria-label="Inventory report categories">'+cats.map((cat,index)=>'<button type="button" class="cat-tab'+(cat===inventoryReportCategory?' active':'')+'" aria-pressed="'+(cat===inventoryReportCategory)+'" onclick="selectInventoryReportCategory('+index+')">'+esc(cat==='Special Orders'?'Special':cat)+'</button>').join('')+'</div><div class="report-actions"><button onclick="printInventoryReport()">Print / PDF</button><button onclick="exportInventoryCSV()">CSV</button></div>';
+  document.getElementById('report-panel').innerHTML=inventoryReportHTML();
+}
+function printInventoryReport(){if(inventoryReportData)printReportPage(inventoryReportTitle(),'<h1>NORVANA</h1><h2>'+esc(inventoryReportTitle())+'</h2>'+inventoryReportHTML());}
+function inventoryCSVRows(){return [['NORVANA',inventoryReportTitle()],['Stock as of',inventoryReportData.stockAsOf],[],['Item','Count'],...inventoryReportItems().map(i=>[i.name,i.stock])];}
+function exportInventoryCSV(){if(inventoryReportData)downloadReportCSV('NORVANA '+inventoryReportTitle(),inventoryCSVRows());}
+function downloadReportCSV(title,rows){
+  const csv=rows.map(r=>r.map(v=>'"'+String(typeof v==='string'&&/^[=+\-@]/.test(v)?"'"+v:v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=title+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function printReportPage(title,html){
+  const w=window.open('','_blank');if(!w){alert('Allow pop-ups to print.');return;}
+  w.document.write('<!doctype html><html><head><title>NORVANA '+esc(title)+'</title><style>body{font:14px Arial,sans-serif;color:#202044;padding:24px;line-height:1.5}h1{font-size:14px}h2{font-size:20px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{padding:7px;border-bottom:1px solid #ddd;text-align:right}th:first-child,td:first-child{text-align:left}thead{display:table-header-group}tr{break-inside:avoid}dt{font-weight:bold;margin-top:12px}dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.report-totals{display:flex;gap:24px;margin:16px 0}.report-total span,.report-total strong{display:block}.report-badge{font-size:12px}@media print{button{display:none}body{padding:0}.report-table-wrap{overflow:visible}}@page{margin:12mm}</style></head><body>'+html+'<p><button onclick="window.print()">Print / Save as PDF</button></p></body></html>');w.document.close();
+}
+function chairPaperHTML(r){return '<div class="chair-paper"><dl><div><dt>Groups Served</dt><dd>'+r.groupsServed+'</dd></div><div><dt>Collected</dt><dd>'+reportMoney(r.moneyCollected)+'</dd></div><div><dt>Spent</dt><dd>'+reportMoney(r.moneySpent)+'</dd></div><div class="chair-notes"><dt>Notes</dt><dd>'+esc(r.other||'None')+'</dd></div></dl></div>';}
+function displayedChairReport(){if(chairDisplay==='final'&&chairData.finalized)return chairData.finalized;const r={...chairData.draft};if(chairDirty){r.moneySpent=Number(document.getElementById('chair-spending').value)||0;r.other=document.getElementById('chair-notes').value;}return r;}
+function chairStatusLabel(){return chairDisplay==='final'?'Finalized (version '+chairData.finalized.version+')':'Draft';}
+function renderChairReport(){
+  const d=chairData,r=d.draft;
+  document.getElementById('report-controls').innerHTML='<div class="report-controls"><label>Reporting month<input id="report-month" type="month" value="'+reportMonthInput(reportMonth)+'" onchange="onReportMonthChange(this.value)"></label><label>Spending<input id="chair-spending" type="number" min="0" step="0.01" value="'+Number(r.moneySpent).toFixed(2)+'" oninput="chairEdited()"></label><label class="notes-field">Notes<textarea id="chair-notes" rows="3" maxlength="10000" oninput="chairEdited()">'+esc(r.other)+'</textarea></label></div>'+
+    '<div class="report-actions"><button onclick="saveChairDraftUI()">Save Draft</button><button id="chair-finalize" '+(!r.savedAt?'disabled':'')+' onclick="finalizeChairUI()">'+(d.finalized?'Update Final':'Finalize')+'</button><span id="chair-unsaved" class="report-help"></span></div>';
+  renderChairPreview();
+}
+function renderChairPreview(){
+  const d=chairData,r=displayedChairReport();
+  document.getElementById('report-panel').innerHTML='<div class="report-preview-head"><span class="report-badge">'+esc(chairStatusLabel())+'</span>'+
+    (d.finalized?'<div class="report-actions"><button onclick="showChairVersion(\''+(chairDisplay==='final'?'draft':'final')+'\')">'+(chairDisplay==='final'?'View Draft':'View Finalized')+'</button></div>':'')+
+    '<div class="report-actions"><button onclick="printChairUI()">Print / PDF</button><button '+(chairDisplay!=='final'?'disabled title="Finalize the draft or view the saved final to email."':'')+' onclick="previewChairUI()">Review Email</button></div></div><div class="report-card">'+chairPaperHTML(r)+'</div><div id="chair-email-preview"></div>';
+}
+function showChairVersion(version){chairDisplay=version;chairPreview=null;chairPreviewSequence++;renderChairPreview();}
+function chairEdited(){
+  const amount=document.getElementById('chair-spending').value,notes=document.getElementById('chair-notes').value;
+  chairDirty=amount===''||Number(amount)!==Number(chairData.draft.moneySpent)||notes!==chairData.draft.other;
+  chairDisplay='draft';chairPreview=null;chairPreviewSequence++;
+  document.getElementById('chair-finalize').disabled=chairDirty||!chairData.draft.savedAt;
+  document.getElementById('chair-unsaved').textContent=chairDirty?'Unsaved changes':'';renderChairPreview();
+}
+function chairActionRunner(display){
+  const month=reportMonth;chairWritePending=true;document.querySelectorAll('#report-controls input,#report-controls textarea,#report-controls button').forEach(b=>b.disabled=true);
+  const finish=r=>{chairWritePending=false;if(!r.success){alert(r.error);if(reportMode==='chair'&&reportMonth===month){document.querySelectorAll('#report-controls input,#report-controls textarea,#report-controls button').forEach(b=>b.disabled=false);document.getElementById('chair-finalize').disabled=chairDirty||!chairData.draft.savedAt;}return;}if(reportMode==='chair'&&reportMonth===month){chairPreferredDisplay=display;chairDirty=false;fetchReport();}};
+  return google.script.run.withSuccessHandler(finish).withFailureHandler(e=>finish({success:false,error:e.message}));
+}
+function saveChairDraftUI(){if(chairWritePending)return;const amount=document.getElementById('chair-spending').value,notes=document.getElementById('chair-notes').value;if(amount===''||!Number.isFinite(Number(amount))||Number(amount)<0){alert('Enter a non-negative spending amount.');return;}chairActionRunner('draft').saveChairDraft(reportMonth,Number(amount),notes,chairData.revision,sessionToken);}
+function finalizeChairUI(){
+  if(chairWritePending||chairDirty||!chairData.draft.savedAt)return;
+  if(chairDisplay!=='draft'){chairDisplay='draft';renderChairPreview();alert('Review the saved draft, then choose Update Final.');return;}
+  if(!confirm(chairData.finalized?'Replace the saved final with this saved draft?':'Finalize this saved draft?'))return;
+  chairActionRunner('final').finalizeChairReport(reportMonth,chairData.revision,!!chairData.finalized,sessionToken);
+}
+function printChairUI(){const r=displayedChairReport();printReportPage('Chair Report','<h1>NORVANA</h1><h2>Chair Report</h2><p>'+esc(r.reportingMonth)+' | '+esc(chairStatusLabel())+(chairDisplay==='draft'&&chairDirty?' | Unsaved changes':'')+'</p>'+chairPaperHTML(r));}
+
+function reopenFromPanel() {
+  const oid = currentOrderId, order = allOrders.find(o => o.orderId === oid), btn = document.getElementById('reopen-btn');
+  if (!order || !btn || btn.disabled) return;
+  if (!confirm('Reopen this Ready order? Its packed quantities will return to available stock. No email is sent until it is marked Ready again.')) return;
+  btn.disabled = true;
+  google.script.run.withSuccessHandler(result => {
+    if (!result.success) { btn.disabled = false; alert(result.error); return; }
+    order.status = 'New'; order.revision = result.revision; order.fulfilledTotal = 0;
+    clearFulfillDraft(oid); viewsLoaded.inventory = false; viewsLoaded.reports = false;
+    updateStats(); renderOrderList(); if (currentOrderId === oid) openOrder(oid);
+    showToast('Order reopened. Previous quantities are ready to edit.');
+  }).withFailureHandler(e => { btn.disabled = false; alert(e.message); }).reopenOrder(oid, sessionToken, order.revision);
+}
+
+function chairEmailSummary(email) {
+  if (!email) return '';
+  const date = value => value ? new Date(value).toLocaleString() : 'date unavailable';
+  let text;
+  if (email.status === 'accepted' || email.status === 'sent') {
+    text = 'Sent date (accepted for sending): ' + date(email.acceptedAt || email.at) + '. Recipient: ' + email.recipient + '. Delivery is not confirmed.';
+  } else if (email.status === 'failed') {
+    text = 'Send failed before contacting the email service. Retry Send is available after reviewing the report.';
+  } else {
+    text = 'Sending outcome is uncertain. The email may have sent. Check sent mail before choosing Retry Send.';
+  }
+  if (email.status !== 'accepted' && email.status !== 'sent' && email.lastAccepted) text += ' Last accepted for sending: ' + date(email.lastAccepted.at) + ' to ' + email.lastAccepted.recipient + '. Delivery is not confirmed.';
+  return text;
+}
+function previewChairUI() {
+  if (chairSendPending || !chairData || !chairData.finalized || chairDisplay !== 'final') return;
+  const month = reportMonth, sequence = ++chairPreviewSequence;
+  chairPreview = null;
+  document.getElementById('chair-email-preview').textContent = 'Loading email review...';
+  google.script.run.withSuccessHandler(r => {
+    if (reportMode !== 'chair' || reportMonth !== month || sequence !== chairPreviewSequence) return;
+    if (!r.success) { document.getElementById('chair-email-preview').textContent = r.error; return; } chairPreview = r;
+    const label = r.action === 'resend' ? 'Resend' : r.action === 'retry' ? 'Retry Send' : 'Send';
+    document.getElementById('chair-email-preview').innerHTML = '<h3>Email</h3><p>To: <strong>' + esc(r.recipient) + '</strong><br>Subject: ' + esc(r.subject) + '</p>' +
+      (r.previousEmail ? '<p class="report-help">' + esc(chairEmailSummary(r.previousEmail)) + '</p>' : '') +
+      '<div class="report-review">' + esc(r.body) + '</div><div class="report-actions"><button id="chair-send" onclick="sendChairUI()">' + label + '</button></div>';
+  }).withFailureHandler(e => { if (reportMode === 'chair' && reportMonth === month && sequence === chairPreviewSequence) document.getElementById('chair-email-preview').textContent = e.message; }).previewChairEmail(month, sessionToken);
+}
+function sendChairUI() {
+  if (!chairPreview || chairSendPending) return;
+  const preview = chairPreview, month = reportMonth;
+  let prompt = 'Send the displayed finalized report to ' + preview.recipient + '?';
+  if (preview.action === 'resend') prompt = 'A previous report email was accepted for sending. Intentionally resend the displayed report to ' + preview.recipient + '? This may create another copy.';
+  if (preview.action === 'retry') prompt = preview.previousEmail && preview.previousEmail.status === 'failed' ?
+    'Retry sending the displayed finalized report to ' + preview.recipient + '?' :
+    'The previous email may have sent. Check sent mail before continuing. After checking, do you want to explicitly retry to ' + preview.recipient + '? This may create another copy.';
+  if (!confirm(prompt)) return;
+  chairSendPending = true; chairPreview = null; chairPreviewSequence++;
+  const button = document.getElementById('chair-send'); if (button) { button.disabled = true; button.textContent = 'Sending...'; }
+  google.script.run.withSuccessHandler(r => {
+    chairSendPending = false;
+    alert(r.success ? r.message : r.error);
+    if (reportMode === 'chair' && reportMonth === month && !chairDirty && !chairWritePending) fetchSpecialReport();
+  }).withFailureHandler(e => {
+    chairSendPending = false;
+    alert('The send response was lost or failed. The email may have sent. Check sent mail, then review the report before an explicit Retry Send.');
+    if (reportMode === 'chair' && reportMonth === month && !chairDirty && !chairWritePending) fetchSpecialReport();
+  }).sendChairReport(preview.previewId, sessionToken, preview.action);
+}
+
+</script>
