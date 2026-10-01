@@ -18,7 +18,7 @@ function commitCells_(requests) {
 }
 function orderState_(orderId) {
   const sheet = getSheet('Orders'), data = sheet.getDataRange().getValues();
-  if (data[0][11] !== 'Revision') throw new Error('Setup required: Orders column L must be Revision. See DEPLOYMENT.md.');
+  if (data[0][11] !== 'Revision') throw new Error('Setup required: Orders column L must be Revision. See the Sheet layout section of HANDOFF.md.');
   const index = data.findIndex((r, i) => i > 0 && String(r[0]).trim() === String(orderId).trim());
   if (index < 0) return null;
   const row = data[index], status = normalizedStatus_(row[9]);

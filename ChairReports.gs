@@ -2,9 +2,9 @@
 const CHAIR_HEADERS_ = ['Presentation Month', 'Draft JSON', 'Finalized JSON', 'Revision', 'Email Attempt JSON'];
 function chairStore_() {
   const sheet = getSheet('Chair Reports');
-  if (!sheet) throw new Error('Create the Chair Reports tab using DEPLOYMENT.md before saving reports.');
+  if (!sheet) throw new Error('Create the Chair Reports tab described in HANDOFF.md before saving reports.');
   const data = sheet.getDataRange().getValues();
-  if (!CHAIR_HEADERS_.every((h,i) => i === 0 ? ['Presentation Month', 'Reporting Month'].includes(data[0][i]) : data[0][i] === h)) throw new Error('Chair Reports headers do not match DEPLOYMENT.md.');
+  if (!CHAIR_HEADERS_.every((h,i) => i === 0 ? ['Presentation Month', 'Reporting Month'].includes(data[0][i]) : data[0][i] === h)) throw new Error('Chair Reports headers do not match the Sheet layout in HANDOFF.md.');
   return { sheet: sheet, data: data };
 }
 function monthLabel_(ym) {

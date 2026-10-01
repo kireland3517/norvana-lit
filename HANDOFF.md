@@ -41,9 +41,10 @@ currently ends December 2027.
    set it to "Anyone with the link": that shows the Config tab (with the access code) and every group's contact details.
 2. **The committee Google account is the master key.** Turn on 2-step verification and change its password whenever
    the Lit Chair or Secretary role changes hands.
-3. **Do not paste one-time tools into the live Apps Script project.** Everything in `local-only-maintenance/` can wipe
-   data or reset the password. Any top-level function in the live project can be called by any visitor to the link.
-   Helper functions whose names end with an underscore (`_`) are private and safe; plain names are public.
+3. **Keep the live Apps Script project to the six files in this repo.** Any top-level function in the live project can be
+   called by any visitor to the link. Helper functions whose names end with an underscore (`_`) are private and safe;
+   plain names are public. Never add one-time setup, cleanup or debugging functions to the live project. If one is ever
+   needed, use a separate copy of the project and spreadsheet.
 4. **Never embed the app on another website.** Use the link or QR code only.
 
 ## Emails
@@ -70,3 +71,38 @@ The `tests/` folder has an automated test suite (`node --test tests/workflow.tes
 - Text typed by visitors is stored as plain text so spreadsheet formulas cannot run.
 - A failed save removes any half-written order rather than leaving it behind.
 - The dashboard keeps only a temporary session token in the browser, never the access code. Sessions last up to 6 hours.
+
+## How ordering and stock behave
+
+- Groups can order while a window is open in the **Schedule** (dates include the whole closing day, in the script's time
+  zone, America/New_York). The server decides the meeting month, never the browser. Items stay orderable even if the
+  recorded stock is zero.
+- Marking an order **Ready** deducts the quantities actually fulfilled and prices them at the original order-time prices.
+  **Reopen** puts the stock back so the order can be edited and marked Ready again. Deleting a Ready order also restores
+  its stock. **Completed** orders must use Undo Pickup first. Stock counts may go negative.
+- **Current Stock Count** in Inventory is a replacement value: enter what is physically on the shelf (30 left plus 50
+  received = enter 80). Spending does not change stock.
+- Every order has a revision number so two people editing the same order cannot overwrite each other. If the app says
+  "Order changed. Reload it," reload and try again.
+- Chair Report: pick the reporting month, enter Spending and Notes, Save Draft, then Finalize. A finalized report stays
+  frozen until it is replaced from a reviewed draft. The Secretary email shows the recipient and the full message before
+  anything is sent.
+
+## Sheet layout (needed to rebuild the spreadsheet)
+
+The app reads these tabs by name. Row 1 is the header row. The Apps Script project also needs the **Google Sheets API**
+advanced service turned on (Services > Sheets API) and the script time zone set to America/New_York.
+
+| Tab | Columns (A onward) |
+|---|---|
+| Orders | Order ID, Timestamp, Area Meeting Month, Group Name, Contact Name, Email, Phone, Estimated Total, Fulfilled Total, Status, Fulfilled At, **Revision** (column L must be exactly "Revision") |
+| Order Items | Row ID, Order ID, Item ID, Item Name, Unit Price, Qty Ordered, Qty Fulfilled, Line Total |
+| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size |
+| Config | Two columns, Setting and Value, with rows: Lit Chair Email, Dashboard Access Code, Secretary Email |
+| Schedule | Meeting Month (e.g. "October 2026"), Window Open, Window Close |
+| Groups | Group Name (one group per row) |
+| Chair Reports | Presentation Month (or Reporting Month), Draft JSON, Finalized JSON, Revision, Email Attempt JSON |
+
+Catalog column E counts single items, and Pack Size (column H) is how many singles one ordered unit contains (for
+example 5 for a five-pack), so orders count packs while stock counts singles. Do not rename the tabs. Leave the Revision,
+Chair Reports and Catalog stock columns alone when editing the sheet by hand.
