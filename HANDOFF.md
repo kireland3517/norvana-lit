@@ -1,6 +1,6 @@
 # NORVANA Literature Orders - keeping it running (handoff notes)
 
-Written for whoever looks after this next, technical or not. Last updated 2026-10-01.
+Written for whoever looks after this next, technical or not. Last updated 2026-10-05.
 
 ## What it is
 
@@ -41,7 +41,7 @@ currently ends December 2027.
    set it to "Anyone with the link": that shows the Config tab (with the access code) and every group's contact details.
 2. **The committee Google account is the master key.** Turn on 2-step verification and change its password whenever
    the Lit Chair or Secretary role changes hands.
-3. **Keep the live Apps Script project to the six files in this repo.** Any top-level function in the live project can be
+3. **Keep the live Apps Script project to the seven files in this repo.** Any top-level function in the live project can be
    called by any visitor to the link. Helper functions whose names end with an underscore (`_`) are private and safe;
    plain names are public. Never add one-time setup, cleanup or debugging functions to the live project. If one is ever
    needed, use a separate copy of the project and spreadsheet.
@@ -49,8 +49,20 @@ currently ends December 2027.
 
 ## Emails
 
-Order confirmations, "ready for pickup" notices and the Secretary report are sent from the committee account. A normal
-Gmail account may send about 100 emails a day (each order sends 2), so a very busy day can hit the limit.
+Order confirmations, "ready for pickup" notices, receipts and the Secretary report are sent from the committee account. A
+normal Gmail account may send about 100 emails a day. Each order sends 2 when submitted, 1 when marked Ready and 1 receipt
+when marked Completed, so a very busy day can hit the limit.
+
+**Receipts:** marking an order **Completed** (Picked Up) emails the group contact a receipt listing what was actually
+fulfilled and the total paid, to hand to the group treasurer. A completed order is treated as paid in full. For H&I
+Subcommittee it says "charged to H&I budget" instead of "paid". An order with nothing fulfilled sends no receipt. If the
+receipt email fails the order is still Completed and the dashboard shows a warning. Undo Pickup sends nothing, but
+completing the order again sends a fresh receipt.
+
+The group confirmation, the Lit Chair alert, the pickup notice and the receipt are styled (NORVANA header with the logo). The look
+lives in one place, `EmailTemplate.gs`, and the logo is a small PNG stored inside that file, so nothing is hosted
+elsewhere. Each email also carries a plain-text version, and if the styled version ever fails to build, the plain email is
+still sent. The Secretary report email is deliberately plain: the Lit Chair reviews its exact text before it is sent.
 
 ## Publishing a change
 
@@ -87,6 +99,23 @@ The `tests/` folder has an automated test suite (`node --test tests/workflow.tes
 - Chair Report: pick the reporting month, enter Spending and Notes, Save Draft, then Finalize. A finalized report stays
   frozen until it is replaced from a reviewed draft. The Secretary email shows the recipient and the full message before
   anything is sent.
+
+## H&I Subcommittee (special rules)
+
+H&I orders through the normal form by choosing the group **H&I Subcommittee**. The rules are keyed to that exact name
+(`HI_GROUP_` near the top of `Code.gs`).
+
+- **Never rename that group on its own.** If it is renamed in Settings > NA Groups, change `HI_GROUP_` to match and
+  publish a new version. Until then the special behavior silently stops.
+- **Items:** H&I-only items go in the Catalog with the category **H&I** (NAWS item numbers as Item IDs). Only H&I
+  Subcommittee sees them. H&I does not see Keytags or Medallions. Every other tab (Books, IPs, Special, Spanish) is
+  shared. The server rejects an order that breaks these rules, so hiding is not just cosmetic.
+- **Payment:** the area treasurer moves the money internally, so nothing is collected at pickup. The status flow is the
+  same (New, Ready, Completed). The H&I emails say the order is charged to the subcommittee budget instead of asking
+  for cash/check.
+- **Reports:** Completed H&I orders count as **Charged to H&I**, not **Collected**. The Chair Report and the Secretary
+  email show an "H&I charged to subcommittee budget" line, which is the number for the treasurer's transfer. Chair
+  Reports finalized before this change have no such line and are not altered.
 
 ## Sheet layout (needed to rebuild the spreadsheet)
 

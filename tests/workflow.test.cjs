@@ -68,7 +68,7 @@ function fixture() {
   }
   const context = vm.createContext({console,Date,Set,Map,JSON,Math,Number,Object,String,Array,RegExp,Error,
     SpreadsheetApp:{openById:()=>({getSheetByName:sheet})}, Session:{getScriptTimeZone:()=> 'America/New_York'},
-    Utilities:{formatDate,getUuid:()=>require('node:crypto').randomUUID()},
+    Utilities:{formatDate,getUuid:()=>require('node:crypto').randomUUID(),base64Decode:b=>Array.from(Buffer.from(b,'base64')),newBlob:(bytes,type,name)=>({bytes,type,name,size:bytes.length})},
     CacheService:{getScriptCache:()=>({get:k=>cache.get(k),put:(k,v)=>cache.set(k,v),remove:k=>cache.delete(k)})},
     PropertiesService:{getScriptProperties:()=>({getProperty:k=>props.get(k),setProperty:(k,v)=>props.set(k,v)})},
     MailApp:{getRemainingDailyQuota:()=>quota,sendEmail:e=>{mailCalls++;if(failMail)throw Error('Mail failed');emails.push(e);if(mailHook)mailHook();if(acceptThenThrow)throw Error('Mail response lost');}},
@@ -85,7 +85,7 @@ function fixture() {
       if(loseResponse){loseResponse=false;throw Error('Response lost after commit');}
     }}}
   });
-  for(const file of ['Code.gs','OrderWorkflow.gs','ChairReports.gs']) vm.runInContext(fs.readFileSync(file,'utf8'),context,{filename:file});
+  for(const file of ['Code.gs','OrderWorkflow.gs','ChairReports.gs','EmailTemplate.gs']) vm.runInContext(fs.readFileSync(file,'utf8'),context,{filename:file});
   const oid='NL-2610-001', quantities=q=>[{rowId:oid+'-01',qtyFulfilled:q}];
   return {c:context,tables,emails,appendLog,oid,quantities,stock:()=>tables.Catalog[1][4],rev:()=>tables.Orders[1][11],
     ready:q=>context.fulfillOrder(oid,quantities(q),999999,'test',tables.Orders[1][11]),
@@ -572,4 +572,167 @@ test('UI renders inventory, fulfillment stock, Secretary setting and both report
   assert.match(elements['report-panel'].innerHTML,/<th>Item<\/th><th>Count<\/th>/);assert.doesNotMatch(elements['report-panel'].innerHTML,/demand|fulfillment|Ordering month/i);
   vm.runInContext(`const r={presentationMonth:'November 2026',reportingMonth:'October 2026',groupsServed:2,moneyCollected:30,moneySpent:20,other:'<script>unsafe</scr'+'ipt>',savedAt:'today'};chairData={draft:r,live:r,finalized:{...r,version:2},revision:2,secretaryEmail:'secretary@example.invalid'};renderChairReport();`,c);
   assert.match(elements['report-controls'].innerHTML,/Update Final/);assert.match(elements['report-panel'].innerHTML,/&lt;script&gt;/);assert.doesNotMatch(elements['report-panel'].innerHTML,/orders awaiting pickup|completed-order counts/i);
+});
+
+// -- H&I Subcommittee: its own items, no Keytags/Medallions, paid from a budget instead of collected --
+function hiFixture(){
+  const f=fixture();openWindow(f);
+  f.tables.Groups.push(['H&I Subcommittee']);
+  f.tables.Catalog.push(['K1','Keytags','Keytag',1,0,'YES'],['M1','Medallions','Medallion',3,0,'YES'],['1500H&I','H&I','NA White Booklet: H&I Edition',0.92,0,'YES']);
+  return f;
+}
+const HI='H&I Subcommittee';
+
+test('H&I-only items are refused for other groups; Keytags and Medallions are refused for H&I',()=>{
+  const f=hiFixture(), before=f.tables.Orders.length;
+  const normal=f.c.submitOrder(order({items:[{itemId:'B1',qty:1},{itemId:'1500H&I',qty:1}]}));
+  assert.equal(normal.success,false);assert.match(normal.error,/not available/);
+  for(const id of ['K1','M1']){
+    const r=f.c.submitOrder(order({groupName:HI,requestId:'req-hi-'+id,items:[{itemId:'B1',qty:1},{itemId:id,qty:1}]}));
+    assert.equal(r.success,false);assert.match(r.error,/not available/);
+  }
+  assert.equal(f.tables.Orders.length,before);assert.equal(f.emails.length,0);
+  // Allowed combinations: H&I can order its own items alongside regular ones; other groups can still order Keytags.
+  const hi=f.c.submitOrder(order({groupName:HI,requestId:'req-hi-ok',items:[{itemId:'B1',qty:2},{itemId:'1500H&I',qty:3}]}));
+  assert.equal(hi.success,true);assert.equal(f.tables['Order Items'].filter(l=>l[1]===hi.orderId).length,2);
+  assert.equal(f.c.submitOrder(order({requestId:'req-key-ok',items:[{itemId:'K1',qty:1}]})).success,true);
+});
+
+test('form data carries the H&I rules and each catalog line carries its pack size',()=>{
+  const f=hiFixture();f.tables.Catalog[1][7]=5;
+  const d=f.c.getFormData();
+  assert.equal(d.hiRules.group,HI);assert.deepEqual(Array.from(d.hiRules.onlyCategories),['H&I']);assert.deepEqual(Array.from(d.hiRules.hiddenCategories),['Keytags','Medallions']);
+  assert.equal(d.catalog.find(i=>i.itemId==='B1').packSize,5);assert.equal(d.catalog.find(i=>i.itemId==='K1').packSize,1);
+});
+
+test('H&I emails say it is charged to the budget; other groups keep the cash/check wording',()=>{
+  const f=hiFixture();
+  const hi=f.c.submitOrder(order({groupName:HI,requestId:'req-hi-mail',email:'hi@example.invalid',items:[{itemId:'B1',qty:1}]}));
+  const confirm=f.emails.find(e=>e.to==='hi@example.invalid'), alert=f.emails.find(e=>e.to==='chair@example.invalid');
+  assert.match(confirm.body,/charged to the H&I subcommittee budget/);assert.doesNotMatch(confirm.body,/final amount due/);
+  assert.match(alert.body,/PAID BY: H&I subcommittee budget/);
+  f.emails.length=0;
+  const normal=f.c.submitOrder(order({items:[{itemId:'B1',qty:1}]}));
+  assert.match(f.emails.find(e=>e.to==='pat@example.invalid').body,/final amount due/);assert.doesNotMatch(f.emails.find(e=>e.to==='chair@example.invalid').body,/PAID BY/);
+  // Ready notices
+  f.emails.length=0;
+  const rowId=id=>id+'-01';
+  assert.equal(f.c.fulfillOrder(hi.orderId,[{rowId:rowId(hi.orderId),qtyFulfilled:1}],10,'test',0).success,true);
+  const ready=f.emails.pop();assert.match(ready.body,/CHARGED TO THE H&I SUBCOMMITTEE BUDGET: \$99\.00/);assert.match(ready.body,/No payment is needed at pickup/);assert.doesNotMatch(ready.body,/cash\/check|DUE AT PICKUP/);
+  assert.equal(f.c.fulfillOrder(normal.orderId,[{rowId:rowId(normal.orderId),qtyFulfilled:1}],10,'test',0).success,true);
+  const cash=f.emails.pop();assert.match(cash.body,/FINAL AMOUNT DUE AT PICKUP: \$99\.00/);assert.match(cash.body,/bring cash\/check payment/);assert.doesNotMatch(cash.body,/H&I/);
+});
+
+test('H&I Completed orders are reported as charged to the budget, not collected',()=>{
+  const f=hiFixture();
+  f.tables.Orders.push(['NL-2610-002','','October 2026',HI,'','','',20,12,'Completed','',0],['NL-2610-003','','October 2026','Group B','','','',40,30,'Completed','',0],['NL-2610-004','','October 2026',HI,'','','',8,8,'Ready','',0]);
+  f.tables['Order Items'].push(['NL-2610-002-01','NL-2610-002','B1','Book',10,2,1,10],['NL-2610-003-01','NL-2610-003','B1','Book',10,4,3,30],['NL-2610-004-01','NL-2610-004','B1','Book',10,1,1,8]);
+  const r=f.c.getOrdersReport('monthly','October 2026','','test');
+  assert.equal(r.totals.collected,30);assert.equal(r.totals.charged,12);
+  assert.equal(r.byGroup.find(g=>g.groupName===HI).charged,12);assert.equal(r.byGroup.find(g=>g.groupName===HI).collected,0);
+  assert.equal(r.byGroup.find(g=>g.groupName==='Group B').charged,0);
+  const o=r.orders.find(x=>x.orderId==='NL-2610-002');assert.equal(o.charged,12);assert.equal(o.collected,0);
+  assert.equal(f.c.getOrdersReport('monthly','October 2026',HI,'test').totals.collected,0);
+});
+
+test('Chair Report keeps cash collected apart from H&I charged; old snapshots are untouched',()=>{
+  const f=hiFixture();
+  f.tables.Orders.push(['NL-2610-002','','October 2026',HI,'','','',20,12,'Completed','',0],['NL-2610-003','','October 2026','Group B','','','',40,30,'Completed','',0]);
+  const live=f.c.getChairReport('October 2026','test').live;
+  assert.equal(live.moneyCollected,30);assert.equal(live.hiCharged,12);assert.equal(live.groupsServed,2);
+  assert.equal(f.c.saveChairDraft('October 2026',5,'',0,'test').success,true);assert.equal(f.c.finalizeChairReport('October 2026',1,false,'test').success,true);
+  assert.match(f.c.previewChairEmail('October 2026','test').body,/Collected: \$30\.00\nH&I charged to subcommittee budget: \$12\.00\nSpent: \$5\.00/);
+  // A snapshot finalized before this feature has no hiCharged and its email body is unchanged.
+  const g=fixture();const legacy={reportingMonth:'October 2026',groupsServed:7,moneyCollected:123.45,moneySpent:90,other:'',version:9};
+  g.tables['Chair Reports'].push(['October 2026',JSON.stringify(legacy),JSON.stringify(legacy),9,'']);
+  assert.doesNotMatch(g.c.previewChairEmail('October 2026','test').body,/H&I/);
+});
+
+test('order form: H&I group gets its own tab first and no Keytags/Medallions; switching groups clears quantities',()=>{
+  const elements={};
+  function element(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return false;},toggle(){}},insertAdjacentHTML(where,s){this.innerHTML+=s;},value:''};}
+  const storage={getItem:()=>null,setItem(){},removeItem(){}};
+  const c=vm.createContext({console,Date,Number,Set,Map,Math,JSON,Object,Array,String,setTimeout:()=>0,clearTimeout(){},alert(){},localStorage:storage,sessionStorage:storage,
+    window:{addEventListener(){},scrollTo(){}},document:{body:element('body'),getElementById:element,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){}},google:{script:{run:{}}}});
+  for(const file of ['App.html','ReportUI.html'])for(const m of fs.readFileSync(file,'utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c);
+  const tabs=()=>Array.from(elements['cat-wrap'].innerHTML.matchAll(/id="cattab-([^"]+)"/g),m=>m[1].replace(/&amp;/g,'&'));
+  vm.runInContext(`hiRules={group:'H&I Subcommittee',onlyCategories:['H&I'],hiddenCategories:['Keytags','Medallions']};
+    catalog=[{itemId:'B1',category:'Books',name:'Book',price:10},{itemId:'K1',category:'Keytags',name:'Keytag',price:1},{itemId:'M1',category:'Medallions',name:'Medal',price:3},
+      {itemId:'SP1',category:'Spanish Lit',name:'Spanish',price:2},{itemId:'SO1',category:'Special Orders',name:'Special',price:4},{itemId:'1500H&I',category:'H&I',name:'Booklet',price:0.92,packSize:5}];
+    initForm(['Group A','H&I Subcommittee']);`,c);
+  assert.deepEqual(tabs(),['Books','Keytags','Medallions','Special Orders','Spanish Lit']);
+  elements['group-name'].value='H&I Subcommittee';vm.runInContext('onGroupChange();',c);
+  assert.deepEqual(tabs(),['H&I','Books','Special Orders','Spanish Lit']);
+  assert.equal(vm.runInContext('activeCat',c),'H&I');assert.match(elements['cat-wrap'].innerHTML,/pack of 5/);
+  vm.runInContext(`changeQty('1500H&I',2);changeQty('B1',1);`,c);assert.equal(elements['subtotal-amount'].textContent,'$11.84');
+  elements['group-name'].value='Group A';vm.runInContext('onGroupChange();',c);
+  assert.deepEqual(tabs(),['Books','Keytags','Medallions','Special Orders','Spanish Lit']);
+  assert.equal(vm.runInContext('qtys["1500H&I"]',c),0);assert.equal(vm.runInContext('qtys.B1',c),1);assert.equal(elements['subtotal-amount'].textContent,'$10.00');
+  assert.doesNotMatch(elements['cat-wrap'].innerHTML,/H&amp;I|1500/);
+  assert.match(fs.readFileSync('App.html','utf8'),/placeholder="First name and last initial \(e\.g\. John D\.\)"/);
+});
+
+test('Ready emails no longer tell groups that unfilled quantities do not carry forward',()=>{
+  const f=hiFixture();
+  const normal=f.c.submitOrder(order({items:[{itemId:'B1',qty:1}]})),hi=f.c.submitOrder(order({groupName:HI,requestId:'req-hi-nocf',items:[{itemId:'B1',qty:1}]}));
+  for(const o of [normal,hi]){
+    f.emails.length=0;assert.equal(f.c.fulfillOrder(o.orderId,[{rowId:o.orderId+'-01',qtyFulfilled:1}],10,'test',0).success,true);
+    const body=f.emails.pop().body;assert.doesNotMatch(body,/Unfilled|carry forward|next month/);assert.match(body,/Questions\? Contact chair@example\.invalid/);
+  }
+});
+
+test('emails carry a styled HTML version with the inline logo; plain text stays, content is escaped, styling can never block sending',()=>{
+  const f=hiFixture();
+  const r=f.c.submitOrder(order({groupName:HI,requestId:'req-style-1',contactName:'<b>Pat</b> & "Q"',items:[{itemId:'B1',qty:2},{itemId:'1500H&I',qty:1}]}));
+  assert.equal(r.success,true);
+  const confirm=f.emails.find(e=>e.to==='pat@example.invalid'),alert=f.emails.find(e=>e.to==='chair@example.invalid');
+  for(const e of [confirm,alert]){
+    assert.ok(e.body.length>50);assert.match(e.htmlBody,/^<!DOCTYPE html>/);assert.match(e.htmlBody,/src="cid:norvanalogo"/);
+    const png=e.inlineImages.norvanalogo;assert.equal(png.type,'image/png');assert.deepEqual(png.bytes.slice(0,4),[0x89,0x50,0x4e,0x47]);
+  }
+  assert.doesNotMatch(alert.htmlBody,/<b>Pat/);assert.match(alert.htmlBody,/&lt;b&gt;Pat&lt;\/b&gt; &amp; &quot;Q&quot;/);
+  assert.match(confirm.htmlBody,/You asked/);assert.match(confirm.htmlBody,/NL-2610-002/);assert.match(confirm.htmlBody,/charged to the H&amp;I subcommittee budget/);
+  assert.match(alert.htmlBody,/Someone needs/);assert.match(alert.htmlBody,/NL-2610-002/);assert.match(alert.htmlBody,/1500H&amp;I/);assert.match(alert.htmlBody,/pat@example\.invalid/);
+  // Pickup notice: normal group shows the payment box, H&I shows the budget box.
+  const normal=f.c.submitOrder(order({requestId:'req-style-2',items:[{itemId:'B1',qty:1}]}));
+  f.emails.length=0;
+  f.c.fulfillOrder(normal.orderId,[{rowId:normal.orderId+'-01',qtyFulfilled:1}],10,'test',0);
+  const pay=f.emails.pop();assert.match(pay.htmlBody,/It's ready/);assert.match(pay.htmlBody,/Final amount due at pickup/);assert.match(pay.htmlBody,/cash or check/);assert.doesNotMatch(pay.htmlBody,/Unfilled|carry forward/);
+  f.c.fulfillOrder(r.orderId,[{rowId:r.orderId+'-01',qtyFulfilled:2},{rowId:r.orderId+'-02',qtyFulfilled:1}],10,'test',0);
+  const hi=f.emails.pop();assert.match(hi.htmlBody,/Charged to H&amp;I budget/);assert.doesNotMatch(hi.htmlBody,/cash or check|amount due at pickup/i);
+  // If building the styled version fails, the plain email still goes out.
+  const g=hiFixture();g.c.Utilities.newBlob=()=>{throw new Error('no blob');};
+  assert.equal(g.c.submitOrder(order({requestId:'req-style-3'})).success,true);
+  const plain=g.emails.find(e=>e.to==='pat@example.invalid');assert.ok(plain.body.length>50);assert.equal(plain.htmlBody,undefined);assert.equal(plain.inlineImages,undefined);
+});
+
+test('marking an order Completed emails the group a receipt of what was actually picked up and paid',()=>{
+  const f=fixture();
+  f.ready(4);f.emails.length=0;                       // ordered 5, only 4 fulfilled at $10
+  const done=f.c.completeOrder(f.oid,'test',1);assert.equal(done.success,true);assert.equal(done.warning,undefined);
+  assert.equal(f.emails.length,1);const r=f.emails[0];
+  assert.equal(r.to,'test@example.invalid');assert.match(r.subject,/Receipt/);assert.match(r.subject,/NL-2610-001/);
+  assert.match(r.body,/Book \(x4\) - \$40\.00/);assert.doesNotMatch(r.body,/x5/);assert.match(r.body,/TOTAL PAID: \$40\.00/);assert.match(r.body,/PICKED UP: [A-Z][a-z]+ \d+, \d{4}/);
+  assert.match(r.htmlBody,/Here's your receipt/);assert.match(r.htmlBody,/Total paid/);assert.match(r.htmlBody,/Paid in full/);assert.match(r.htmlBody,/Items received/);assert.match(r.htmlBody,/\$40\.00/);
+  assert.doesNotMatch(r.htmlBody,/H&amp;I|Unfilled|Cash or check/);
+  // Other transitions send no receipt; Undo Pickup sends nothing, completing again sends a fresh receipt.
+  f.emails.length=0;assert.equal(f.c.uncompleteOrder(f.oid,'test',2).success,true);assert.equal(f.emails.length,0);
+  assert.equal(f.c.completeOrder(f.oid,'test',3).success,true);assert.equal(f.emails.length,1);
+});
+
+test('receipt for an H&I order says charged to the budget, not paid',()=>{
+  const f=hiFixture();
+  const o=f.c.submitOrder(order({groupName:HI,requestId:'req-rcpt-hi',email:'hi@example.invalid',items:[{itemId:'B1',qty:2}]}));
+  f.c.fulfillOrder(o.orderId,[{rowId:o.orderId+'-01',qtyFulfilled:2}],0,'test',0);f.emails.length=0;
+  assert.equal(f.c.completeOrder(o.orderId,'test',1).success,true);
+  const r=f.emails.pop();assert.equal(r.to,'hi@example.invalid');
+  assert.match(r.body,/TOTAL CHARGED TO THE H&I SUBCOMMITTEE BUDGET: \$198\.00/);assert.doesNotMatch(r.body,/TOTAL PAID/);
+  assert.match(r.htmlBody,/Charged to H&amp;I budget/);assert.doesNotMatch(r.htmlBody,/Paid in full|Total paid/);
+});
+
+test('no receipt for an order with nothing fulfilled; a failed receipt email still completes the order with a warning',()=>{
+  const f=fixture();f.ready(0);f.emails.length=0;
+  assert.equal(f.c.completeOrder(f.oid,'test',1).success,true);assert.equal(f.emails.length,0);
+  const g=fixture();g.ready(3);g.failMail();
+  const r=g.c.completeOrder(g.oid,'test',1);assert.equal(r.success,true);assert.ok(r.warning);assert.match(r.warning,/receipt/i);assert.equal(g.tables.Orders[1][9],'Completed');
 });

@@ -90,6 +90,11 @@ function transitionOrder_(orderId, action, revision, fulfilled, token) {
       try { sendReadyNotice_(state.row, indices.map(i => ({ name: String(data[i][3]), price: Number(data[i][4]), qty: Number(fulfilled.find(f => String(f.rowId) === String(data[i][0])).qtyFulfilled) })), total, state.revision > 0); }
       catch (e) { result.warning = 'Order is Ready and inventory is saved, but the pickup email failed. Contact the group directly.'; }
     }
+    if (action === 'complete') {
+      // The group's receipt for its treasurer: what was actually picked up and the total paid.
+      try { sendReceiptNotice_(state.row, indices.map(i => ({ name: String(data[i][3]), price: Number(data[i][4]), qty: Number(data[i][6]) || 0 })), total); }
+      catch (e) { result.warning = 'Order is Completed, but the receipt email failed. Send the group a receipt another way if they need one.'; }
+    }
     return result;
   });
 }
@@ -97,10 +102,57 @@ function reopenOrder(orderId, token, revision) { return transitionOrder_(orderId
 
 function sendReadyNotice_(order, items, total, updated) {
   const lines = items.filter(i => i.qty > 0).map(i => '  ' + i.name + ' (x' + i.qty + ') - $' + (i.price * i.qty).toFixed(2));
-  MailApp.sendEmail({ to: String(order[5]), subject: (updated ? 'Updated Literature Order Ready - ' : 'Your Literature Order is Ready - ') + String(order[3]),
+  // Subcommittee orders are paid by an internal budget transfer, so there is nothing to collect at pickup.
+  const payment = isSubcommitteeGroup_(order[3])
+    ? '\n\nFINAL AMOUNT CHARGED TO THE H&I SUBCOMMITTEE BUDGET: $' + total.toFixed(2) + '\n\nNo payment is needed at pickup.'
+    : '\n\nFINAL AMOUNT DUE AT PICKUP: $' + total.toFixed(2) + '\n\nPlease bring cash/check payment to the Lit Chair table at the area meeting. Exact change appreciated.';
+  const subcommittee = isSubcommitteeGroup_(order[3]), month = meetingMonthFromOrdersCell_(order[2]);
+  sendStyledMail_({ to: String(order[5]), subject: (updated ? 'Updated Literature Order Ready - ' : 'Your Literature Order is Ready - ') + String(order[3]),
+    eyebrow: month + EMAIL_DOT_ + (updated ? 'Updated pickup' : 'Literature pickup'),
+    headline: updated ? ['Your order', 'was updated.'] : ['We did the thing.', "It's ready."],
+    lead: 'Your literature is packed and ready to go. The message is ready to carry.',
+    pill: updated ? 'Updated and ready' : 'Ready for pickup',
+    heading: String(order[3]), subheading: 'Order ' + String(order[0]), statusLabel: 'Packed for your group',
+    itemsLabel: 'Fulfilled items',
+    items: items.filter(i => i.qty > 0).map(i => ({ name: i.name, qty: i.qty, amount: i.price * i.qty })),
+    band: subcommittee
+      ? { label: 'Charged to H&I budget', sub: 'No payment needed at pickup', amount: total }
+      : { label: 'Final amount due at pickup', sub: 'Cash or check', amount: total },
+    info: { title: month + ' area meeting', text: 'Your order is at the Lit Chair table.' },
+    notes: [subcommittee
+      ? 'This order is charged to the H&I subcommittee budget, so no payment is needed at pickup.'
+      : 'Please bring cash or check to the Lit Chair table. Exact change is appreciated.'],
+    footer: ['Questions? Contact ' + getLitChairEmail() + '.', 'NORVANA Literature Committee'],
     body: 'Your literature order for the ' + meetingMonthFromOrdersCell_(order[2]) + ' area meeting is ready for pickup.\n\nGROUP: ' + String(order[3]) +
-      '\n\nITEMS FULFILLED:\n' + (lines.join('\n') || 'No items fulfilled.') + '\n\nFINAL AMOUNT DUE AT PICKUP: $' + total.toFixed(2) +
-      '\n\nPlease bring cash/check payment to the Lit Chair table at the area meeting. Exact change appreciated. Unfilled quantities do not carry forward; submit a new order next month.\n\nQuestions? Contact ' + getLitChairEmail() + '\n\nNORVANA Literature Committee' });
+      '\n\nITEMS FULFILLED:\n' + (lines.join('\n') || 'No items fulfilled.') + payment +
+      '\n\nQuestions? Contact ' + getLitChairEmail() + '\n\nNORVANA Literature Committee' });
+}
+
+// Sent when an order is marked Completed (picked up). Lists only what was actually fulfilled.
+// A completed order is treated as paid in full, so the total paid is the fulfilled total.
+function sendReceiptNotice_(order, items, total) {
+  const got = items.filter(i => i.qty > 0);
+  if (!got.length) return;
+  const subcommittee = isSubcommitteeGroup_(order[3]), month = meetingMonthFromOrdersCell_(order[2]);
+  const date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy');
+  const lines = got.map(i => '  ' + i.name + ' (x' + i.qty + ') - $' + (i.price * i.qty).toFixed(2)).join('\n');
+  sendStyledMail_({ to: String(order[5]), subject: 'Literature Receipt - ' + String(order[3]) + ' - ' + String(order[0]),
+    eyebrow: month + EMAIL_DOT_ + 'Receipt',
+    headline: ['Thank you.', "Here's your receipt."],
+    lead: 'Keep this for your group treasurer. It lists what your group picked up' + (subcommittee ? ' and the amount charged to the H&I budget.' : ' and what was paid.'),
+    pill: subcommittee ? 'Charged to H&I budget' : 'Paid in full',
+    heading: String(order[3]), subheading: 'Order ' + String(order[0]) + EMAIL_DOT_ + 'Picked up ' + date, statusLabel: 'Receipt',
+    itemsLabel: 'Items received',
+    items: got.map(i => ({ name: i.name, qty: i.qty, amount: i.price * i.qty })),
+    band: subcommittee
+      ? { label: 'Total charged to H&I budget', sub: 'No payment collected at pickup', amount: total }
+      : { label: 'Total paid', sub: 'Paid at pickup', amount: total },
+    notes: ['Received from NORVANA Literature Committee for the ' + month + ' area meeting.'],
+    footer: ['Questions? Contact ' + getLitChairEmail() + '.', 'NORVANA Literature Committee'],
+    body: 'LITERATURE RECEIPT\n\nGROUP: ' + String(order[3]) + '\nORDER: ' + String(order[0]) + '\nPICKED UP: ' + date +
+      '\nAREA MEETING: ' + month + '\n\nITEMS RECEIVED:\n' + lines + '\n\n' +
+      (subcommittee ? 'TOTAL CHARGED TO THE H&I SUBCOMMITTEE BUDGET: $' : 'TOTAL PAID: $') + total.toFixed(2) +
+      '\n\nKeep this receipt for your group treasurer.\n\nQuestions? Contact ' + getLitChairEmail() + '\n\nNORVANA Literature Committee' });
 }
 
 function inventoryReport_(meetingMonth, token) {
@@ -145,16 +197,18 @@ function getOrdersReport(period, selection, group, token) {
     const selected = inPeriod.filter(o => !group || groupKey(o.groupName) === groupKey(group));
     const lines = getSheet('Order Items').getDataRange().getValues();
     const catalog = getCatalogMap_(), itemMap = new Map(), groupMap = new Map();
-    const empty = () => ({ orderCount: 0, requested: 0, fulfilled: 0, estimated: 0, collected: 0, pending: 0 });
+    const empty = () => ({ orderCount: 0, requested: 0, fulfilled: 0, estimated: 0, collected: 0, charged: 0, pending: 0 });
     const totals = empty(), months = Array.from({length:12}, (_,i) => ({ month: monthLabel_(year * 12 + i), ...empty() }));
     const add = (target, row) => {
       ['orderCount','requested','fulfilled'].forEach(k => target[k] += row[k]);
-      ['estimated','collected','pending'].forEach(k => target[k] = Math.round((target[k] + row[k]) * 100) / 100);
+      ['estimated','collected','charged','pending'].forEach(k => target[k] = Math.round((target[k] + row[k]) * 100) / 100);
     };
     const orders = selected.map(o => {
       const result = { orderId: o.orderId, groupName: groupNames.get(groupKey(o.groupName)), status: o.status,
         orderCount: 1, requested: 0, fulfilled: 0, estimated: o.estimatedTotal,
-        collected: o.status === 'Completed' ? o.fulfilledTotal : 0,
+        // Subcommittee orders are charged to a budget, not collected as cash at pickup.
+        collected: o.status === 'Completed' && !isSubcommitteeGroup_(o.groupName) ? o.fulfilledTotal : 0,
+        charged: o.status === 'Completed' && isSubcommitteeGroup_(o.groupName) ? o.fulfilledTotal : 0,
         pending: o.status === 'Completed' ? 0 : o.status === 'Ready' ? o.fulfilledTotal : o.estimatedTotal,
         amount: o.status === 'New' ? o.estimatedTotal : o.fulfilledTotal };
       const seenLines = new Set();

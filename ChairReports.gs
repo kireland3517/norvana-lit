@@ -16,9 +16,12 @@ function chairFigures_(reportingMonth, token) {
   if (ym == null) throw new Error('Select a reporting month.');
   const month = monthLabel_(ym);
   const completed = getOrders(month, token).filter(o => o.status === 'Completed' && orderMatchesReportMonth_(o.meetingMonth, month));
+  const total = list => Math.round(list.reduce((sum,o) => sum + o.fulfilledTotal, 0) * 100) / 100;
+  // Subcommittee orders are charged to its budget, so they are reported apart from cash collected.
   return { reportingMonth: month,
     groupsServed: new Set(completed.map(o => o.groupName.trim().toLowerCase())).size,
-    moneyCollected: Math.round(completed.reduce((sum,o) => sum + o.fulfilledTotal, 0) * 100) / 100 };
+    moneyCollected: total(completed.filter(o => !isSubcommitteeGroup_(o.groupName))),
+    hiCharged: total(completed.filter(o => isSubcommitteeGroup_(o.groupName))) };
 }
 // Saved JSON owns the association; old column A keys must never shift a saved report.
 function chairRowMonth_(row, header) {
@@ -75,7 +78,9 @@ function finalizeChairReport(reportingMonth, revision, replaceFinalized, token) 
 function chairReportText_(report) {
   return 'NORVANA Chair Report\nReporting month: ' + report.reportingMonth +
     '\nFinalized (version ' + report.version + ')\n\nGroups Served: ' + report.groupsServed +
-    '\nCollected: $' + report.moneyCollected.toFixed(2) + '\nSpent: $' + report.moneySpent.toFixed(2) +
+    '\nCollected: $' + report.moneyCollected.toFixed(2) +
+    (typeof report.hiCharged === 'number' ? '\nH&I charged to subcommittee budget: $' + report.hiCharged.toFixed(2) : '') +
+    '\nSpent: $' + report.moneySpent.toFixed(2) +
     '\nNotes: ' + (report.other || 'None');
 }
 // Email state is independent of the report revision. Legacy records remain readable.

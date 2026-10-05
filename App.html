@@ -249,27 +249,35 @@
     overflow: hidden;
   }
 
-  .cat-tabs { display: flex; justify-content: stretch; border-bottom: 1px solid var(--border); padding: 0; overflow: hidden; }
+  /* Tabs keep their natural width and the bar scrolls sideways when they do not all fit.
+     When everything fits, flex-grow spreads them across the full width as before.
+     The fade-left / fade-right classes (set by syncTabBar) hint that more tabs are off-screen. */
+  .cat-tabs {
+    display: flex; position: relative;
+    border-bottom: 1px solid var(--border); padding: 0;
+    overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
+  }
+  .cat-tabs::-webkit-scrollbar { display: none; }
+  .cat-tabs.fade-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  .cat-tabs.fade-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+  .cat-tabs.fade-left.fade-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
 
   .cat-tab {
-    flex: 1 1 auto;
-    min-width: 0;
+    flex: 1 0 auto;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 2px;
-    padding: 15px 3px 8px;
+    padding: 15px 9px 8px;
     border: none; background: transparent;
     font-family: "Outfit", sans-serif;
     font-size: 10px; font-weight: 700;
     letter-spacing: 0.03em; text-transform: uppercase;
     color: var(--muted); cursor: pointer;
     border-bottom: 2.5px solid transparent;
-    margin-bottom: -1px;
     transition: color 0.18s, border-color 0.18s, background 0.18s;
     position: relative;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   .cat-tab:not(.active):hover { background: var(--blue-pale); color: var(--blue-mid); }
   .cat-tab:not(.active):hover .icon-stroke { color: var(--blue-mid); }
@@ -1423,6 +1431,51 @@ function doLogin() {
   switchView('order');
 }
 
+// -- TAB BARS (order form, Inventory, Inventory Report) --
+// Bars scroll sideways when the tabs do not all fit. Fade hints show which side has more tabs,
+// and the selected tab is kept in view. A MutationObserver covers every place a bar is rebuilt.
+function syncTabBar(bar) {
+  const max = bar.scrollWidth - bar.clientWidth;
+  bar.classList.toggle('fade-left', max > 2 && bar.scrollLeft > 2);
+  bar.classList.toggle('fade-right', max > 2 && bar.scrollLeft < max - 2);
+}
+function revealActiveTab(bar) {
+  const tab = bar.querySelector('.cat-tab.active');
+  if (!tab) return;
+  // Only when the selected tab changed, so a manual swipe is not undone by unrelated page updates.
+  const label = tab.textContent;
+  if (bar.dataset.shownTab === label) return;
+  bar.dataset.shownTab = label;
+  const left = tab.offsetLeft, right = left + tab.offsetWidth;
+  if (left < bar.scrollLeft + 30) bar.scrollLeft = Math.max(0, left - 30);
+  else if (right > bar.scrollLeft + bar.clientWidth - 30) bar.scrollLeft = right - bar.clientWidth + 30;
+}
+function refreshTabBars() {
+  Array.prototype.forEach.call(document.querySelectorAll('.cat-tabs'), function(bar) {
+    if (!bar.dataset.scrollHint) {
+      bar.dataset.scrollHint = '1';
+      bar.addEventListener('scroll', function() { syncTabBar(bar); }, { passive: true });
+    }
+    revealActiveTab(bar);
+    syncTabBar(bar);
+  });
+}
+(function() {
+  let queued = false;
+  function queue() {
+    if (queued) return;
+    queued = true;
+    setTimeout(function() { queued = false; refreshTabBars(); }, 0);
+  }
+  if (typeof MutationObserver !== 'undefined' && document.documentElement) {
+    new MutationObserver(queue).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  document.addEventListener('click', function(e) {
+    if (e.target && e.target.closest && e.target.closest('.cat-tab')) queue();
+  });
+  window.addEventListener('resize', queue);
+})();
+
 // -- ORDER FORM --
 function showOrderFormError(msg) {
   var m = (msg && String(msg).trim()) ? esc(String(msg)) : 'Please check your connection and try again.';
@@ -1444,6 +1497,7 @@ function loadFormData(retryAttempt) {
       windowData = data.windowData || {};
       catalog    = data.catalog    || [];
       if (data.litChairEmail) litChairEmail = data.litChairEmail;
+      hiRules = data.hiRules || null;
       initForm(data.groups || []);
     })
     .withFailureHandler(function(err) {
@@ -1469,7 +1523,7 @@ const CAT_ICONS = {
 };
 
 // Category order
-const CAT_ORDER = ['Books', 'IPs', 'Keytags', 'Medallions', 'Special Orders', 'Spanish Lit'];
+const CAT_ORDER = ['Books', 'IPs', 'Keytags', 'Medallions', 'Special Orders', 'Spanish Lit', 'H&I'];
 const CAT_TAB_LABELS = { 'Special Orders': 'Special', 'Spanish Lit': 'Spanish' };
 function catTabLabel(cat) { return CAT_TAB_LABELS[cat] || cat; }
 function itemSortScore(item) {
@@ -1480,36 +1534,49 @@ function itemSortScore(item) {
 }
 let activeCat = null;
 let formGroups = [];
+let hiRules = null;
 
-function initForm(groups) {
-  formGroups = groups;
-  setSubText('Group Order Form');
+// Categories a group may order from, in tab order. H&I Subcommittee gets its own
+// categories first and never sees the hidden ones; every other group never sees the H&I-only ones.
+// The server enforces the same rules on submit.
+function allowedCategories(catNames, group) {
+  const rules = hiRules || { group: '', onlyCategories: [], hiddenCategories: [] };
+  const isHI = !!rules.group && group === rules.group;
+  const allowed = catNames.filter(function(c) {
+    return isHI ? rules.hiddenCategories.indexOf(c) === -1 : rules.onlyCategories.indexOf(c) === -1;
+  });
+  const preferred = (isHI ? rules.onlyCategories.concat(CAT_ORDER) : CAT_ORDER);
+  const ordered = preferred.filter(function(c, i) { return allowed.indexOf(c) !== -1 && preferred.indexOf(c) === i; });
+  // Also add any unexpected categories at the end
+  allowed.forEach(function(c) { if (ordered.indexOf(c) === -1) ordered.push(c); });
+  return ordered;
+}
 
-  const groupOptions = '<option value="">Select your group...</option>' +
-    groups.map(function(g) { return '<option value="' + esc(g) + '">' + esc(g) + '</option>'; }).join('');
+// Builds the category tabs and item rows for the group currently selected.
+// Quantities in categories the group may not order from are cleared.
+function renderCatalogArea() {
+  const wrap = document.getElementById('cat-wrap');
+  if (!wrap) return;
+  const group = (document.getElementById('group-name') || {}).value || '';
+  const rules = hiRules || { onlyCategories: [] };
 
   const cats = {};
   catalog.forEach(function(item) {
     if (!cats[item.category]) cats[item.category] = [];
     cats[item.category].push(item);
-    qtys[item.itemId] = 0;
   });
   Object.keys(cats).forEach(function(c) {
     cats[c].sort(function(a, b) { return itemSortScore(a) - itemSortScore(b); });
   });
 
-  // Build ordered category list (only cats that exist in catalog)
-  const orderedCats = CAT_ORDER.filter(function(c) { return cats[c]; });
-  // Also add any unexpected categories at the end
-  Object.keys(cats).forEach(function(c) { if (orderedCats.indexOf(c) === -1) orderedCats.push(c); });
+  const orderedCats = allowedCategories(Object.keys(cats), group);
+  catalog.forEach(function(item) {
+    if (orderedCats.indexOf(item.category) === -1) qtys[item.itemId] = 0;
+  });
+  if (orderedCats.indexOf(activeCat) === -1) activeCat = orderedCats[0] || null;
 
-  // Set first active category
-  activeCat = orderedCats[0] || null;
-
-  // Build tab bar HTML
   const tabsHtml = orderedCats.map(function(cat) {
     const isActive = cat === activeCat;
-    const icon = CAT_ICONS[cat] || '';
     const shortName = catTabLabel(cat);
     return '<button class="cat-tab' + (isActive ? ' active' : '') + '" id="cattab-' + esc(cat) + '" onclick="switchCat(\'' + esc(cat) + '\')">' +
       '<span class="cat-tab-badge" id="catbadge-' + esc(cat) + '"></span>' +
@@ -1517,7 +1584,6 @@ function initForm(groups) {
       '</button>';
   }).join('');
 
-  // Build panels HTML
   const panelsHtml = orderedCats.map(function(cat) {
     const isActive = cat === activeCat;
     let panelHtml = '<div class="cat-panel' + (isActive ? ' active' : '') + '" id="catpanel-' + esc(cat) + '">';
@@ -1526,12 +1592,14 @@ function initForm(groups) {
     }
     cats[cat].forEach(function(item) {
       const id = item.itemId;
-      panelHtml += '<div class="item-row" id="row-' + esc(id) + '">'
+      const qty = qtys[id] || 0;
+      const packNote = (item.packSize > 1 && rules.onlyCategories.indexOf(cat) !== -1) ? ' &middot; pack of ' + Number(item.packSize) : '';
+      panelHtml += '<div class="item-row' + (qty > 0 ? ' has-qty' : '') + '" id="row-' + esc(id) + '">'
         + '<div class="item-info"><div class="item-name">' + esc(item.name) + '</div>'
-        + '<div class="item-price">$' + Number(item.price).toFixed(2) + '</div></div>'
+        + '<div class="item-price">$' + Number(item.price).toFixed(2) + packNote + '</div></div>'
         + '<div class="qty-wrap">'
         + '<button class="qty-btn" onclick="changeQty(\'' + esc(id) + '\',-1)">-</button>'
-        + '<input class="qty-val" id="qty-' + esc(id) + '" type="number" value="0" min="0" oninput="setQty(\'' + esc(id) + '\',this.value)">'
+        + '<input class="qty-val" id="qty-' + esc(id) + '" type="number" value="' + qty + '" min="0" oninput="setQty(\'' + esc(id) + '\',this.value)">'
         + '<button class="qty-btn qty-plus" onclick="changeQty(\'' + esc(id) + '\',1)">+</button>'
         + '</div></div>';
     });
@@ -1539,22 +1607,40 @@ function initForm(groups) {
     return panelHtml;
   }).join('');
 
+  wrap.innerHTML = '<div class="cat-tabs">' + tabsHtml + '</div>' + panelsHtml;
+  updateTotals();
+}
+
+// Picking a different group rebuilds the tabs and starts on that group's first tab.
+function onGroupChange() {
+  activeCat = null;
+  renderCatalogArea();
+  updateSubmitState();
+}
+
+function initForm(groups) {
+  formGroups = groups;
+  setSubText('Group Order Form');
+
+  const groupOptions = '<option value="">Select your group...</option>' +
+    groups.map(function(g) { return '<option value="' + esc(g) + '">' + esc(g) + '</option>'; }).join('');
+
+  catalog.forEach(function(item) { qtys[item.itemId] = 0; });
+  activeCat = null;
+
   let html = '';
 
   // Your Information card
   html += '<div class="card">'
     + '<div class="card-label">Your Information</div>'
-    + '<div class="field"><label>Group Name *</label><select id="group-name" onchange="updateSubmitState()">' + groupOptions + '</select></div>'
-    + '<div class="field"><label>Contact Name *</label><input type="text" id="contact-name" placeholder="First Name, Last Initial" oninput="updateSubmitState()"></div>'
+    + '<div class="field"><label>Group Name *</label><select id="group-name" onchange="onGroupChange()">' + groupOptions + '</select></div>'
+    + '<div class="field"><label>Contact Name *</label><input type="text" id="contact-name" placeholder="First name and last initial (e.g. John D.)" oninput="updateSubmitState()"></div>'
     + '<div class="field"><label>Email *</label><input type="email" id="email" placeholder="Confirmation will be sent here" oninput="updateSubmitState()"></div>'
     + '<div class="field"><label>Phone</label><input type="tel" id="phone" placeholder="(703) 000-0000"></div>'
     + '</div>';
 
-  // Category tabs + panels card
-  html += '<div class="cat-tabs-wrap">'
-    + '<div class="cat-tabs">' + tabsHtml + '</div>'
-    + panelsHtml
-    + '</div>';
+  // Category tabs + panels card (filled in by renderCatalogArea for the selected group)
+  html += '<div class="cat-tabs-wrap" id="cat-wrap"></div>';
 
   html += '<div class="special-note"><strong>Need something not listed?</strong> '
     + 'Contact the Literature Chair for special orders or requests. '
@@ -1570,6 +1656,7 @@ function initForm(groups) {
   html += '<button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">Submit Order</button>';
 
   document.getElementById('view-order').innerHTML = html;
+  renderCatalogArea();
 }
 
 function switchCat(cat) {
@@ -1826,22 +1913,36 @@ function renderOrderList() {
   }).join('');
 }
 
+// Completing an order also emails the group its receipt, which takes a moment. Show progress right away
+// and ignore extra taps until the first one finishes (a second tap would use a stale revision).
+var pickupBusy = false;
+function pickupDone() { pickupBusy = false; }
+function pickupFailed(message) {
+  pickupBusy = false;
+  var t = document.getElementById('toast'); if (t) t.classList.remove('show');
+  alert(message);
+}
+
 function markPickedUp(orderId) {
+  if (pickupBusy) return;
   var order = allOrders.find(function(o) { return o.orderId === orderId; });
   if (!order) return;
+  pickupBusy = true;
+  showToast('Marking as picked up...', 30000);
   google.script.run
     .withSuccessHandler(function(result) {
+      pickupDone();
       if (result && result.success) {
         order.status = 'Completed'; order.revision = result.revision;
         viewsLoaded.reports = false; viewsLoaded.inventory = false;
         updateStats();
         renderOrderList();
-        showToast('&#10003; Marked as Picked Up', 3000);
+        showToast(result.warning || '\u2713 Marked as Picked Up - receipt emailed', result.warning ? 8000 : 4000);
       } else {
-        alert((result && result.error) ? result.error : 'Could not mark as completed.');
+        pickupFailed((result && result.error) ? result.error : 'Could not mark as completed.');
       }
     })
-    .withFailureHandler(function(e) { alert(e.message || 'Error.'); })
+    .withFailureHandler(function(e) { pickupFailed(e.message || 'Error.'); })
     .completeOrder(orderId, sessionToken, order.revision);
 }
 
@@ -2174,22 +2275,25 @@ function markReady() {
 }
 
 function markPickupFromPanel() {
-  if (!currentOrderId) return;
+  if (!currentOrderId || pickupBusy) return;
   var oid = currentOrderId;
+  pickupBusy = true;
+  showToast('Marking as picked up...', 30000);
   google.script.run
     .withSuccessHandler(function(result) {
+      pickupDone();
       if (result && result.success) {
         var order = allOrders.find(function(o) { return o.orderId === oid; });
         if (order) { order.status = 'Completed'; order.revision = result.revision; }
         viewsLoaded.reports = false; viewsLoaded.inventory = false;
         updateStats();
         closeOrderPanel(true);
-        showToast('&#10003; Marked as Picked Up', 3000);
+        showToast(result.warning || '\u2713 Marked as Picked Up - receipt emailed', result.warning ? 8000 : 4000);
       } else {
-        alert((result && result.error) ? result.error : 'Could not mark as completed.');
+        pickupFailed((result && result.error) ? result.error : 'Could not mark as completed.');
       }
     })
-    .withFailureHandler(function(e) { alert(e.message || 'Error.'); })
+    .withFailureHandler(function(e) { pickupFailed(e.message || 'Error.'); })
     .completeOrder(oid, sessionToken, allOrders.find(o => o.orderId === oid).revision);
 }
 

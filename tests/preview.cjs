@@ -4,8 +4,9 @@ const stub = `<script>
 const demoOrder = {orderId:'NL-2610-001',groupName:'Example Group',contact:'Example Contact',estimatedTotal:50,fulfilledTotal:30,status:'Ready',revision:1,itemCount:5};
 const demoDraft = {reportingMonth:'October 2026',groupsServed:8,moneyCollected:245.50,moneySpent:180,other:'Regional order placed for next month.',savedAt:'2026-10-10'};
 const demoCatalog = [{itemId:'B1',name:'Basic Text',category:'Books',price:10,stock:-2,active:true},{itemId:'P1',name:'IP #7 Am I an Addict',category:'IPs',price:1.45,stock:32,lowAt:20,packSize:5,active:true},{itemId:'SP3101',name:'IP #1 Quien, Que, Como y Por Que',category:'Spanish Lit',price:1.45,stock:0,lowAt:5,packSize:5,active:true}];
+const formCatalog = demoCatalog.concat([{itemId:'K1',name:'30 Day Keytag',category:'Keytags',price:1.1,packSize:5},{itemId:'1500H&I',name:'NA White Booklet: H&I Edition',category:'H&I',price:0.92,packSize:1},{itemId:'3129H&I',name:'IP #29: Intro to NA Mtgs, H&I Edition',category:'H&I',price:1.45,packSize:5}]);
 const responses = {
- getFormData:()=>({windowData:{meetingMonth:'October 2026',openDate:'September 4, 2026',closeDate:'October 1, 2026',isOpen:true},groups:['Example Group'],catalog:demoCatalog}),
+ getFormData:()=>({windowData:{meetingMonth:'October 2026',openDate:'September 4, 2026',closeDate:'October 1, 2026',isOpen:true},groups:['Example Group','H&I Subcommittee'],catalog:formCatalog,hiRules:{group:'H&I Subcommittee',onlyCategories:['H&I'],hiddenCategories:['Keytags','Medallions']}}),
  checkAccessCode:()=>({valid:true,token:'fixture',meetingMonth:'October 2026'}), getOrders:()=>[demoOrder], getAvailableMonths:()=>['October 2026','November 2026'], getCatalogAll:()=>demoCatalog,
  getOrderItems:()=>({items:[{orderId:demoOrder.orderId,rowId:demoOrder.orderId+'-01',sheetRow:2,itemId:'B1',name:'Basic Text',category:'Books',price:10,qtyOrdered:5,qtyFulfilled:3,stock:-2},{orderId:demoOrder.orderId,rowId:demoOrder.orderId+'-02',sheetRow:3,itemId:'P1',name:'IP #7 Am I an Addict',category:'IPs',price:1.45,qtyOrdered:2,qtyFulfilled:2,stock:32,packSize:5}],status:demoOrder.status,revision:demoOrder.revision}),
  getOrdersReport:(period,selection,group)=>{
@@ -18,7 +19,7 @@ const responses = {
   const months=period==='annual'?Array.from({length:12},(_,i)=>{const month=new Date(Number(selection),i,1).toLocaleString('en-US',{month:'long',year:'numeric'});return {month,...sum(orders.filter(o=>o.month===month))};}):[];
   return {period,selection,group,groups,orders,byGroup,totals,months,items:orders.length?[{name:'Basic Text',requested:totals.requested,fulfilled:totals.fulfilled,estimated:totals.estimated,fulfilledValue:totals.fulfilled*10}]:[]};
  },
- submitOrder:()=>({success:true,orderId:'NL-2610-002'}),
+ submitOrder:()=>({success:true,orderId:'NL-2610-002'}), completeOrder:()=>({success:true,revision:2}),
  getStockReport:()=>({stockAsOf:'2026-10-10T12:00:00Z',items:demoCatalog}),
  getInventoryReport:m=>({meetingMonth:m,stockAsOf:'2026-10-10T12:00:00Z',items:[{name:'Basic Text',groups:4,qtyOrdered:20,qtyFulfilled:12,unfilled:3,awaiting:5,stock:-2},{name:'An Introduction to NA',groups:3,qtyOrdered:50,qtyFulfilled:40,unfilled:0,awaiting:10,stock:30}]}),
  getChairReport:m=>{const r={...demoDraft,reportingMonth:m,groupsServed:m==='October 2026'?1:0,moneyCollected:m==='October 2026'?20:0};return {draft:r,live:r,finalized:{...r,version:2},revision:2,secretaryEmail:'secretary@example.invalid'};},

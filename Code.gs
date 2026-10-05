@@ -6,6 +6,18 @@
 
 const SHEET_ID = '1TFcx55RMampRYUpVhUP3Nzp5hGERJB2F3GnLFvt7A40';
 
+// -- H&I Subcommittee rules --
+// Matched by exact group name: renaming that group on the Groups tab means changing HI_GROUP_ too.
+// H&I-only categories show only to this group; hidden categories never show to it.
+// Its orders are paid from the subcommittee budget (area treasurer transfer), not collected at pickup.
+const HI_GROUP_ = 'H&I Subcommittee';
+const HI_ONLY_CATEGORIES_ = ['H&I'];
+const HI_HIDDEN_CATEGORIES_ = ['Keytags', 'Medallions'];
+
+function isSubcommitteeGroup_(groupName) {
+  return String(groupName == null ? '' : groupName).trim() === HI_GROUP_;
+}
+
 // -- Routing --
 // Single URL serves the unified app (Order Form + Dashboard).
 // No ?dashboard=1 parameter needed anymore.
@@ -84,6 +96,7 @@ function getCatalogForForm() {
       category: String(row[1]),
       name:     String(row[2]),
       price:    Number(row[3]),
+      packSize: Number(row[7]) || 1,
     });
   }
   return catalog;
@@ -126,6 +139,7 @@ function getFormData() {
       groups:     cachedFormPart_('nv_form_groups', getGroups),
       catalog:    cachedFormPart_('nv_form_catalog', getCatalogForForm),
       litChairEmail: cachedFormPart_('nv_form_chair', getLitChairEmail),
+      hiRules:    { group: HI_GROUP_, onlyCategories: HI_ONLY_CATEGORIES_, hiddenCategories: HI_HIDDEN_CATEGORIES_ },
     };
   } catch (e) {
     return {
@@ -288,18 +302,26 @@ function submitOrder(payload) {
     const catalog = new Map();
     getSheet('Catalog').getDataRange().getValues().slice(1).forEach(function(row) {
       if (row[0] && String(row[5]).trim().toUpperCase() === 'YES') {
-        catalog.set(String(row[0]), { name: String(row[2]), price: Number(row[3]) || 0 });
+        catalog.set(String(row[0]), { name: String(row[2]), price: Number(row[3]) || 0, category: String(row[1]).trim() });
       }
     });
 
     // One line per catalog item: repeated lines are added together, then capped per item.
+    // Category rules are enforced here too, not only by what the form shows.
+    const subcommittee = isSubcommitteeGroup_(groupName);
     const quantities = new Map();
+    let notAllowed = false;
     payload.items.forEach(function(item) {
       const id = item && typeof item.itemId === 'string' ? item.itemId : '';
       const qty = Math.floor(Number(item && item.qty));
       if (!catalog.has(id) || !Number.isFinite(qty) || qty < 1) return;
+      const category = catalog.get(id).category;
+      if (subcommittee ? HI_HIDDEN_CATEGORIES_.indexOf(category) >= 0 : HI_ONLY_CATEGORIES_.indexOf(category) >= 0) { notAllowed = true; return; }
       quantities.set(id, Math.min((quantities.get(id) || 0) + qty, SUBMIT_MAX_QTY_));
     });
+    if (notAllowed) {
+      return { success: false, error: 'Some items in this order are not available to the selected group. Please reload the form and try again.' };
+    }
     items = Array.from(quantities.keys()).map(function(id) {
       return { itemId: id, name: catalog.get(id).name, price: catalog.get(id).price, qty: quantities.get(id) };
     });
@@ -360,9 +382,25 @@ function submitOrder(payload) {
 function sendConfirmationToGroup_(payload, orderId, estimatedTotal) {
   const lines = payload.items.map(i =>
     '  ' + i.name + ' (x' + i.qty + ') - $' + (i.price * i.qty).toFixed(2)).join('\n');
-  MailApp.sendEmail({
+  const subcommittee = isSubcommitteeGroup_(payload.groupName);
+  sendStyledMail_({
     to: payload.email,
     subject: 'Literature Order Confirmation - ' + payload.groupName,
+    eyebrow: payload.meetingMonth + EMAIL_DOT_ + 'Order confirmation',
+    headline: ['You asked.', "We're on it."],
+    lead: "Your literature order is in. We'll get everything together and let you know when it's ready for pickup.",
+    pill: 'Order submitted',
+    heading: payload.groupName, subheading: 'Order ' + orderId, statusLabel: 'Order received',
+    itemsLabel: 'Requested items',
+    items: payload.items.map(i => ({ name: i.name, qty: i.qty, amount: i.price * i.qty })),
+    band: subcommittee
+      ? { label: 'Estimated total', sub: 'Charged to the H&I budget', amount: estimatedTotal }
+      : { label: 'Estimated total', sub: 'Final amount confirmed when ready', amount: estimatedTotal },
+    callout: subcommittee
+      ? { label: 'Paid by', text: 'This order is charged to the H&I subcommittee budget, so no payment is needed at pickup.' }
+      : null,
+    notes: ['Totals are estimates and depend on available inventory. The final amount will be confirmed when the order is ready for pickup.'],
+    footer: ['Questions? Contact the Lit Chair at ' + getLitChairEmail() + '.', 'NORVANA Literature Committee'],
     body:
       'Thank you for submitting your literature order for the ' + payload.meetingMonth + ' area meeting.\n\n' +
       'GROUP: ' + payload.groupName + '\n' +
@@ -370,7 +408,9 @@ function sendConfirmationToGroup_(payload, orderId, estimatedTotal) {
       'ITEMS ORDERED:\n' + lines + '\n\n' +
       'ESTIMATED TOTAL: $' + estimatedTotal.toFixed(2) + '\n\n' +
       'All totals are estimates. Final amounts are based on actual inventory at time of fulfillment. ' +
-      'You will receive a second email when your order is ready for pickup with the final amount due.\n\n' +
+      (isSubcommitteeGroup_(payload.groupName)
+        ? 'This order is charged to the H&I subcommittee budget, so no payment is needed at pickup. You will receive a second email when your order is ready for pickup.\n\n'
+        : 'You will receive a second email when your order is ready for pickup with the final amount due.\n\n') +
       'Questions? Contact the Lit Chair at ' + getLitChairEmail() + '.\n\n' +
       'NORVANA Literature Committee',
   });
@@ -379,14 +419,29 @@ function sendConfirmationToGroup_(payload, orderId, estimatedTotal) {
 function sendAlertToLitChair_(payload, orderId, estimatedTotal) {
   const lines = payload.items.map(i =>
     '  ' + i.itemId + '  ' + i.name + ' (x' + i.qty + ') - $' + (i.price * i.qty).toFixed(2)).join('\n');
-  MailApp.sendEmail({
+  sendStyledMail_({
     to: getLitChairEmail(),
     subject: 'New Order - ' + payload.groupName,
+    eyebrow: payload.meetingMonth + EMAIL_DOT_ + 'Chair notification',
+    headline: ['Someone needs', 'literature.'],
+    lead: 'A new literature order just came in. Another group is getting ready to carry the message.',
+    pill: 'New order received',
+    heading: payload.groupName, subheading: 'Order ' + orderId, statusLabel: 'Needs fulfillment',
+    contact: { label: 'Group contact', name: payload.contactName, detail: payload.email + (payload.phone ? EMAIL_DOT_ + payload.phone : '') },
+    itemsLabel: 'Requested items',
+    items: payload.items.map(i => ({ id: i.itemId, name: i.name, qty: i.qty, amount: i.price * i.qty })),
+    band: { label: 'Estimated total', sub: 'Final amount confirmed when ready', amount: estimatedTotal },
+    callout: isSubcommitteeGroup_(payload.groupName)
+      ? { label: 'Paid by', text: 'H&I subcommittee budget (no payment at pickup).' }
+      : null,
+    notes: ['Totals are estimates and depend on available inventory. The final amount will be confirmed when the order is ready for pickup.'],
+    footer: ['Sent to the Literature Chair.', 'NORVANA Literature Committee'],
     body:
       'New literature order submitted.\n\n' +
       'ORDER ID: ' + orderId + '\nMEETING MONTH: ' + payload.meetingMonth + '\n' +
       'GROUP: ' + payload.groupName + '\nCONTACT: ' + payload.contactName + '\n' +
-      'EMAIL: ' + payload.email + '\nPHONE: ' + payload.phone + '\n\n' +
+      'EMAIL: ' + payload.email + '\nPHONE: ' + payload.phone + '\n' +
+      (isSubcommitteeGroup_(payload.groupName) ? 'PAID BY: H&I subcommittee budget (no payment at pickup)\n' : '') + '\n' +
       'ITEMS:\n' + lines + '\n\n' +
       'ESTIMATED TOTAL: $' + estimatedTotal.toFixed(2) + '\n\nNORVANA Literature Orders System',
   });
