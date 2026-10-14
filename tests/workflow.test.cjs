@@ -353,20 +353,25 @@ test('Inventory print and CSV contain only Item and Count plus NORVANA and stock
   const ui=emailUIFixture();let printed,exported;
   ui.c.inventoryReportData={stockAsOf:'2026-10-10T12:00:00Z',items:[{name:'Book',stock:-2},{name:'Inactive item',stock:0}]};
   ui.c.printReportPage=(title,html)=>printed=html;ui.c.downloadReportCSV=(title,rows)=>exported=rows;
-  ui.c.renderInventoryReport();ui.c.printInventoryReport();ui.c.exportInventoryCSV();
+  ui.c.renderInventoryReport();ui.c.selectInventoryReportCategory('Other');ui.c.printInventoryReport();ui.c.exportInventoryCSV();
   assert.match(printed,/NORVANA/);assert.match(printed,/Stock as of/);assert.equal((printed.match(/<th>/g)||[]).length,2);assert.doesNotMatch(printed,/Requested|Fulfilled|demand|month selector/i);
   assert.equal(exported[0][0],'NORVANA');assert.equal(exported[1][1],'2026-10-10T12:00:00Z');assert.equal(exported[3].join(','),'Item,Count');assert.equal(exported[4][1],-2);assert.ok(exported.slice(3).every(r=>r.length===2));
 });
 
-test('Inventory category selection keeps screen, print and CSV scoped to the same items',()=>{
+test('Inventory report defaults to all categories and a selected category keeps screen, print and CSV scoped to the same items',()=>{
   const ui=emailUIFixture();let printed;
   ui.c.inventoryReportData={stockAsOf:'2026-10-10T12:00:00Z',items:[{name:'Book',category:'Books',stock:-2},{name:'Welcome',category:'Keytags',stock:5}]};
   ui.c.printReportPage=(title,html)=>printed=html;
-  ui.c.renderInventoryReport();assert.equal(ui.c.inventoryReportCategory,'Books');
-  ui.c.selectInventoryReportCategory(1);ui.c.printInventoryReport();
+  ui.c.renderInventoryReport();assert.equal(ui.c.inventoryReportCategory,null);
+  assert.match(ui.elements['report-controls'].innerHTML,/All categories/);
+  assert.match(ui.elements['report-panel'].innerHTML,/Book/);assert.match(ui.elements['report-panel'].innerHTML,/Welcome/);
+  ui.c.printInventoryReport();assert.match(printed,/Inventory - All categories/);assert.match(printed,/Book/);assert.match(printed,/Welcome/);
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.c.inventoryCSVRows().slice(3))),[['Category','Item','Count'],['Books','Book',-2],['Keytags','Welcome',5]]);
+  ui.c.selectInventoryReportCategory('Keytags');ui.c.printInventoryReport();
   assert.match(ui.elements['report-panel'].innerHTML,/Welcome/);assert.doesNotMatch(ui.elements['report-panel'].innerHTML,/Book/);
   assert.match(printed,/Inventory - Keytags/);assert.doesNotMatch(printed,/Book/);
   assert.deepEqual(JSON.parse(JSON.stringify(ui.c.inventoryCSVRows().slice(4))),[['Welcome',5]]);
+  ui.c.selectInventoryReportCategory('');assert.equal(ui.c.inventoryReportCategory,null);
 });
 
 test('Chair controls precede one preview; selected version determines print and email',()=>{

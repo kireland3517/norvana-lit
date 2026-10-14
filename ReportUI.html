@@ -22,9 +22,10 @@ function inventoryReportCategories(){
   const order=['Books','Pamphlets','Keytags','Medallions','Special Orders'];
   return order.filter(c=>categories.includes(c)).concat(categories.filter(c=>!order.includes(c)));
 }
-function inventoryReportItems(){return inventoryReportData.items.filter(i=>(i.category||'Other')===inventoryReportCategory);}
-function inventoryReportTitle(){return 'Inventory'+(inventoryReportCategory?' - '+inventoryReportCategory:'');}
-function selectInventoryReportCategory(index){const cats=inventoryReportCategories();if(cats[index]){inventoryReportCategory=cats[index];renderInventoryReport();}}
+// inventoryReportCategory: null means every category (the default); otherwise one category name.
+function inventoryReportItems(){return inventoryReportData.items.filter(i=>inventoryReportCategory===null||(i.category||'Other')===inventoryReportCategory);}
+function inventoryReportTitle(){return 'Inventory - '+(inventoryReportCategory===null?'All categories':inventoryReportCategory);}
+function selectInventoryReportCategory(value){inventoryReportCategory=value===''||value===null?null:String(value);renderInventoryReport();}
 var reportRequest=0, chairSendPending=false, chairWritePending=false, chairPreviewSequence=0, chairDirty=false, chairDisplay='draft', chairPreferredDisplay=null;
 const REPORT_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function reportMonthInput(label){const p=String(label).split(' '), i=REPORT_MONTH_NAMES.indexOf(p[0]);return i<0?'':p[1]+'-'+String(i+1).padStart(2,'0');}
@@ -110,15 +111,24 @@ function ordersPeriodLabel(){return ordersReportData.selection+(ordersReportData
 function printOrdersReport(){if(!ordersReportData)return;const t=ordersTableData(),m=ordersMonthData();printReportPage(ordersTitle(),'<h1>NORVANA</h1><h2>'+ordersTitle()+'</h2><p>'+esc(ordersPeriodLabel())+'</p>'+ordersTotalsHTML()+'<p>'+ordersHelp()+'</p>'+reportTable(t.headers,t.rows)+(ordersReportData.period==='annual'?'<h3>Monthly breakdown</h3>'+reportTable(m.headers,m.rows):''));}
 function ordersCSVRows(){const d=ordersReportData,t=ordersTableData(),m=ordersMonthData();return [['NORVANA',ordersTitle()],['Period',d.selection],['Group',d.group||'All groups'],['Collected',d.totals.collected],...(hasCharged()?[['Charged to H&I',d.totals.charged]]:[]),['Pending',d.totals.pending],['Estimated Value',d.totals.estimated],[ordersHelp()],[],t.headers,...t.rows,...(d.period==='annual'?[[],['Monthly breakdown'],m.headers,...m.rows]:[])];}
 function exportOrdersCSV(){if(ordersReportData)downloadReportCSV('NORVANA '+ordersTitle()+' '+ordersReportData.selection,ordersCSVRows());}
-function inventoryReportHTML(){const d=inventoryReportData;return '<p class="report-stock-date">Stock as of '+esc(new Date(d.stockAsOf).toLocaleString())+'</p>'+reportTable(['Item','Count'],inventoryReportItems().map(i=>[i.name,i.stock]));}
+function inventoryReportHTML(){
+  const d=inventoryReportData,stamp='<p class="report-stock-date">Stock as of '+esc(new Date(d.stockAsOf).toLocaleString())+'</p>';
+  if(inventoryReportCategory!==null)return stamp+reportTable(['Item','Count'],inventoryReportItems().map(i=>[i.name,i.stock]));
+  // All categories: one headed table per category, in the usual category order.
+  return stamp+inventoryReportCategories().map(cat=>'<h3 class="report-cat-heading" style="margin:18px 0 6px;font-size:14px">'+esc(cat)+'</h3>'+reportTable(['Item','Count'],d.items.filter(i=>(i.category||'Other')===cat).map(i=>[i.name,i.stock]))).join('');
+}
 function renderInventoryReport(){
   const cats=inventoryReportCategories();
-  if(!cats.includes(inventoryReportCategory))inventoryReportCategory=cats[0]||null;
-  document.getElementById('report-controls').innerHTML='<div class="cat-tabs" aria-label="Inventory report categories">'+cats.map((cat,index)=>'<button type="button" class="cat-tab'+(cat===inventoryReportCategory?' active':'')+'" aria-pressed="'+(cat===inventoryReportCategory)+'" onclick="selectInventoryReportCategory('+index+')">'+esc(cat==='Special Orders'?'Special':cat)+'</button>').join('')+'</div><div class="report-actions"><button onclick="printInventoryReport()">Print / PDF</button><button onclick="exportInventoryCSV()">CSV</button></div>';
+  if(inventoryReportCategory!==null&&!cats.includes(inventoryReportCategory))inventoryReportCategory=null;
+  document.getElementById('report-controls').innerHTML='<div class="report-controls"><label>Category<select id="inventory-category" onchange="selectInventoryReportCategory(this.value)"><option value=""'+(inventoryReportCategory===null?' selected':'')+'>All categories</option>'+cats.map(cat=>'<option value="'+esc(cat)+'"'+(cat===inventoryReportCategory?' selected':'')+'>'+esc(cat)+'</option>').join('')+'</select></label></div><div class="report-actions"><button onclick="printInventoryReport()">Print / PDF</button><button onclick="exportInventoryCSV()">CSV</button></div>';
   document.getElementById('report-panel').innerHTML=inventoryReportHTML();
 }
 function printInventoryReport(){if(inventoryReportData)printReportPage(inventoryReportTitle(),'<h1>NORVANA</h1><h2>'+esc(inventoryReportTitle())+'</h2>'+inventoryReportHTML());}
-function inventoryCSVRows(){return [['NORVANA',inventoryReportTitle()],['Stock as of',inventoryReportData.stockAsOf],[],['Item','Count'],...inventoryReportItems().map(i=>[i.name,i.stock])];}
+function inventoryCSVRows(){
+  const head=[['NORVANA',inventoryReportTitle()],['Stock as of',inventoryReportData.stockAsOf],[]];
+  if(inventoryReportCategory!==null)return [...head,['Item','Count'],...inventoryReportItems().map(i=>[i.name,i.stock])];
+  return [...head,['Category','Item','Count'],...inventoryReportCategories().flatMap(cat=>inventoryReportData.items.filter(i=>(i.category||'Other')===cat).map(i=>[cat,i.name,i.stock]))];
+}
 function exportInventoryCSV(){if(inventoryReportData)downloadReportCSV('NORVANA '+inventoryReportTitle(),inventoryCSVRows());}
 function downloadReportCSV(title,rows){
   const csv=rows.map(r=>r.map(v=>'"'+String(typeof v==='string'&&/^[=+\-@]/.test(v)?"'"+v:v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
