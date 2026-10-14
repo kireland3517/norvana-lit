@@ -7,10 +7,11 @@ body.dark .report-actions button,body.dark .report-views button{color:var(--onyx
 .report-controls input,.report-controls select,.report-controls textarea{font:inherit;font-size:14px;width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--onyx)}
 .report-controls .notes-field{flex-basis:100%}.report-table-wrap{overflow-x:auto}.report-table{width:100%;border-collapse:collapse;font-size:13px}
 .report-table th,.report-table td{padding:10px;text-align:right;border-bottom:1px solid var(--border)}.report-table th:first-child,.report-table td:first-child{text-align:left;min-width:110px}
-.report-table th{background:var(--snow);font-size:11px}.report-table td{font-variant-numeric:tabular-nums}.report-table th,.report-table td{overflow-wrap:anywhere}
+.report-table th{background:var(--snow);font-size:11px}.report-table td{font-variant-numeric:tabular-nums}.report-table th,.report-table td{white-space:nowrap}.report-table th:first-child,.report-table td:first-child{white-space:normal;overflow-wrap:break-word}
 .report-help{font-size:12px;color:var(--muted);margin:8px 0}.report-totals{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}.report-total{flex:1;min-width:100px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--white)}.report-total span{display:block;font-size:11px;color:var(--muted)}.report-total strong{display:block;font-size:19px;margin-top:4px}
 .chair-paper{padding:16px}.chair-paper dl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0}.chair-paper dt{font-size:12px;color:var(--muted)}.chair-paper dd{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}.chair-paper .chair-notes{grid-column:1/-1}.report-badge{font-size:11px;padding:4px 8px;border-radius:20px;background:var(--snow);border:1px solid var(--border)}.report-preview-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:12px 0}.report-review{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:var(--snow);border:1px solid var(--border);border-radius:10px}.report-stock-date{font-size:12px;color:var(--muted);margin-bottom:10px}
-@media(max-width:480px){.report-table th,.report-table td{padding:8px 6px;font-size:11px}.report-actions button{flex:1}.report-total strong{font-size:17px}}
+@media(max-width:640px){.report-table th,.report-table td{padding:8px 3px;font-size:10px}.report-table th:first-child,.report-table td:first-child{min-width:64px}}
+@media(max-width:480px){.report-actions button{flex:1}.report-total strong{font-size:17px}}
 </style>
 <script>
 var requestedReportMode=null, reportMode='orders', reportMonth='', availableMonths=[], reportYear='', reportPeriod='monthly', reportView='group', reportGroup='';
@@ -83,7 +84,10 @@ function fetchReport(){
   else runner.getChairReport(reportMonth,sessionToken);
 }
 function fetchSpecialReport(){fetchReport();}
-function reportTable(headers,rows){return '<div class="report-table-wrap"><table class="report-table"><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>'<tr>'+r.map(v=>'<td>'+esc(v)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+headers.length+'">No records</td></tr>')+'</tbody></table></div>';}
+// On-screen tables use short column names on narrow phones so the whole table fits; print and CSV keep the full names.
+const SHORT_HEADERS={'Requested':'Req.','Fulfilled':'Filled','Estimated Value':'Est.','Fulfilled Value':'Filled Val.','Amount':'Amt.','Orders':'Ord.','Pending':'Pend.','Collected':'Coll.','Charged to H&I':'H&I'};
+function shortHeader(h){return (typeof window!=='undefined'&&window.innerWidth<=640&&SHORT_HEADERS[h])||h;}
+function reportTable(headers,rows,onScreen){return '<div class="report-table-wrap"><table class="report-table"><thead><tr>'+headers.map(h=>'<th>'+esc(onScreen?shortHeader(h):h)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(r=>'<tr>'+r.map(v=>'<td>'+esc(v)+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+headers.length+'">No records</td></tr>')+'</tbody></table></div>';}
 function ordersTableData(){
   const d=ordersReportData;
   if(reportView==='item')return {headers:['Item','Requested','Fulfilled','Estimated Value','Fulfilled Value'],rows:d.items.map(i=>[i.name,i.requested,i.fulfilled,reportMoney(i.estimated),reportMoney(i.fulfilledValue)])};
@@ -98,8 +102,8 @@ function ordersHelp(){return reportView==='item'?'Fulfilled Value includes Ready
 function renderOrdersResults(){
   if(!ordersReportData)return;
   const table=ordersTableData(),months=ordersMonthData();
-  document.getElementById('report-panel').innerHTML=ordersTotalsHTML()+'<div class="report-actions"><button onclick="printOrdersReport()">Print / PDF</button><button onclick="exportOrdersCSV()">CSV</button></div><p class="report-help">'+ordersHelp()+'</p>'+reportTable(table.headers,table.rows)+
-    (ordersReportData.period==='annual'?'<details style="margin-top:16px"><summary>Monthly breakdown</summary>'+reportTable(months.headers,months.rows)+'</details>':'');
+  document.getElementById('report-panel').innerHTML=ordersTotalsHTML()+'<div class="report-actions"><button onclick="printOrdersReport()">Print / PDF</button><button onclick="exportOrdersCSV()">CSV</button></div><p class="report-help">'+ordersHelp()+'</p>'+reportTable(table.headers,table.rows,true)+
+    (ordersReportData.period==='annual'?'<details style="margin-top:16px"><summary>Monthly breakdown</summary>'+reportTable(months.headers,months.rows,true)+'</details>':'');
 }
 function ordersTitle(){return 'Orders - '+(reportView==='item'?'By Item':'By Group');}
 function ordersPeriodLabel(){return ordersReportData.selection+(ordersReportData.group?' | '+ordersReportData.group:' | All groups');}
@@ -129,7 +133,7 @@ function displayedChairReport(){if(chairDisplay==='final'&&chairData.finalized)r
 function chairStatusLabel(){return chairDisplay==='final'?'Finalized (version '+chairData.finalized.version+')':'Draft';}
 function renderChairReport(){
   const d=chairData,r=d.draft;
-  document.getElementById('report-controls').innerHTML='<div class="report-controls"><label>Reporting month<input id="report-month" type="month" value="'+reportMonthInput(reportMonth)+'" onchange="onReportMonthChange(this.value)"></label><label>Spending<input id="chair-spending" type="number" min="0" step="0.01" value="'+Number(r.moneySpent).toFixed(2)+'" oninput="chairEdited()"></label><label class="notes-field">Notes<textarea id="chair-notes" rows="3" maxlength="10000" oninput="chairEdited()">'+esc(r.other)+'</textarea></label></div>'+
+  document.getElementById('report-controls').innerHTML='<div class="report-controls"><label>Reporting month<input id="report-month" type="month" value="'+reportMonthInput(reportMonth)+'" onchange="onReportMonthChange(this.value)"></label><label>Spent<input id="chair-spending" type="number" min="0" step="0.01" value="'+Number(r.moneySpent).toFixed(2)+'" oninput="chairEdited()"></label><label class="notes-field">Notes<textarea id="chair-notes" rows="3" maxlength="10000" oninput="chairEdited()">'+esc(r.other)+'</textarea></label></div><p class="report-help">Spent is the regional order placed after the reporting month, to replace what was sold that month. It is usually placed early the following month.</p>'+
     '<div class="report-actions"><button onclick="saveChairDraftUI()">Save Draft</button><button id="chair-finalize" '+(!r.savedAt?'disabled':'')+' onclick="finalizeChairUI()">'+(d.finalized?'Update Final':'Finalize')+'</button><span id="chair-unsaved" class="report-help"></span></div>';
   renderChairPreview();
 }
@@ -152,7 +156,7 @@ function chairActionRunner(display){
   const finish=r=>{chairWritePending=false;if(!r.success){alert(r.error);if(reportMode==='chair'&&reportMonth===month){document.querySelectorAll('#report-controls input,#report-controls textarea,#report-controls button').forEach(b=>b.disabled=false);document.getElementById('chair-finalize').disabled=chairDirty||!chairData.draft.savedAt;}return;}if(reportMode==='chair'&&reportMonth===month){chairPreferredDisplay=display;chairDirty=false;fetchReport();}};
   return google.script.run.withSuccessHandler(finish).withFailureHandler(e=>finish({success:false,error:e.message}));
 }
-function saveChairDraftUI(){if(chairWritePending)return;const amount=document.getElementById('chair-spending').value,notes=document.getElementById('chair-notes').value;if(amount===''||!Number.isFinite(Number(amount))||Number(amount)<0){alert('Enter a non-negative spending amount.');return;}chairActionRunner('draft').saveChairDraft(reportMonth,Number(amount),notes,chairData.revision,sessionToken);}
+function saveChairDraftUI(){if(chairWritePending)return;const amount=document.getElementById('chair-spending').value,notes=document.getElementById('chair-notes').value;if(amount===''||!Number.isFinite(Number(amount))||Number(amount)<0){alert('Enter a non-negative amount spent.');return;}chairActionRunner('draft').saveChairDraft(reportMonth,Number(amount),notes,chairData.revision,sessionToken);}
 function finalizeChairUI(){
   if(chairWritePending||chairDirty||!chairData.draft.savedAt)return;
   if(chairDisplay!=='draft'){chairDisplay='draft';renderChairPreview();alert('Review the saved draft, then choose Update Final.');return;}

@@ -33,6 +33,7 @@ window.addEventListener('load',()=>setTimeout(()=>{isLoggedIn=true;sessionToken=
 function renderPreview() {
  // Replacement callbacks preserve literal dollar signs in embedded report code.
  let html=fs.readFileSync('App.html','utf8').replace("<?!= HtmlService.createHtmlOutputFromFile('ReportUI').getContent(); ?>",()=>fs.readFileSync('ReportUI.html','utf8'));
+ html=html.replace("<?= DEMO_MODE ? '1' : '0' ?>",()=>process.env.PREVIEW_DEMO==='1'?'1':'0');
  return html.replace('<script>',()=>stub+'<script>');
 }
 module.exports = { renderPreview };

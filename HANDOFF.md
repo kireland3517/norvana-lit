@@ -73,6 +73,10 @@ still sent. The Secretary report email is deliberately plain: the Lit Chair revi
 
 The `tests/` folder has an automated test suite (`node --test tests/workflow.test.cjs`). Run it before releasing.
 
+### The demo project
+
+Admins can practice in a separate demo Apps Script project that points at its own spreadsheet, so live numbers stay accurate. It is the same files as live except two lines at the top of `Code.gs`: `SHEET_ID` (the demo spreadsheet) and `DEMO_MODE = true`. `DEMO_MODE` adds an orange "DEMO - test orders only" banner, a DEMO browser-tab title and a "[DEMO]" prefix on every email subject. Keep `DEMO_MODE = false` in live, and never copy the demo `Code.gs` over the live one (or the reverse). Every other file is pasted unchanged into both.
+
 ## Built-in protections (so you know they are intentional)
 
 - Wrong-code lockout and no default password (see above).

@@ -102,7 +102,7 @@ function previewChairEmail(reportingMonth, token) {
     const recipient = getSettings(token).secretaryEmail;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) throw new Error('Set Secretary Email in Settings first.');
     const preview = { reportingMonthContract: true, month: rec.finalized.reportingMonth, version: rec.finalized.version, recipient: recipient,
-      subject: 'NORVANA Chair Report - ' + rec.finalized.reportingMonth, body: chairReportText_(rec.finalized), token: token,
+      subject: demoPrefix_() + 'NORVANA Chair Report - ' + rec.finalized.reportingMonth, body: chairReportText_(rec.finalized), token: token,
       previousAttempt: chairEmailMarker_(rec.email), action: chairEmailAction_(rec.email) };
     const id = Utilities.getUuid();
     CacheService.getScriptCache().put('chair_preview_' + id, JSON.stringify(preview), 600);

@@ -6,6 +6,11 @@
 
 const SHEET_ID = '1TFcx55RMampRYUpVhUP3Nzp5hGERJB2F3GnLFvt7A40';
 
+// DEMO_MODE: true only in the demo project (next to its own SHEET_ID). Shows a DEMO banner on every screen,
+// puts DEMO in the browser tab title and prefixes every email subject with [DEMO]. Must be false in live.
+const DEMO_MODE = false;
+function demoPrefix_() { return DEMO_MODE ? '[DEMO] ' : ''; }
+
 // -- H&I Subcommittee rules --
 // Matched by exact group name: renaming that group on the Groups tab means changing HI_GROUP_ too.
 // H&I-only categories show only to this group; hidden categories never show to it.
@@ -25,7 +30,7 @@ function isSubcommitteeGroup_(groupName) {
 function doGet(e) {
   const template = HtmlService.createTemplateFromFile('App');
   return template.evaluate()
-    .setTitle('NORVANA Literature')
+    .setTitle((DEMO_MODE ? 'DEMO - ' : '') + 'NORVANA Literature')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, user-scalable=no');
   // No ALLOWALL: other websites cannot frame this app (clickjacking). Direct links and QR codes are unaffected.
 }

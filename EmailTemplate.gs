@@ -107,7 +107,7 @@ function emailHtml_(o) {
 
 // opts: everything MailApp needs (to, subject, body) plus the template fields above.
 function sendStyledMail_(opts) {
-  const message = { to: opts.to, subject: opts.subject, body: opts.body };
+  const message = { to: opts.to, subject: demoPrefix_() + opts.subject, body: opts.body };
   try {
     message.htmlBody = emailHtml_(opts);
     message.inlineImages = { norvanalogo: Utilities.newBlob(Utilities.base64Decode(EMAIL_LOGO_B64_), 'image/png', 'norvana-logo.png') };

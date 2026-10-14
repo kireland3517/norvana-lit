@@ -51,6 +51,13 @@
     min-height: -webkit-fill-available;
   }
 
+  /* -- DEMO BANNER (only when the server sets data-demo="1") -- */
+  .demo-banner { display: none; position: fixed; top: 0; left: 0; right: 0; height: 26px; z-index: 1000; background: #ff6d00; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; align-items: center; justify-content: center; text-align: center; }
+  body[data-demo="1"] .demo-banner { display: flex; }
+  body[data-demo="1"] { padding-top: 26px; }
+  body[data-demo="1"] .top-bar { top: 26px; }
+  body[data-demo="1"] #order-panel { top: 26px; }
+
   /* -- TOP BAR -- */
   .top-bar {
     background: var(--blue);
@@ -1072,7 +1079,8 @@
 
 </style>
 </head>
-<body>
+<body data-demo="<?= DEMO_MODE ? '1' : '0' ?>">
+<div class="demo-banner">DEMO &ndash; test orders only</div>
 
 <div id="app-shell">
 

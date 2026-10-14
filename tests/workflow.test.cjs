@@ -376,7 +376,7 @@ test('Chair controls precede one preview; selected version determines print and 
   ui.c.printReportPage=(title,html)=>printed=html;ui.c.renderReportsShell();ui.c.renderChairReport();
   const shell=ui.elements['reports-content'].innerHTML;assert.ok(shell.indexOf('report-controls')<shell.indexOf('report-panel'));
   const controls=ui.elements['report-controls'].innerHTML;
-  assert.ok(controls.indexOf('Reporting month')<controls.indexOf('Spending'));assert.ok(controls.indexOf('Notes')<controls.indexOf('Save Draft'));assert.match(controls,/Update Final/);
+  assert.ok(controls.indexOf('Reporting month')<controls.indexOf('Spent'));assert.ok(controls.indexOf('Notes')<controls.indexOf('Save Draft'));assert.match(controls,/Update Final/);
   assert.equal((ui.elements['report-panel'].innerHTML.match(/class="chair-paper"/g)||[]).length,1);assert.doesNotMatch(ui.elements['report-panel'].innerHTML,/Secretary:|Presentation|November|Unsaved changes/);
   ui.c.printChairUI();assert.match(printed,/NORVANA/);assert.match(printed,/October 2026/);assert.match(printed,/Finalized \(version 4\)/);assert.match(printed,/Final notes/);assert.doesNotMatch(printed,/Draft notes/);
   ui.c.showChairVersion('draft');ui.c.printChairUI();assert.match(printed,/Draft notes/);assert.match(printed,/Draft/);assert.doesNotMatch(printed,/Final notes/);
