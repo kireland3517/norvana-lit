@@ -197,20 +197,20 @@ test('January Chair selection reports January and preserves legacy December asso
   assert.equal(f.c.getChairReport('January 2027','test').finalized,null);
   f.c.saveChairDraft('January 2027',2,'',0,'test');assert.equal(f.c.getChairReport('January 2027','test').draft.reportingMonth,'January 2027');
 });
-test('chair reports select the reporting meeting month; the sent version changes only when sent again',()=>{
+test('chair reports are presented in the selected month but total the previous month orders; the sent version changes only when sent again',()=>{
   const f=fixture();f.ready(3);f.c.completeOrder(f.oid,'test',1);
   f.tables.Orders.push(['another','','October 2026','Group A','','','',10,10,'Completed','',0],['nov','','November 2026','Group B','','','',100,100,'Completed','',0]);
-  let r=f.c.getChairReport('October 2026','test');assert.equal(r.live.groupsServed,1);assert.equal(r.live.moneyCollected,40);assert.equal(r.draft.reportingMonth,'October 2026');
-  assert.equal(f.c.saveChairDraft('October 2026',75,'Notes',0,'test').revision,1);
-  let p=f.c.previewChairEmail('October 2026','test');assert.equal(f.c.sendChairReport(p.previewId,'test',p.action).success,true);const stock=f.stock();
+  let r=f.c.getChairReport('November 2026','test');assert.equal(r.live.groupsServed,1);assert.equal(r.live.moneyCollected,40);assert.equal(r.draft.reportingMonth,'November 2026');assert.equal(r.live.ordersMonth,'October 2026');assert.equal(f.c.getChairReport('December 2026','test').live.moneyCollected,100);
+  assert.equal(f.c.saveChairDraft('November 2026',75,'Notes',0,'test').revision,1);
+  let p=f.c.previewChairEmail('November 2026','test');assert.match(p.body,/Reporting month: November 2026\nOrders recap: October 2026/);assert.equal(f.c.sendChairReport(p.previewId,'test',p.action).success,true);const stock=f.stock();
   f.c.uncompleteOrder(f.oid,'test',2);
-  r=f.c.getChairReport('October 2026','test');assert.equal(r.live.moneyCollected,10);assert.equal(r.draft.moneyCollected,10);
+  r=f.c.getChairReport('November 2026','test');assert.equal(r.live.moneyCollected,10);assert.equal(r.draft.moneyCollected,10);
   assert.equal(r.finalized.moneyCollected,40);assert.equal(r.finalized.version,1);assert.ok(r.finalized.sentAt);assert.equal(r.finalized.recipient,'secretary@example.invalid');
-  assert.equal(f.c.saveChairDraft('October 2026',80,'Updated',r.revision,'test').success,true);
-  r=f.c.getChairReport('October 2026','test');assert.equal(r.finalized.moneySpent,75);
-  p=f.c.previewChairEmail('October 2026','test');assert.equal(p.action,'resend');assert.match(p.body,/Revised report \(version 2\)/);
+  assert.equal(f.c.saveChairDraft('November 2026',80,'Updated',r.revision,'test').success,true);
+  r=f.c.getChairReport('November 2026','test');assert.equal(r.finalized.moneySpent,75);
+  p=f.c.previewChairEmail('November 2026','test');assert.equal(p.action,'resend');assert.match(p.body,/Revised report \(version 2\)/);
   assert.equal(f.c.sendChairReport(p.previewId,'test',p.action).success,true);
-  r=f.c.getChairReport('October 2026','test');assert.equal(r.finalized.moneyCollected,10);assert.equal(r.finalized.moneySpent,80);assert.equal(r.finalized.version,2);
+  r=f.c.getChairReport('November 2026','test');assert.equal(r.finalized.moneyCollected,10);assert.equal(r.finalized.moneySpent,80);assert.equal(r.finalized.version,2);
   assert.equal(r.finalized.history.length,1);assert.equal(r.finalized.history[0].moneyCollected,40);assert.equal(r.finalized.history[0].moneySpent,75);assert.equal(f.stock(),stock);
 });
 test('autosaved Spent edits after a preview make that preview unusable',()=>{
@@ -680,10 +680,10 @@ test('H&I Completed orders are reported as charged to the budget, not collected'
 test('Chair Report keeps cash collected apart from H&I charged; old snapshots are untouched',()=>{
   const f=hiFixture();
   f.tables.Orders.push(['NL-2610-002','','October 2026',HI,'','','',20,12,'Completed','',0],['NL-2610-003','','October 2026','Group B','','','',40,30,'Completed','',0]);
-  const live=f.c.getChairReport('October 2026','test').live;
+  const live=f.c.getChairReport('November 2026','test').live;
   assert.equal(live.moneyCollected,30);assert.equal(live.hiCharged,12);assert.equal(live.groupsServed,2);
-  assert.equal(f.c.saveChairDraft('October 2026',5,'',0,'test').success,true);
-  assert.match(f.c.previewChairEmail('October 2026','test').body,/Collected: \$30\.00\nH&I charged to subcommittee budget: \$12\.00\nSpent: \$5\.00/);
+  assert.equal(f.c.saveChairDraft('November 2026',5,'',0,'test').success,true);
+  assert.match(f.c.previewChairEmail('November 2026','test').body,/Collected: \$30\.00\nH&I charged to subcommittee budget: \$12\.00\nSpent: \$5\.00/);
   // A version sent before this feature has no hiCharged and is left exactly as saved.
   const g=fixture();const legacy={reportingMonth:'October 2026',groupsServed:7,moneyCollected:123.45,moneySpent:90,other:'',version:9};
   g.tables['Chair Reports'].push(['October 2026',JSON.stringify(legacy),JSON.stringify(legacy),9,'']);

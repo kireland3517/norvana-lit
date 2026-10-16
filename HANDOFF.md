@@ -100,7 +100,10 @@ Admins can practice in a separate demo Apps Script project that points at its ow
   received = enter 80). Spending does not change stock.
 - Every order has a revision number so two people editing the same order cannot overwrite each other. If the app says
   "Order changed. Reload it," reload and try again.
-- Chair Report: pick the reporting month and enter Spent and Notes. They save automatically (the line under the fields says
+- Chair Report: the report month is the area meeting where it is presented (for example November), but the Groups
+  Served, Collected and H&I charged figures are the **previous month's** Completed orders (October's, picked up at the
+  October meeting). The screen and the email say "Orders recap: October 2026" so this is never ambiguous. Pick the
+  reporting month and enter Spent and Notes. They save automatically (the line under the fields says
   Saved, or NOT SAVED in red if something went wrong). Review Email shows the recipient and the full message; Send emails it
   and saves that exact version, with its sent date, in the Chair Reports tab (column C, Finalized JSON). Later orders or
   edits never change a sent version. Sending again saves a new version and keeps the earlier ones in its history.

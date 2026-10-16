@@ -15,10 +15,13 @@ function chairFigures_(reportingMonth, token) {
   const ym = meetingLabelToYm_(reportingMonth);
   if (ym == null) throw new Error('Select a reporting month.');
   const month = monthLabel_(ym);
-  const completed = getOrders(month, token).filter(o => o.status === 'Completed' && orderMatchesReportMonth_(o.meetingMonth, month));
+  // The report is presented at the `month` area meeting but recaps the PREVIOUS month's orders
+  // (what groups picked up at last month's meeting), so the figures come from ordersMonth.
+  const ordersMonth = monthLabel_(ym - 1);
+  const completed = getOrders(month, token).filter(o => o.status === 'Completed' && orderMatchesReportMonth_(o.meetingMonth, ordersMonth));
   const total = list => Math.round(list.reduce((sum,o) => sum + o.fulfilledTotal, 0) * 100) / 100;
   // Subcommittee orders are charged to its budget, so they are reported apart from cash collected.
-  return { reportingMonth: month,
+  return { reportingMonth: month, ordersMonth: ordersMonth,
     groupsServed: new Set(completed.map(o => o.groupName.trim().toLowerCase())).size,
     moneyCollected: total(completed.filter(o => !isSubcommitteeGroup_(o.groupName))),
     hiCharged: total(completed.filter(o => isSubcommitteeGroup_(o.groupName))) };
@@ -69,6 +72,7 @@ function saveChairDraft(reportingMonth, spending, notes, revision, token) {
 }
 function chairReportText_(report) {
   return 'NORVANA Chair Report\nReporting month: ' + report.reportingMonth +
+    (report.ordersMonth ? '\nOrders recap: ' + report.ordersMonth : '') +
     (report.version > 1 ? '\nRevised report (version ' + report.version + ')' : '') + '\n\nGroups Served: ' + report.groupsServed +
     '\nCollected: $' + report.moneyCollected.toFixed(2) +
     (typeof report.hiCharged === 'number' ? '\nH&I charged to subcommittee budget: $' + report.hiCharged.toFixed(2) : '') +

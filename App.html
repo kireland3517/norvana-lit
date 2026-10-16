@@ -1914,7 +1914,7 @@ function renderOrderList() {
   var checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
   list.innerHTML = filtered.map(function(o) {
     var checkBtn = o.status === 'Ready'
-      ? '<button type="button" class="card-check-icon" title="Mark Picked Up" aria-label="Mark Picked Up" onclick="event.stopPropagation();markPickedUp(\'' + esc(o.orderId) + '\')">' + checkSvg + '</button>'
+      ? '<button type="button" class="card-check-icon" title="Picked Up" aria-label="Picked Up" onclick="event.stopPropagation();markPickedUp(\'' + esc(o.orderId) + '\')">' + checkSvg + '</button>'
       : '';
     return '<div class="order-card status-' + esc(o.status) + '" onclick="openOrder(\'' + esc(o.orderId) + '\')">' +
       '<div class="card-top-row">' +
@@ -2145,7 +2145,7 @@ function renderOrderPanel(data) {
   } else {
     html += '<button class="mark-ready-btn done" disabled>&#10003; Ready for Pickup</button>';
     html += '<button class="undo-pickup-btn" id="reopen-btn" onclick="reopenFromPanel()">Reopen for editing</button>';
-    html += '<button class="mark-complete-btn" style="width:100%;margin-top:10px;border-radius:12px;padding:14px;font-size:15px" onclick="markPickupFromPanel()">Mark Picked Up</button>';
+    html += '<button class="mark-complete-btn" style="width:100%;margin-top:10px;border-radius:12px;padding:14px;font-size:15px" onclick="markPickupFromPanel()">Picked Up</button>';
   }
 
   document.getElementById('panel-body').innerHTML = html;
