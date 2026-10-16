@@ -15,17 +15,7 @@ body.dark .report-actions button,body.dark .report-views button{color:var(--onyx
 </style>
 <script>
 var requestedReportMode=null, reportMode='orders', reportMonth='', availableMonths=[], reportYear='', reportPeriod='monthly', reportView='group', reportGroup='';
-var ordersReportData=null, inventoryReportData=null, chairData=null, chairPreview=null;
-var inventoryReportCategory=null;
-function inventoryReportCategories(){
-  const categories=[...new Set(inventoryReportData.items.map(i=>i.category||'Other'))];
-  const order=['Books','Pamphlets','Keytags','Medallions','Special Orders'];
-  return order.filter(c=>categories.includes(c)).concat(categories.filter(c=>!order.includes(c)));
-}
-// inventoryReportCategory: null means every category (the default); otherwise one category name.
-function inventoryReportItems(){return inventoryReportData.items.filter(i=>inventoryReportCategory===null||(i.category||'Other')===inventoryReportCategory);}
-function inventoryReportTitle(){return 'Inventory - '+(inventoryReportCategory===null?'All categories':inventoryReportCategory);}
-function selectInventoryReportCategory(value){inventoryReportCategory=value===''||value===null?null:String(value);renderInventoryReport();}
+var ordersReportData=null, chairData=null, chairPreview=null;
 var reportRequest=0, chairSendPending=false, chairWritePending=false, chairPreviewSequence=0, chairDirty=false, chairDisplay='draft', chairPreferredDisplay=null, chairSaveTimer=null, chairSaveAgain=false, chairSaveWaiters=[];
 const REPORT_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function reportMonthInput(label){const p=String(label).split(' '), i=REPORT_MONTH_NAMES.indexOf(p[0]);return i<0?'':p[1]+'-'+String(i+1).padStart(2,'0');}
@@ -37,7 +27,6 @@ function reportCanLeave(go,stay){
   if(reportMode!=='chair'||!chairData||(!chairDirty&&!chairWritePending&&!chairSaveTimer)){go();return;}
   chairAutosave(ok=>{if(ok)go();else showConfirm('Your latest changes could not be saved. Leave anyway and lose them?','Leave',go,stay);});
 }
-function openInventoryReport(){requestedReportMode='inventory';viewsLoaded.reports=false;switchView('reports');}
 function loadReports(){
   reportMode=requestedReportMode||'orders';requestedReportMode=null;
   if(!reportMonthInput(reportMonth)){const n=new Date();reportMonth=reportMonthInput(meetingMonth)?meetingMonth:REPORT_MONTH_NAMES[n.getMonth()]+' '+n.getFullYear();}
@@ -47,11 +36,11 @@ function loadReports(){
 }
 function renderReportsShell(){
   document.getElementById('reports-content').innerHTML='<div style="padding-top:16px"><div class="report-mode-tabs">'+
-    [['orders','Orders'],['inventory','Inventory'],['chair','Chair Report']].map(([key,label])=>'<button class="report-mode-tab'+(reportMode===key?' active':'')+'" onclick="setReportMode(\''+key+'\')">'+label+'</button>').join('')+
+    [['orders','Orders'],['chair','Chair Report']].map(([key,label])=>'<button class="report-mode-tab'+(reportMode===key?' active':'')+'" onclick="setReportMode(\''+key+'\')">'+label+'</button>').join('')+
     '</div><div id="report-controls"></div><div id="report-panel"></div><div id="footer-reports"></div></div>';
 }
 function setReportMode(mode){
-  if(!['orders','inventory','chair'].includes(mode))return;
+  if(!['orders','chair'].includes(mode))return;
   reportCanLeave(()=>{reportMode=mode;chairDirty=false;renderReportsShell();fetchReport();});
 }
 function onReportMonthChange(value){
@@ -74,7 +63,7 @@ function renderOrdersControls(){
 }
 function fetchReport(){
   const request=++reportRequest,mode=reportMode;chairPreview=null;chairPreviewSequence++;
-  ordersReportData=null;inventoryReportData=null;chairData=null;
+  ordersReportData=null;chairData=null;
   if(mode==='orders')renderOrdersControls();else document.getElementById('report-controls').innerHTML='';
   document.getElementById('report-panel').innerHTML='<div class="spinner"><div class="spin"></div>Loading...</div>';
   const runner=google.script.run.withSuccessHandler(data=>{
@@ -82,11 +71,9 @@ function fetchReport(){
     if(!data||data.error){document.getElementById('report-panel').textContent=data&&data.error||'Could not load report.';return;}
     viewsLoaded.reports=true;
     if(mode==='orders'){ordersReportData=data;renderOrdersControls();renderOrdersResults();}
-    else if(mode==='inventory'){inventoryReportData=data;renderInventoryReport();}
     else{chairData=data;chairDirty=false;clearTimeout(chairSaveTimer);chairSaveAgain=false;chairDisplay=chairPreferredDisplay&&data.finalized?chairPreferredDisplay:'draft';chairPreferredDisplay=null;renderChairReport();}
   }).withFailureHandler(e=>{if(request===reportRequest)document.getElementById('report-panel').textContent=e.message;});
   if(mode==='orders')runner.getOrdersReport(reportPeriod,reportPeriod==='annual'?reportYear:reportMonth,reportGroup,sessionToken);
-  else if(mode==='inventory')runner.getStockReport(sessionToken);
   else runner.getChairReport(reportMonth,sessionToken);
 }
 function fetchSpecialReport(){fetchReport();}
@@ -116,25 +103,57 @@ function ordersPeriodLabel(){return ordersReportData.selection+(ordersReportData
 function printOrdersReport(){if(!ordersReportData)return;const t=ordersTableData(),m=ordersMonthData();printReportPage(ordersTitle(),'<h1>NORVANA</h1><h2>'+ordersTitle()+'</h2><p>'+esc(ordersPeriodLabel())+'</p>'+ordersTotalsHTML()+'<p>'+ordersHelp()+'</p>'+reportTable(t.headers,t.rows)+(ordersReportData.period==='annual'?'<h3>Monthly breakdown</h3>'+reportTable(m.headers,m.rows):''));}
 function ordersCSVRows(){const d=ordersReportData,t=ordersTableData(),m=ordersMonthData();return [['NORVANA',ordersTitle()],['Period',d.selection],['Group',d.group||'All groups'],['Collected',d.totals.collected],...(hasCharged()?[['Charged to H&I',d.totals.charged]]:[]),['Pending',d.totals.pending],['Estimated Value',d.totals.estimated],[ordersHelp()],[],t.headers,...t.rows,...(d.period==='annual'?[[],['Monthly breakdown'],m.headers,...m.rows]:[])];}
 function exportOrdersCSV(){if(ordersReportData)downloadReportCSV('NORVANA '+ordersTitle()+' '+ordersReportData.selection,ordersCSVRows());}
-function inventoryReportHTML(){
-  const d=inventoryReportData,stamp='<p class="report-stock-date">Stock as of '+esc(new Date(d.stockAsOf).toLocaleString())+'</p>';
-  if(inventoryReportCategory!==null)return stamp+reportTable(['Item','Count'],inventoryReportItems().map(i=>[i.name,i.stock]));
-  // All categories: one headed table per category, in the usual category order.
-  return stamp+inventoryReportCategories().map(cat=>'<h3 class="report-cat-heading" style="margin:18px 0 6px;font-size:14px">'+esc(cat)+'</h3>'+reportTable(['Item','Count'],d.items.filter(i=>(i.category||'Other')===cat).map(i=>[i.name,i.stock]))).join('');
+// -- Inventory Print / Export (opened from the Inventory tab) --
+// Counts, targets and suggested orders are all in singles, the unit Catalog stock is kept in.
+// Incoming (already ordered) stock is not tracked, so Suggested Order = max(0, Target Stock - On Hand).
+function inventoryStatusLabel(onHand,lowAt){const low=Number(lowAt)||5;return onHand<=0?'Out of stock':onHand<=low?'Low stock':'In stock';}
+function inventoryCategoryOrder(categories){
+  const known=(typeof CAT_ORDER!=='undefined'?CAT_ORDER:[]).filter(c=>categories.includes(c));
+  return known.concat(categories.filter(c=>!known.includes(c)));
 }
-function renderInventoryReport(){
-  const cats=inventoryReportCategories();
-  if(inventoryReportCategory!==null&&!cats.includes(inventoryReportCategory))inventoryReportCategory=null;
-  document.getElementById('report-controls').innerHTML='<div class="report-controls"><label>Category<select id="inventory-category" onchange="selectInventoryReportCategory(this.value)"><option value=""'+(inventoryReportCategory===null?' selected':'')+'>All categories</option>'+cats.map(cat=>'<option value="'+esc(cat)+'"'+(cat===inventoryReportCategory?' selected':'')+'>'+esc(cat)+'</option>').join('')+'</select></label></div><div class="report-actions"><button onclick="printInventoryReport()">Print / PDF</button><button onclick="exportInventoryCSV()">CSV</button></div>';
-  document.getElementById('report-panel').innerHTML=inventoryReportHTML();
+// items: live values [{itemId,category,name,stock,lowAt,packSize,targetStock}]; options: {categories:null|[names], include:'all'|'reorder'}
+function inventoryReportModel(items,options){
+  const wanted=options.categories&&options.categories.length?options.categories:null;
+  const sorted=typeof itemSortScore==='function'?items.slice().sort((a,b)=>itemSortScore(a)-itemSortScore(b)):items;
+  const cats=inventoryCategoryOrder([...new Set(items.map(i=>i.category||'Other'))]).filter(c=>!wanted||wanted.includes(c));
+  const groups=cats.map(cat=>({category:cat,rows:sorted.filter(i=>(i.category||'Other')===cat).map(i=>{
+    const onHand=Number(i.stock)||0,pack=Number(i.packSize)||1;
+    const target=i.targetStock===null||i.targetStock===undefined||i.targetStock===''?null:Number(i.targetStock);
+    const suggested=target===null?null:Math.max(0,target-onHand),status=inventoryStatusLabel(onHand,i.lowAt);
+    return {itemId:i.itemId,name:i.name,pack:pack,onHand:onHand,target:target,suggested:suggested,
+      packs:suggested>0&&pack>1?Math.ceil(suggested/pack):null,status:status,needsTarget:target===null&&status!=='In stock'};
+  }).filter(r=>options.include!=='reorder'||r.suggested>0||r.needsTarget)})).filter(g=>g.rows.length);
+  const needTarget=groups.reduce((n,g)=>n+g.rows.filter(r=>r.needsTarget).length,0);
+  return {groups:groups,needTarget:needTarget,allCategories:inventoryCategoryOrder([...new Set(items.map(i=>i.category||'Other'))])};
 }
-function printInventoryReport(){if(inventoryReportData)printReportPage(inventoryReportTitle(),'<h1>NORVANA</h1><h2>'+esc(inventoryReportTitle())+'</h2>'+inventoryReportHTML());}
-function inventoryCSVRows(){
-  const head=[['NORVANA',inventoryReportTitle()],['Stock as of',inventoryReportData.stockAsOf],[]];
-  if(inventoryReportCategory!==null)return [...head,['Item','Count'],...inventoryReportItems().map(i=>[i.name,i.stock])];
-  return [...head,['Category','Item','Count'],...inventoryReportCategories().flatMap(cat=>inventoryReportData.items.filter(i=>(i.category||'Other')===cat).map(i=>[cat,i.name,i.stock]))];
+function inventoryScopeText(model,options){
+  const picked=options.categories&&options.categories.length&&options.categories.length<model.allCategories.length;
+  return 'Categories: '+(picked?options.categories.join(', '):'All categories')+' | Items: '+(options.include==='reorder'?'Items to reorder':'All items');
 }
-function exportInventoryCSV(){if(inventoryReportData)downloadReportCSV('NORVANA '+inventoryReportTitle(),inventoryCSVRows());}
+function inventorySuggestedText(r){
+  if(r.target===null)return 'Set target';
+  if(r.pack>1&&r.suggested>0)return r.suggested+' ('+r.packs+(r.packs===1?' pack':' packs')+' of '+r.pack+')';
+  return String(r.suggested);
+}
+function inventoryPrintHTML(model,meta){
+  const left='style="text-align:left"';
+  const head='<tr><th '+left+'>Item #</th><th '+left+'>Item Name</th><th>On Hand</th><th>Target Stock</th><th>Suggested Order</th><th>Stock Status</th></tr>';
+  const tables=model.groups.map(g=>'<h3 style="margin:18px 0 6px;font-size:14px">'+esc(g.category)+'</h3><table class="report-table" style="table-layout:fixed"><colgroup><col style="width:11%"><col style="width:31%"><col style="width:11%"><col style="width:12%"><col style="width:20%"><col style="width:15%"></colgroup><thead>'+head+'</thead><tbody>'+
+    g.rows.map(r=>'<tr><td '+left+'>'+esc(r.itemId)+'</td><td '+left+'>'+esc(r.name)+(r.pack>1?'<br><small>Pack of '+r.pack+' - counts are in singles</small>':'')+'</td><td>'+r.onHand+'</td><td>'+(r.target===null?'':r.target)+'</td><td>'+esc(inventorySuggestedText(r))+'</td><td>'+(r.status==='In stock'?'In stock':'<strong>'+esc(r.status.toUpperCase())+'</strong>')+'</td></tr>').join('')+'</tbody></table>').join('')||'<p>No items match this selection.</p>';
+  return '<h2>NORVANA Literature Inventory</h2><p>Generated: '+esc(meta.generated)+'<br>'+esc(meta.scope)+'</p>'+
+    '<p style="font-size:12px">All counts are in singles (individual items). Target Stock is the item\'s Low At level from the Catalog sheet. Suggested Order = Target Stock - On Hand.'+(model.needTarget?' "Set target" marks '+model.needTarget+' low or out item'+(model.needTarget===1?'':'s')+' with no target.':'')+'</p>'+tables;
+}
+function inventoryCSVRows(model,meta){
+  return [['NORVANA Literature Inventory'],['Generated',meta.generated],['Scope',meta.scope],['All counts are in singles. Suggested Order = Target Stock - On Hand.'],[],
+    ['Category','Item #','Item Name','On Hand','Target Stock','Suggested Order','Stock Status','Order Unit','Suggested Packs'],
+    ...model.groups.flatMap(g=>g.rows.map(r=>[g.category,r.itemId,r.name,r.onHand,r.target===null?'':r.target,r.target===null?'Set target':r.suggested,r.status,r.pack>1?'Pack of '+r.pack+' (counts are singles)':'Single items',r.packs===null?'':r.packs]))];
+}
+function createInventoryReport(items,options,output){
+  const model=inventoryReportModel(items,options),now=new Date(),meta={generated:now.toLocaleString(),scope:inventoryScopeText(model,options)};
+  if(output==='csv')downloadReportCSV('NORVANA Literature Inventory '+now.toISOString().slice(0,10),inventoryCSVRows(model,meta));
+  else printReportPage('Literature Inventory',inventoryPrintHTML(model,meta));
+  return model;
+}
 function downloadReportCSV(title,rows){
   const csv=rows.map(r=>r.map(v=>'"'+String(typeof v==='string'&&/^[=+\-@]/.test(v)?"'"+v:v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
   const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=title+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);

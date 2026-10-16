@@ -913,6 +913,7 @@ function getCatalogAll(token) {
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (!row[0]) continue;
+    const lowAt = row[6] !== '' && row[6] !== undefined ? Number(row[6]) : 5;
     items.push({
       itemId:   String(row[0]),
       category: String(row[1]),
@@ -920,8 +921,10 @@ function getCatalogAll(token) {
       price:    Number(row[3]),
       stock:    Number(row[4]) || 0,
       active:   String(row[5]).trim().toUpperCase() === 'YES',
-      lowAt:    row[6] !== '' && row[6] !== undefined ? Number(row[6]) : 5,
+      lowAt:    lowAt,
       packSize: Number(row[7]) || 1,
+      // The Inventory report's Target Stock is the item's Low At level (Catalog column G); there is no separate column.
+      targetStock: lowAt,
       rowIndex: i + 1,
     });
   }

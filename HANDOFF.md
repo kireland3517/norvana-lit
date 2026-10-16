@@ -140,6 +140,8 @@ advanced service turned on (Services > Sheets API) and the script time zone set 
 | Groups | Group Name (one group per row) |
 | Chair Reports | Presentation Month (or Reporting Month), Draft JSON, Finalized JSON, Revision, Email Attempt JSON |
 
+The Inventory tab's Print / Export button builds one report (Print / PDF or CSV). Its Target Stock is each item's Low At (Catalog column G), so Suggested Order = Low At - On Hand, in singles (never below 0). Low At also decides when an item turns orange (low) or red (out). There is no separate target column. Incoming (already ordered) stock is not tracked.
+
 Catalog column E counts single items, and Pack Size (column H) is how many singles one ordered unit contains (for
 example 5 for a five-pack), so orders count packs while stock counts singles. Leave the Revision,
 Chair Reports and Catalog stock columns alone when editing the sheet by hand.

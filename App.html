@@ -761,6 +761,13 @@
   .inv-price-prefix-wrap:focus-within { border-color: var(--blue); background: white; }
   .inv-price-line { display: flex; align-items: center; gap: 2px; min-height: 31px; }
   .inv-price-ro { min-width: 48px; padding: 5px 4px; text-align: center; font-size: 13px; font-weight: 600; color: var(--onyx); }
+  #inv-export-modal { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(10,12,40,0.55); align-items: center; justify-content: center; padding: 20px; }
+  #inv-export-modal.open { display: flex; }
+  #inv-export-modal .export-title { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
+  #inv-export-modal fieldset { border: 0; margin: 0 0 14px; padding: 0; }
+  #inv-export-modal legend { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0; margin-bottom: 6px; }
+  #inv-export-modal label.opt { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 14px; }
+  #inv-export-modal .export-cats { max-height: 170px; overflow-y: auto; }
   .inv-icon-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; background: none; border: none; border-radius: 7px; color: var(--muted); cursor: pointer; flex-shrink: 0; transition: background 0.18s; }
   .inv-icon-btn:hover { background: var(--blue-pale); }
   .inv-icon-btn:disabled { opacity: 0.4; cursor: default; }
@@ -1257,6 +1264,17 @@
 <!-- -- TOAST -- -->
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="notice-modal" role="alertdialog" aria-modal="true"><div class="notice-sheet"><div id="notice-text"></div><button type="button" class="login-btn" id="notice-ok" onclick="closeNotice()">OK</button></div></div>
+<div id="inv-export-modal" role="dialog" aria-modal="true" aria-labelledby="inv-export-title"><div class="notice-sheet">
+  <div class="export-title" id="inv-export-title">Print / Export inventory</div>
+  <fieldset><legend>Categories</legend><div class="export-cats" id="inv-export-cats"></div></fieldset>
+  <fieldset><legend>Include</legend>
+    <label class="opt"><input type="radio" name="inv-export-include" value="all" checked> All items</label>
+    <label class="opt"><input type="radio" name="inv-export-include" value="reorder"> Items to reorder</label></fieldset>
+  <fieldset><legend>Output</legend>
+    <label class="opt"><input type="radio" name="inv-export-output" value="print" checked> Print / PDF</label>
+    <label class="opt"><input type="radio" name="inv-export-output" value="csv"> CSV</label></fieldset>
+  <div class="confirm-row"><button type="button" class="login-btn secondary" onclick="closeInventoryExport()">Cancel</button><button type="button" class="login-btn" id="inv-export-go" onclick="runInventoryExport()">Create report</button></div>
+</div></div>
 <div id="confirm-modal" role="alertdialog" aria-modal="true"><div class="notice-sheet"><div id="confirm-text"></div><div class="confirm-row"><button type="button" class="login-btn secondary" id="confirm-cancel" onclick="closeConfirm(false)">Cancel</button><button type="button" class="login-btn" id="confirm-ok" onclick="closeConfirm(true)">OK</button></div></div></div>
 
 <script>
@@ -1433,7 +1451,7 @@ function doLogin() {
     var panel = document.getElementById('order-panel'); if (panel) panel.classList.remove('open');
     allOrders = []; currentOrderId = null; currentItems = [];
     inventoryCategories = []; activeInventoryCategory = null; window._settingsGroups = null;
-    ordersReportData = null; inventoryReportData = null; chairData = null; chairPreview = null;
+    ordersReportData = null; chairData = null; chairPreview = null;
   }
 
   function doSignout() {
@@ -2378,6 +2396,7 @@ function loadInventory() {
     .getCatalogAll(sessionToken);
 }
 
+let inventoryItems = [];
 let inventoryCategories = [];
 let activeInventoryCategory = null;
 
@@ -2400,7 +2419,7 @@ function renderInventory(items) {
 
   let html = '<div style="padding-top:16px">'
     + '<div style="height:12px"></div>'
-    + '<button class="save-inv-btn" style="margin-bottom:12px" onclick="openInventoryReport()">View Inventory Report</button>'
+    + '<button class="save-inv-btn" style="margin-bottom:12px" onclick="openInventoryExport()">Print / Export</button>'
     + '<div id="inv-status" role="status"></div>'
     + '<div class="inv-summary">'
     + '<div class="inv-tile inv-tile-ok" onclick="filterInventory(\'ok\',this)">'
@@ -2468,6 +2487,7 @@ function renderInventory(items) {
 
   html += '</div>';
   invPrices = {};
+  inventoryItems = items;
   items.forEach(function(item) { invPrices[item.itemId] = Number(item.price); });
   document.getElementById('inventory-content').innerHTML = html;
 }
@@ -2648,6 +2668,51 @@ function saveStockNow() {
     .withSuccessHandler(function(result) { if (!result || !result.success) done(false, (result && result.error) || 'Count save failed.'); else done(true); })
     .withFailureHandler(function(e) { done(false, (e && e.message) || 'Count save failed.'); })
     .updateStockCounts(updates, sessionToken);
+}
+
+// -- Inventory Print / Export dialog --
+// Always opens on "All categories", whichever category tab is being viewed.
+function openInventoryExport() {
+  var box = document.getElementById('inv-export-modal'), list = document.getElementById('inv-export-cats');
+  if (!box || !list) return;
+  list.innerHTML = '<label class="opt"><input type="checkbox" id="inv-export-all" checked onchange="exportAllToggled(this)"> All categories</label>'
+    + inventoryCategories.map(function(cat) { return '<label class="opt"><input type="checkbox" class="inv-export-cat" value="' + esc(cat) + '" onchange="exportCatToggled()"> ' + esc(cat === 'Spanish Lit' ? 'Spanish' : cat) + '</label>'; }).join('');
+  document.querySelector('input[name="inv-export-include"][value="all"]').checked = true;
+  document.querySelector('input[name="inv-export-output"][value="print"]').checked = true;
+  box.classList.add('open');
+  document.getElementById('inv-export-go').focus();
+}
+function closeInventoryExport() { var box = document.getElementById('inv-export-modal'); if (box) box.classList.remove('open'); }
+function exportAllToggled(cb) {
+  if (cb.checked) document.querySelectorAll('.inv-export-cat').forEach(function(c) { c.checked = false; });
+  else cb.checked = true; // "All categories" stays selected until a specific category is chosen
+}
+function exportCatToggled() {
+  var any = Array.from(document.querySelectorAll('.inv-export-cat')).some(function(c) { return c.checked; });
+  document.getElementById('inv-export-all').checked = !any;
+}
+function liveInventoryItems() {
+  // The report uses the counts on screen (including one typed a moment ago); Target Stock comes from the Catalog sheet.
+  return inventoryItems.map(function(item) {
+    var stock = document.getElementById('inv-' + item.itemId);
+    var out = Object.assign({}, item);
+    if (stock && stock.value.trim() !== '') out.stock = Number(stock.value);
+    return out;
+  });
+}
+function runInventoryExport() {
+  var picked = Array.from(document.querySelectorAll('.inv-export-cat')).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
+  var include = document.querySelector('input[name="inv-export-include"]:checked').value;
+  var output = document.querySelector('input[name="inv-export-output"]:checked').value;
+  var items = liveInventoryItems();
+  if (items.some(function(i) { return !Number.isInteger(Number(i.stock)); })) {
+    closeInventoryExport();
+    showNotice('Fix the counts first. They must be whole numbers.');
+    return;
+  }
+  closeInventoryExport();
+  saveStockNow();
+  createInventoryReport(items, { categories: picked.length ? picked : null, include: include }, output);
 }
 
 function toggleItem(checkbox, itemId) {

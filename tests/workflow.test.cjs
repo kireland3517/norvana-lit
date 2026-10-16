@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-test('assembled local preview loads Reports and the Inventory Report shortcut',()=>{
+test('assembled local preview loads Reports (Orders and Chair Report only; inventory printing lives on the Inventory tab)',()=>{
   const html=require('./preview.cjs').renderPreview(), elements={}, timers=[];
   function element(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return false;}},insertAdjacentHTML(where,s){this.innerHTML+=s;}};}
   const storage={getItem:()=>null,setItem(){},removeItem(){}};
@@ -14,8 +14,8 @@ test('assembled local preview loads Reports and the Inventory Report shortcut',(
   for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c,{filename:'assembled-preview.html'});
   function flush(){let n=0;while(timers.length){assert.ok(n++<30,'callbacks must settle');timers.shift()();}}
   vm.runInContext("meetingMonth='October 2026';sessionToken='fixture';switchView('reports');",c);flush();
-  assert.match(elements['reports-content'].innerHTML,/>Inventory</);
-  assert.equal((elements['reports-content'].innerHTML.match(/class="report-mode-tab/g)||[]).length,4);
+  assert.doesNotMatch(elements['reports-content'].innerHTML,/>Inventory</);
+  assert.equal((elements['reports-content'].innerHTML.match(/class="report-mode-tab/g)||[]).length,3);
   assert.match(elements['report-panel'].innerHTML,/Example Group/);
   vm.runInContext("changeOrdersPeriod('annual');",c);flush();
   assert.match(elements['report-panel'].innerHTML,/Monthly breakdown/);
@@ -24,10 +24,6 @@ test('assembled local preview loads Reports and the Inventory Report shortcut',(
   assert.equal(vm.runInContext('ordersReportData.totals.collected',c),20);
   assert.equal(vm.runInContext('ordersReportData.totals.pending',c),0);
   vm.runInContext("changeOrdersPeriod('monthly');",c);flush();
-  vm.runInContext('openInventoryReport();',c);flush();
-  assert.match(elements['report-panel'].innerHTML,/Stock as of/);
-  assert.match(elements['report-panel'].innerHTML,/Basic Text/);
-  assert.doesNotMatch(elements['report-panel'].innerHTML,/Loading/);
   vm.runInContext("setReportMode('chair');",c);flush();
   assert.match(elements['report-panel'].innerHTML,/Groups Served/);
   assert.match(elements['report-panel'].innerHTML,/20\.00/);  vm.runInContext("alert('Choose an access code of at least 8 characters.')",c);
@@ -363,31 +359,6 @@ test('all Orders views export the selected period, group and matching rows with 
   }
 });
 
-test('Inventory print and CSV contain only Item and Count plus NORVANA and stock date',()=>{
-  const ui=emailUIFixture();let printed,exported;
-  ui.c.inventoryReportData={stockAsOf:'2026-10-10T12:00:00Z',items:[{name:'Book',stock:-2},{name:'Inactive item',stock:0}]};
-  ui.c.printReportPage=(title,html)=>printed=html;ui.c.downloadReportCSV=(title,rows)=>exported=rows;
-  ui.c.renderInventoryReport();ui.c.selectInventoryReportCategory('Other');ui.c.printInventoryReport();ui.c.exportInventoryCSV();
-  assert.match(printed,/NORVANA/);assert.match(printed,/Stock as of/);assert.equal((printed.match(/<th>/g)||[]).length,2);assert.doesNotMatch(printed,/Requested|Fulfilled|demand|month selector/i);
-  assert.equal(exported[0][0],'NORVANA');assert.equal(exported[1][1],'2026-10-10T12:00:00Z');assert.equal(exported[3].join(','),'Item,Count');assert.equal(exported[4][1],-2);assert.ok(exported.slice(3).every(r=>r.length===2));
-});
-
-test('Inventory report defaults to all categories and a selected category keeps screen, print and CSV scoped to the same items',()=>{
-  const ui=emailUIFixture();let printed;
-  ui.c.inventoryReportData={stockAsOf:'2026-10-10T12:00:00Z',items:[{name:'Book',category:'Books',stock:-2},{name:'Welcome',category:'Keytags',stock:5}]};
-  ui.c.printReportPage=(title,html)=>printed=html;
-  ui.c.renderInventoryReport();assert.equal(ui.c.inventoryReportCategory,null);
-  assert.match(ui.elements['report-controls'].innerHTML,/All categories/);
-  assert.match(ui.elements['report-panel'].innerHTML,/Book/);assert.match(ui.elements['report-panel'].innerHTML,/Welcome/);
-  ui.c.printInventoryReport();assert.match(printed,/Inventory - All categories/);assert.match(printed,/Book/);assert.match(printed,/Welcome/);
-  assert.deepEqual(JSON.parse(JSON.stringify(ui.c.inventoryCSVRows().slice(3))),[['Category','Item','Count'],['Books','Book',-2],['Keytags','Welcome',5]]);
-  ui.c.selectInventoryReportCategory('Keytags');ui.c.printInventoryReport();
-  assert.match(ui.elements['report-panel'].innerHTML,/Welcome/);assert.doesNotMatch(ui.elements['report-panel'].innerHTML,/Book/);
-  assert.match(printed,/Inventory - Keytags/);assert.doesNotMatch(printed,/Book/);
-  assert.deepEqual(JSON.parse(JSON.stringify(ui.c.inventoryCSVRows().slice(4))),[['Welcome',5]]);
-  ui.c.selectInventoryReportCategory('');assert.equal(ui.c.inventoryReportCategory,null);
-});
-
 test('Chair summary strip leads the controls; autosave replaces Save and Finalize; selected version determines print and email',()=>{
   const ui=emailUIFixture();let printed;
   const draft={reportingMonth:'October 2026',groupsServed:2,moneyCollected:30,hiCharged:4,moneySpent:20,other:'Draft notes',savedAt:'today'};
@@ -427,7 +398,7 @@ test('leaving a Chair Report saves first and only asks in-page when a change cou
   ui.answer(false);ui.c.onReportMonthChange('2026-11');
   assert.equal(left,1);assert.match(ui.prompts[0],/could not be saved/);assert.equal(ui.elements['report-month'].value,'2026-10');
   ui.answer(true);ui.c.onReportMonthChange('2026-11');assert.equal(left,2);assert.equal(ui.c.reportMonth,'November 2026');
-  ui.c.chairDirty=false;ui.c.setReportMode('inventory');assert.equal(left,3);
+  ui.c.chairDirty=false;ui.c.setReportMode('orders');assert.equal(left,3);
 });
 test('manual ordering window includes final millisecond of meeting day in New York',()=>{
   const f=fixture();const NativeDate=Date;
@@ -605,13 +576,11 @@ test('UI renders inventory, fulfillment stock, Secretary setting and both report
     window:{addEventListener(){},scrollTo(){}},document:{body:element('body'),getElementById:element,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){}},google:{script:{run:{}}}});
   for(const file of ['App.html','ReportUI.html'])for(const m of fs.readFileSync(file,'utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c);
   vm.runInContext(`renderInventory([{itemId:'B1',category:'Books',name:'Book',stock:-2,price:10,active:true}]);`,c);
-  assert.match(elements['inventory-content'].innerHTML,/View Inventory Report/);assert.match(elements['inventory-content'].innerHTML,/inv-field-label">Count</);assert.match(elements['inventory-content'].innerHTML,/inv-price-ro">\$10\.00/);assert.doesNotMatch(elements['inventory-content'].innerHTML,/inv-price-input|Save Stock/);assert.match(elements['inventory-content'].innerHTML,/aria-label="Edit price for Book"/);assert.match(elements['inventory-content'].innerHTML,/value="-2"/);
+  assert.match(elements['inventory-content'].innerHTML,/Print \/ Export/);assert.match(elements['inventory-content'].innerHTML,/inv-field-label">Count</);assert.match(elements['inventory-content'].innerHTML,/inv-price-ro">\$10\.00/);assert.doesNotMatch(elements['inventory-content'].innerHTML,/inv-price-input|Save Stock/);assert.match(elements['inventory-content'].innerHTML,/aria-label="Edit price for Book"/);assert.match(elements['inventory-content'].innerHTML,/value="-2"/);
   vm.runInContext(`allOrders=[{orderId:'O',status:'Ready',estimatedTotal:50,groupName:'A'}];currentOrderId='O';renderOrderPanel({status:'Ready',revision:1,items:[{orderId:'O',rowId:'O-01',sheetRow:2,name:'Book',category:'Books',price:10,qtyOrdered:5,qtyFulfilled:3,stock:-2}]});`,c);
   assert.match(elements['panel-body'].innerHTML,/Available: -2/);assert.match(elements['panel-body'].innerHTML,/Reopen for editing/);
   vm.runInContext(`renderSettings({codeIsSet:true,email:'chair@example.invalid',secretaryEmail:'secretary@example.invalid',schedule:[]},[]);`,c);
   assert.match(elements['settings-content'].innerHTML,/Secretary Email/);
-  vm.runInContext(`inventoryReportData={meetingMonth:'October 2026',stockAsOf:'2026-10-10',items:[{name:'Book',groups:2,qtyOrdered:10,qtyFulfilled:3,unfilled:2,awaiting:5,stock:-2}]};renderInventoryReport();`,c);
-  assert.match(elements['report-panel'].innerHTML,/<th>Item<\/th><th>Count<\/th>/);assert.doesNotMatch(elements['report-panel'].innerHTML,/demand|fulfillment|Ordering month/i);
   vm.runInContext(`const r={presentationMonth:'November 2026',reportingMonth:'October 2026',groupsServed:2,moneyCollected:30,moneySpent:20,other:'<script>unsafe</scr'+'ipt>',savedAt:'today'};chairData={draft:r,live:r,finalized:{...r,version:2},revision:2,secretaryEmail:'secretary@example.invalid'};renderChairReport();`,c);
   assert.match(elements['report-controls'].innerHTML,/Groups served/);assert.match(elements['report-panel'].innerHTML,/&lt;script&gt;/);assert.doesNotMatch(elements['report-panel'].innerHTML,/orders awaiting pickup|completed-order counts/i);
 });
@@ -777,4 +746,84 @@ test('no receipt for an order with nothing fulfilled; a failed receipt email sti
   assert.equal(f.c.completeOrder(f.oid,'test',1).success,true);assert.equal(f.emails.length,0);
   const g=fixture();g.ready(3);g.failMail();
   const r=g.c.completeOrder(g.oid,'test',1);assert.equal(r.success,true);assert.ok(r.warning);assert.match(r.warning,/receipt/i);assert.equal(g.tables.Orders[1][9],'Completed');
+});
+
+// -- Inventory Target Stock + Print / Export --
+const plain = x => JSON.parse(JSON.stringify(x));
+function clientContext() {
+  const elements = {};
+  function element(id) { return elements[id] ||= { innerHTML: '', textContent: '', style: {}, classList: { add() {}, remove() {}, contains() { return false; }, toggle() {} }, insertAdjacentHTML(where, s) { this.innerHTML += s; }, value: '' }; }
+  const storage = { getItem: () => null, setItem() {}, removeItem() {} };
+  const c = vm.createContext({ console, Date, Number, Set, Map, Math, JSON, Object, Array, String, setTimeout: () => 0, clearTimeout() {}, alert() {}, localStorage: storage, sessionStorage: storage,
+    window: { addEventListener() {}, scrollTo() {} }, document: { body: element('body'), getElementById: element, querySelector: () => null, querySelectorAll: () => [], addEventListener() {} }, google: { script: { run: {} } } });
+  for (const file of ['App.html', 'ReportUI.html']) for (const m of fs.readFileSync(file, 'utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) vm.runInContext(m[1], c);
+  return c;
+}
+const INV_ITEMS = [
+  { itemId: '1101', category: 'Books', name: 'Basic Text', stock: 3, lowAt: 6, packSize: 1, targetStock: 20 },
+  { itemId: '1130', category: 'Books', name: 'Sponsorship', stock: 12, lowAt: 6, packSize: 1, targetStock: 10 },
+  { itemId: '3101', category: 'IPs', name: 'IP #1 Who, What, How, and Why', stock: 2, lowAt: 10, packSize: 5, targetStock: 40 },
+  { itemId: '4100', category: 'Keytags', name: 'Welcome', stock: 0, lowAt: 5, packSize: 5, targetStock: null },
+  { itemId: '4300', category: 'Medallions', name: '18 Months', stock: 50, lowAt: 5, packSize: 1, targetStock: null }
+];
+
+test('Target Stock is the Catalog Low At level (column G, default 5); no separate column is read', () => {
+  const f = fixture();
+  let item = f.c.getCatalogAll('test')[0];
+  assert.equal(item.targetStock, item.lowAt); assert.equal(item.stock, 2);
+  f.tables.Catalog[1][6] = 12; f.tables.Catalog[1][8] = 99;
+  item = f.c.getCatalogAll('test')[0];
+  assert.equal(item.lowAt, 12); assert.equal(item.targetStock, 12);
+  f.tables.Catalog[1][6] = '';
+  assert.equal(f.c.getCatalogAll('test')[0].targetStock, 5);
+  assert.equal(typeof f.c.updateTargetStocks, 'undefined');
+});
+
+test('inventory report: Suggested Order = max(0, Target - On Hand) in singles, blank targets say Set target and low/out ones are flagged', () => {
+  const c = clientContext(); c.INV_ITEMS = INV_ITEMS;
+  const model = vm.runInContext("inventoryReportModel(INV_ITEMS,{categories:null,include:'all'})", c);
+  assert.deepEqual(plain(model.groups.map(g => g.category)), ['Books', 'IPs', 'Keytags', 'Medallions']);
+  const rows = Object.fromEntries(model.groups.flatMap(g => g.rows).map(r => [r.itemId, r]));
+  assert.equal(rows['1101'].suggested, 17); assert.equal(rows['1101'].status, 'Low stock');
+  assert.equal(rows['1130'].suggested, 0); assert.equal(rows['1130'].status, 'In stock');
+  assert.equal(rows['3101'].suggested, 38); assert.equal(rows['3101'].packs, 8);
+  assert.equal(rows['4100'].suggested, null); assert.equal(rows['4100'].status, 'Out of stock'); assert.equal(rows['4100'].needsTarget, true);
+  assert.equal(rows['4300'].needsTarget, false);
+  assert.equal(model.needTarget, 1);
+  const text = r => vm.runInContext('inventorySuggestedText', c)(r);
+  assert.equal(text(rows['1101']), '17'); assert.equal(text(rows['3101']), '38 (8 packs of 5)'); assert.equal(text(rows['4100']), 'Set target'); assert.equal(text(rows['1130']), '0');
+  // Items to reorder: suggested > 0, plus low/out items that have no target. In-stock items without a target are left out.
+  const reorder = vm.runInContext("inventoryReportModel(INV_ITEMS,{categories:null,include:'reorder'})", c);
+  assert.deepEqual(plain(reorder.groups.flatMap(g => g.rows).map(r => r.itemId)), ['1101', '3101', '4100']);
+  // Only the chosen categories are included, in one grouped report.
+  const books = vm.runInContext("inventoryReportModel(INV_ITEMS,{categories:['Books','Keytags'],include:'all'})", c);
+  assert.deepEqual(plain(books.groups.map(g => g.category)), ['Books', 'Keytags']);
+  assert.equal(vm.runInContext("inventoryScopeText(inventoryReportModel(INV_ITEMS,{categories:['Books','Keytags'],include:'reorder'}),{categories:['Books','Keytags'],include:'reorder'})", c), 'Categories: Books, Keytags | Items: Items to reorder');
+  assert.equal(vm.runInContext("inventoryScopeText(inventoryReportModel(INV_ITEMS,{categories:null,include:'all'}),{categories:null,include:'all'})", c), 'Categories: All categories | Items: All items');
+});
+
+test('inventory Print and CSV outputs: required columns and header, written status words, no prices or active flag', () => {
+  const c = clientContext(); c.INV_ITEMS = INV_ITEMS;
+  const captured = {};
+  c.printReportPage = (title, html) => { captured.print = { title, html }; };
+  c.downloadReportCSV = (title, rows) => { captured.csv = { title, rows }; };
+  vm.runInContext("createInventoryReport(INV_ITEMS,{categories:null,include:'reorder'},'print')", c);
+  const html = captured.print.html;
+  assert.match(html, /NORVANA Literature Inventory/); assert.match(html, /Generated: /); assert.match(html, /Categories: All categories \| Items: Items to reorder/);
+  for (const h of ['Item #', 'Item Name', 'On Hand', 'Target Stock', 'Suggested Order', 'Stock Status']) assert.match(html, new RegExp('<th[^>]*>' + h + '</th>'));
+  assert.match(html, /LOW STOCK/); assert.match(html, /OUT OF STOCK/); assert.match(html, /Set target/); assert.match(html, /38 \(8 packs of 5\)/); assert.match(html, /Pack of 5 - counts are in singles/);
+  assert.doesNotMatch(html, /Sponsorship/); assert.doesNotMatch(html, /\$|Price|Active/);
+  vm.runInContext("createInventoryReport(INV_ITEMS,{categories:['Books'],include:'all'},'csv')", c);
+  const rows = captured.csv.rows; assert.match(captured.csv.title, /^NORVANA Literature Inventory \d{4}-\d{2}-\d{2}$/);
+  assert.equal(rows[0][0], 'NORVANA Literature Inventory'); assert.equal(rows[1][0], 'Generated'); assert.match(rows[2][1], /Categories: Books \| Items: All items/);
+  const head = rows.findIndex(r => r[0] === 'Category'); assert.deepEqual(plain(rows[head].slice(0, 7)), ['Category', 'Item #', 'Item Name', 'On Hand', 'Target Stock', 'Suggested Order', 'Stock Status']);
+  assert.deepEqual(plain(rows.slice(head + 1).map(r => r[1])), ['1101', '1130']); assert.equal(rows[head + 1][5], 17);
+});
+
+test('Inventory tab: Print / Export replaces View Inventory Report, Reports tab loses its Inventory option, no Target field in the app, thresholds untouched', () => {
+  const app = fs.readFileSync('App.html', 'utf8'), ui = fs.readFileSync('ReportUI.html', 'utf8');
+  assert.match(app, /openInventoryExport\(\)">Print \/ Export<\/button>/); assert.doesNotMatch(app, /View Inventory Report/);
+  assert.doesNotMatch(ui, /\['inventory','Inventory'\]/); assert.doesNotMatch(ui, /openInventoryReport|getStockReport/);
+  assert.doesNotMatch(app, /invtarget-|inv-target/); assert.match(app, /data-low-at=/);
+  assert.match(app, /name="inv-export-include" value="all" checked/); assert.match(app, /id="inv-export-all" checked/);
 });
