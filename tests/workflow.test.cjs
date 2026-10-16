@@ -400,7 +400,7 @@ test('Chair summary strip leads the controls; autosave replaces Save and Finaliz
   assert.doesNotMatch(controls,/Save Draft|Finalize|Update Final|regional order/i);
   assert.equal((ui.elements['report-panel'].innerHTML.match(/class="chair-paper"/g)||[]).length,1);assert.doesNotMatch(ui.elements['report-panel'].innerHTML,/Secretary:|Presentation|November|Unsaved changes/);
   ui.c.printChairUI();assert.match(printed,/Sent version 4/);assert.match(printed,/Sent notes/);assert.doesNotMatch(printed,/Draft notes/);
-  ui.c.showChairVersion('draft');ui.c.printChairUI();assert.match(printed,/Working copy/);assert.match(printed,/Draft notes/);assert.doesNotMatch(printed,/Sent notes/);
+  ui.c.showChairVersion('draft');ui.c.printChairUI();assert.match(printed,/Current report/);assert.match(printed,/Draft notes/);assert.doesNotMatch(printed,/Sent notes/);
   ui.c.showChairVersion('final');ui.c.previewChairUI();assert.equal(ui.calls.length,0);
   ui.c.showChairVersion('draft');
   ui.c.document.getElementById('chair-spending').value='25';ui.c.document.getElementById('chair-notes').value='Edited notes';ui.c.chairEdited();

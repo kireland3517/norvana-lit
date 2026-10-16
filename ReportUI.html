@@ -146,7 +146,7 @@ function printReportPage(title,html){
 function chairPaperHTML(r){return '<div class="chair-paper"><dl><div><dt>Groups Served</dt><dd>'+r.groupsServed+'</dd></div><div><dt>Collected</dt><dd>'+reportMoney(r.moneyCollected)+'</dd></div>'+(typeof r.hiCharged==='number'?'<div><dt>H&I charged to subcommittee budget</dt><dd>'+reportMoney(r.hiCharged)+'</dd></div>':'')+'<div><dt>Spent</dt><dd>'+reportMoney(r.moneySpent)+'</dd></div><div class="chair-notes"><dt>Notes</dt><dd>'+esc(r.other||'None')+'</dd></div></dl></div>';}
 function displayedChairReport(){if(chairDisplay==='final'&&chairData.finalized)return chairData.finalized;const r={...chairData.draft};if(chairDirty){r.moneySpent=Number(document.getElementById('chair-spending').value)||0;r.other=document.getElementById('chair-notes').value;}return r;}
 function chairSentDate(r){return r.sentAt?new Date(r.sentAt).toLocaleDateString():'date unavailable';}
-function chairStatusLabel(){return chairDisplay==='final'?'Sent version '+chairData.finalized.version+' ('+chairSentDate(chairData.finalized)+')':'Working copy';}
+function chairStatusLabel(){return chairDisplay==='final'?'Sent version '+chairData.finalized.version+' ('+chairSentDate(chairData.finalized)+')':'Current report';}
 function renderChairReport(){
   const d=chairData,r=d.draft;
   document.getElementById('report-controls').innerHTML='<div class="report-totals"><div class="report-total"><span>Groups served</span><strong>'+r.groupsServed+'</strong></div><div class="report-total"><span>Collected</span><strong>'+reportMoney(r.moneyCollected)+'</strong></div>'+(typeof r.hiCharged==='number'?'<div class="report-total"><span>H&amp;I charged</span><strong>'+reportMoney(r.hiCharged)+'</strong></div>':'')+'</div><div class="report-controls"><label>Reporting month<input id="report-month" type="month" value="'+reportMonthInput(reportMonth)+'" onchange="onReportMonthChange(this.value)"></label><label>Spent<input id="chair-spending" type="number" min="0" step="0.01" value="'+Number(r.moneySpent).toFixed(2)+'" oninput="chairEdited()"></label><label class="notes-field">Notes<textarea id="chair-notes" rows="3" maxlength="10000" oninput="chairEdited()">'+esc(r.other)+'</textarea></label></div>'+
@@ -156,8 +156,8 @@ function renderChairReport(){
 function renderChairPreview(){
   const d=chairData,r=displayedChairReport();
   document.getElementById('report-panel').innerHTML='<div class="report-preview-head"><span class="report-badge">'+esc(chairStatusLabel())+'</span>'+
-    (d.finalized?'<div class="report-actions"><button onclick="showChairVersion(\''+(chairDisplay==='final'?'draft':'final')+'\')">'+(chairDisplay==='final'?'View Working Copy':'View Last Sent')+'</button></div>':'')+
-    '<div class="report-actions"><button onclick="printChairUI()">Print / PDF</button><button '+(chairDisplay==='final'?'disabled title="Switch to the working copy to email it."':'')+' onclick="previewChairUI()">Review Email</button></div></div><div class="report-card">'+chairPaperHTML(r)+'</div><div id="chair-email-preview"></div>';
+    (d.finalized?'<div class="report-actions"><button onclick="showChairVersion(\''+(chairDisplay==='final'?'draft':'final')+'\')">'+(chairDisplay==='final'?'Edit Report':'View Last Sent')+'</button></div>':'')+
+    '<div class="report-actions"><button onclick="printChairUI()">Print / PDF</button><button '+(chairDisplay==='final'?'disabled title="Click Edit Report to email a new version."':'')+' onclick="previewChairUI()">Review Email</button></div></div><div class="report-card">'+chairPaperHTML(r)+'</div><div id="chair-email-preview"></div>';
 }
 function showChairVersion(version){chairDisplay=version;chairPreview=null;chairPreviewSequence++;renderChairPreview();}
 function setChairStatus(text,isError){const el=document.getElementById('chair-unsaved');if(!el)return;el.textContent=text;el.style.color=isError?'#b3261e':'';el.style.fontWeight=isError?'600':'';}
