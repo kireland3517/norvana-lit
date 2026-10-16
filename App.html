@@ -759,6 +759,16 @@
   .inv-price-prefix { padding: 5px 4px 5px 7px; font-size: 12px; color: var(--muted); font-weight: 600; }
   .inv-price-input { width: 48px; padding: 5px 6px 5px 2px; border: none; background: transparent; font-family: "Outfit", sans-serif; font-size: 13px; font-weight: 600; color: var(--onyx); outline: none; }
   .inv-price-prefix-wrap:focus-within { border-color: var(--blue); background: white; }
+  .inv-price-line { display: flex; align-items: center; gap: 2px; min-height: 31px; }
+  .inv-price-ro { min-width: 48px; padding: 5px 4px; text-align: center; font-size: 13px; font-weight: 600; color: var(--onyx); }
+  .inv-icon-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; background: none; border: none; border-radius: 7px; color: var(--muted); cursor: pointer; flex-shrink: 0; transition: background 0.18s; }
+  .inv-icon-btn:hover { background: var(--blue-pale); }
+  .inv-icon-btn:disabled { opacity: 0.4; cursor: default; }
+  .inv-icon-btn.ok { color: var(--success); }
+  .inv-icon-btn.no { color: var(--danger); }
+  .inv-icon-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #inv-status { min-height: 20px; margin: 0 2px 10px; font-size: 13px; color: var(--muted); }
+  #inv-status.error { color: var(--danger); font-weight: 600; }
   .inv-col-labels { display: grid; grid-template-columns: 1fr 80px 80px 44px; gap: 8px; padding: 6px 16px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
   .inv-row-full { display: grid; grid-template-columns: 1fr 80px 80px 44px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #f0f0f8; gap: 8px; font-size: 13px; }
   .inv-row-full:last-child { border-bottom: none; }
@@ -2390,7 +2400,8 @@ function renderInventory(items) {
 
   let html = '<div style="padding-top:16px">'
     + '<div style="height:12px"></div>'
-    + '<button class="save-inv-btn" style="margin-bottom:16px" onclick="openInventoryReport()">View Inventory Report</button>'
+    + '<button class="save-inv-btn" style="margin-bottom:12px" onclick="openInventoryReport()">View Inventory Report</button>'
+    + '<div id="inv-status" role="status"></div>'
     + '<div class="inv-summary">'
     + '<div class="inv-tile inv-tile-ok" onclick="filterInventory(\'ok\',this)">'
     + '<div class="inv-tile-num">' + okItems.length + '</div>'
@@ -2442,23 +2453,22 @@ function renderInventory(items) {
         + '</div>'
         + '<div class="inv-price-wrap">'
         + '<div class="inv-field-label">Price</div>'
-        + '<div class="inv-price-prefix-wrap"><span class="inv-price-prefix">$</span>'
-        + '<input class="inv-price-input" id="invprice-' + esc(item.itemId) + '"'
-        + ' type="text" inputmode="decimal" value="' + Number(item.price).toFixed(2) + '"'
-        + ' data-item-id="' + esc(item.itemId) + '">'
-        + '</div></div>'
+        + '<div class="inv-price-line" id="invpricebox-' + esc(item.itemId) + '">' + priceViewHTML(item.itemId, Number(item.price), item.name) + '</div>'
+        + '</div>'
         + '<div class="inv-stock-wrap">'
         + '<div class="inv-field-label">Count</div>'
         + '<input class="inv-stock-input ' + inpCls + '" id="inv-' + esc(item.itemId) + '"'
         + ' type="number" step="1" value="' + stock + '"'
-        + ' data-item-id="' + esc(item.itemId) + '" data-original="' + stock + '" data-low-at="' + lowAt + '" oninput="updateInvStyle(this)">'
+        + ' data-item-id="' + esc(item.itemId) + '" data-original="' + stock + '" data-low-at="' + lowAt + '" oninput="updateInvStyle(this);scheduleStockSave()" onblur="saveStockNow()">'
         + '</div>'
         + '</div>';
     });
     html += '</div>';
   });
 
-  html += '<button class="save-inv-btn" onclick="saveInventory()">Save Stock & Prices</button></div>';
+  html += '</div>';
+  invPrices = {};
+  items.forEach(function(item) { invPrices[item.itemId] = Number(item.price); });
   document.getElementById('inventory-content').innerHTML = html;
 }
 
@@ -2533,50 +2543,111 @@ function refreshInventoryTiles() {
   if (outTile) outTile.textContent = out;
 }
 
-function saveInventory() {
-  const stockInputs = document.querySelectorAll('.inv-stock-input');
-  const priceInputs = document.querySelectorAll('.inv-price-input');
-  const stockUpdates = Array.from(stockInputs).filter(inp => inp.value.trim() !== inp.dataset.original).map(function(inp) {
-    return { itemId: inp.dataset.itemId, stock: inp.value.trim() === '' ? '' : Number(inp.value) };
-  });
-  if (stockUpdates.some(u => u.stock === '' || !Number.isInteger(u.stock))) { alert('Enter whole-number stock counts, including negative counts when needed.'); return; }
-  const priceUpdates = Array.from(priceInputs).map(function(inp) {
-    return { itemId: inp.dataset.itemId, price: parseFloat(inp.value) || 0 };
-  });
-  const btn = document.querySelector('[onclick="saveInventory()"]');
-  if (btn.disabled) return;
-  btn.textContent = 'Saving...'; btn.disabled = true;
+// -- Inventory autosave --
+// Counts save a moment after typing stops. Prices are read-only until the pencil is tapped,
+// and only change when the check is tapped.
+var invPrices = {}, stockSaveTimer = null, stockSaving = false, stockSaveAgain = false;
+var ICON_PENCIL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>';
+var ICON_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+var ICON_X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+function setInvStatus(text, isError) {
+  var el = document.getElementById('inv-status');
+  if (!el) return;
+  el.textContent = text;
+  el.className = isError ? 'error' : '';
+}
+
+function priceViewHTML(itemId, price, name) {
+  return '<span class="inv-price-ro">$' + Number(price).toFixed(2) + '</span>'
+    + '<button type="button" class="inv-icon-btn" aria-label="Edit price for ' + esc(name || itemId) + '" onclick="startPriceEdit(\'' + esc(itemId) + '\')">' + ICON_PENCIL + '</button>';
+}
+
+function startPriceEdit(itemId) {
+  var box = document.getElementById('invpricebox-' + itemId);
+  if (!box) return;
+  box.innerHTML = '<div class="inv-price-prefix-wrap"><span class="inv-price-prefix">$</span>'
+    + '<input class="inv-price-input" id="invprice-' + esc(itemId) + '" type="text" inputmode="decimal" value="' + Number(invPrices[itemId]).toFixed(2) + '"'
+    + ' data-item-id="' + esc(itemId) + '" onkeydown="priceKey(event, \'' + esc(itemId) + '\')"></div>'
+    + '<button type="button" class="inv-icon-btn ok" aria-label="Save price" onclick="commitPrice(\'' + esc(itemId) + '\')">' + ICON_CHECK + '</button>'
+    + '<button type="button" class="inv-icon-btn no" aria-label="Cancel" onclick="cancelPriceEdit(\'' + esc(itemId) + '\')">' + ICON_X + '</button>';
+  var input = document.getElementById('invprice-' + itemId);
+  if (input) { input.focus(); input.select(); }
+}
+
+function priceKey(event, itemId) {
+  if (event.key === 'Enter') { event.preventDefault(); commitPrice(itemId); }
+  else if (event.key === 'Escape') { event.preventDefault(); cancelPriceEdit(itemId); }
+}
+
+function cancelPriceEdit(itemId) {
+  var box = document.getElementById('invpricebox-' + itemId);
+  if (!box) return;
+  var row = document.getElementById('invrow-' + itemId), nameEl = row && row.querySelector('.inv-name');
+  box.innerHTML = priceViewHTML(itemId, invPrices[itemId], nameEl ? nameEl.textContent : itemId);
+  setInvStatus('');
+}
+
+function commitPrice(itemId) {
+  var input = document.getElementById('invprice-' + itemId);
+  if (!input || input.disabled) return;
+  var text = input.value.trim().replace(/^\$/, '');
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) { setInvStatus('Enter a price like 12.50.', true); input.focus(); return; }
+  var price = Math.round(Number(text) * 100) / 100;
+  if (price === invPrices[itemId]) { cancelPriceEdit(itemId); return; }
+  var buttons = document.querySelectorAll('#invpricebox-' + itemId + ' button');
+  input.disabled = true; buttons.forEach(function(b) { b.disabled = true; });
+  setInvStatus('Saving...');
+  function failed(message) {
+    var again = document.getElementById('invprice-' + itemId);
+    if (again) { again.disabled = false; again.focus(); }
+    document.querySelectorAll('#invpricebox-' + itemId + ' button').forEach(function(b) { b.disabled = false; });
+    setInvStatus('NOT SAVED: ' + message + ' The price was not changed.', true);
+  }
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result || !result.success) { btn.disabled = false; btn.textContent = 'Save Stock & Prices'; alert(result && result.error || 'Stock save failed.'); return; }
-      google.script.run
-        .withSuccessHandler(function() {
-          btn.textContent = 'Saved - refreshing...';
-          viewsLoaded.reports = false;
-          viewsLoaded.inventory = false;
-          google.script.run
-            .withSuccessHandler(function(items) {
-              renderInventory(items);
-              btn.textContent = 'Save Stock & Prices';
-              btn.disabled = false;
-            })
-            .withFailureHandler(function() {
-              refreshInventoryTiles();
-              btn.textContent = 'Save Stock & Prices';
-              btn.disabled = false;
-            })
-            .getCatalogAll(sessionToken);
-        })
-        .withFailureHandler(function() {
-          btn.textContent = 'Price save failed'; btn.disabled = false;
-        })
-        .updateCatalogPrices(priceUpdates, sessionToken);
+      if (result && result.success === false) { failed(result.error || 'Price save failed.'); return; }
+      invPrices[itemId] = price;
+      viewsLoaded.reports = false;
+      cancelPriceEdit(itemId);
+      setInvStatus('All changes saved');
     })
-    .withFailureHandler(function() {
-      btn.textContent = 'Save failed - try again';
-      btn.disabled = false;
-    })
-    .updateStockCounts(stockUpdates, sessionToken);
+    .withFailureHandler(function(e) { failed((e && e.message) || 'Price save failed.'); })
+    .updateCatalogPrices([{ itemId: itemId, price: price }], sessionToken);
+}
+
+function scheduleStockSave() {
+  clearTimeout(stockSaveTimer);
+  stockSaveTimer = setTimeout(saveStockNow, 700);
+  setInvStatus('Saving...');
+}
+
+function saveStockNow() {
+  clearTimeout(stockSaveTimer); stockSaveTimer = null;
+  if (stockSaving) { stockSaveAgain = true; return; }
+  var changed = Array.from(document.querySelectorAll('.inv-stock-input')).filter(function(inp) { return inp.value.trim() !== inp.dataset.original; });
+  if (!changed.length) { return; }
+  var updates = changed.map(function(inp) { return { itemId: inp.dataset.itemId, stock: inp.value.trim() === '' ? '' : Number(inp.value) }; });
+  if (updates.some(function(u) { return u.stock === '' || !Number.isInteger(u.stock); })) {
+    setInvStatus('Enter whole-number counts to save, including negative counts when needed.', true);
+    return;
+  }
+  stockSaving = true; setInvStatus('Saving...');
+  function done(ok, message) {
+    stockSaving = false;
+    if (!ok) { stockSaveAgain = false; setInvStatus('NOT SAVED: ' + message + ' Reload this tab to see the real counts.', true); return; }
+    changed.forEach(function(inp, i) { if (inp.value.trim() === String(updates[i].stock)) inp.dataset.original = String(updates[i].stock); });
+    refreshInventoryTiles();
+    viewsLoaded.reports = false;
+    var more = stockSaveAgain || Array.from(document.querySelectorAll('.inv-stock-input')).some(function(inp) { return inp.value.trim() !== inp.dataset.original; });
+    stockSaveAgain = false;
+    if (more) { saveStockNow(); return; }
+    setInvStatus('All changes saved');
+  }
+  google.script.run
+    .withSuccessHandler(function(result) { if (!result || !result.success) done(false, (result && result.error) || 'Count save failed.'); else done(true); })
+    .withFailureHandler(function(e) { done(false, (e && e.message) || 'Count save failed.'); })
+    .updateStockCounts(updates, sessionToken);
 }
 
 function toggleItem(checkbox, itemId) {
