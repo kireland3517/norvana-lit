@@ -26,13 +26,17 @@ function inventoryReportCategories(){
 function inventoryReportItems(){return inventoryReportData.items.filter(i=>inventoryReportCategory===null||(i.category||'Other')===inventoryReportCategory);}
 function inventoryReportTitle(){return 'Inventory - '+(inventoryReportCategory===null?'All categories':inventoryReportCategory);}
 function selectInventoryReportCategory(value){inventoryReportCategory=value===''||value===null?null:String(value);renderInventoryReport();}
-var reportRequest=0, chairSendPending=false, chairWritePending=false, chairPreviewSequence=0, chairDirty=false, chairDisplay='draft', chairPreferredDisplay=null;
+var reportRequest=0, chairSendPending=false, chairWritePending=false, chairPreviewSequence=0, chairDirty=false, chairDisplay='draft', chairPreferredDisplay=null, chairSaveTimer=null, chairSaveAgain=false, chairSaveWaiters=[];
 const REPORT_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function reportMonthInput(label){const p=String(label).split(' '), i=REPORT_MONTH_NAMES.indexOf(p[0]);return i<0?'':p[1]+'-'+String(i+1).padStart(2,'0');}
 function reportMonthLabel(value){const p=String(value).split('-');return p.length===2&&Number(p[1])>=1&&Number(p[1])<=12?REPORT_MONTH_NAMES[Number(p[1])-1]+' '+p[0]:'';}
 function reportMoney(n){return '$'+Number(n||0).toFixed(2);}
 function reportOption(value,label,selected){return '<option value="'+esc(value)+'"'+(value===selected?' selected':'')+'>'+esc(label)+'</option>';}
-function reportCanLeave(){return !chairWritePending&&(!chairDirty||confirm('Discard unsaved changes?'));}
+function reportCanLeave(go,stay){
+  // Edits autosave, so leaving only asks when a change could not be saved.
+  if(reportMode!=='chair'||!chairData||(!chairDirty&&!chairWritePending&&!chairSaveTimer)){go();return;}
+  chairAutosave(ok=>{if(ok)go();else showConfirm('Your latest changes could not be saved. Leave anyway and lose them?','Leave',go,stay);});
+}
 function openInventoryReport(){requestedReportMode='inventory';viewsLoaded.reports=false;switchView('reports');}
 function loadReports(){
   reportMode=requestedReportMode||'orders';requestedReportMode=null;
@@ -47,13 +51,14 @@ function renderReportsShell(){
     '</div><div id="report-controls"></div><div id="report-panel"></div><div id="footer-reports"></div></div>';
 }
 function setReportMode(mode){
-  if(!['orders','inventory','chair'].includes(mode)||!reportCanLeave())return;
-  reportMode=mode;chairDirty=false;renderReportsShell();fetchReport();
+  if(!['orders','inventory','chair'].includes(mode))return;
+  reportCanLeave(()=>{reportMode=mode;chairDirty=false;renderReportsShell();fetchReport();});
 }
 function onReportMonthChange(value){
   const month=reportMonthLabel(value)||value;
-  if(!reportMonthInput(month)||!reportCanLeave()){const input=document.getElementById('report-month');if(input)input.value=reportMonthInput(reportMonth);return;}
-  reportMonth=month;reportYear=month.split(' ')[1];if(reportMode==='orders')reportGroup='';chairDirty=false;fetchReport();
+  const revert=()=>{const input=document.getElementById('report-month');if(input)input.value=reportMonthInput(reportMonth);};
+  if(!reportMonthInput(month)){revert();return;}
+  reportCanLeave(()=>{reportMonth=month;reportYear=month.split(' ')[1];if(reportMode==='orders')reportGroup='';chairDirty=false;fetchReport();},revert);
 }
 function changeOrdersPeriod(value){if(value==='annual')reportYear=reportMonth.split(' ')[1];else if(reportPeriod==='annual')reportMonth=reportMonth.split(' ')[0]+' '+reportYear;reportPeriod=value;reportGroup='';fetchReport();}
 function changeOrdersYear(value){reportYear=value;reportGroup='';fetchReport();}
@@ -78,7 +83,7 @@ function fetchReport(){
     viewsLoaded.reports=true;
     if(mode==='orders'){ordersReportData=data;renderOrdersControls();renderOrdersResults();}
     else if(mode==='inventory'){inventoryReportData=data;renderInventoryReport();}
-    else{chairData=data;chairDirty=false;chairDisplay=chairPreferredDisplay||(data.finalized?'final':'draft');chairPreferredDisplay=null;renderChairReport();}
+    else{chairData=data;chairDirty=false;clearTimeout(chairSaveTimer);chairSaveAgain=false;chairDisplay=chairPreferredDisplay&&data.finalized?chairPreferredDisplay:'draft';chairPreferredDisplay=null;renderChairReport();}
   }).withFailureHandler(e=>{if(request===reportRequest)document.getElementById('report-panel').textContent=e.message;});
   if(mode==='orders')runner.getOrdersReport(reportPeriod,reportPeriod==='annual'?reportYear:reportMonth,reportGroup,sessionToken);
   else if(mode==='inventory')runner.getStockReport(sessionToken);
@@ -140,45 +145,64 @@ function printReportPage(title,html){
 }
 function chairPaperHTML(r){return '<div class="chair-paper"><dl><div><dt>Groups Served</dt><dd>'+r.groupsServed+'</dd></div><div><dt>Collected</dt><dd>'+reportMoney(r.moneyCollected)+'</dd></div>'+(typeof r.hiCharged==='number'?'<div><dt>H&I charged to subcommittee budget</dt><dd>'+reportMoney(r.hiCharged)+'</dd></div>':'')+'<div><dt>Spent</dt><dd>'+reportMoney(r.moneySpent)+'</dd></div><div class="chair-notes"><dt>Notes</dt><dd>'+esc(r.other||'None')+'</dd></div></dl></div>';}
 function displayedChairReport(){if(chairDisplay==='final'&&chairData.finalized)return chairData.finalized;const r={...chairData.draft};if(chairDirty){r.moneySpent=Number(document.getElementById('chair-spending').value)||0;r.other=document.getElementById('chair-notes').value;}return r;}
-function chairStatusLabel(){return chairDisplay==='final'?'Finalized (version '+chairData.finalized.version+')':'Draft';}
+function chairSentDate(r){return r.sentAt?new Date(r.sentAt).toLocaleDateString():'date unavailable';}
+function chairStatusLabel(){return chairDisplay==='final'?'Sent version '+chairData.finalized.version+' ('+chairSentDate(chairData.finalized)+')':'Working copy';}
 function renderChairReport(){
   const d=chairData,r=d.draft;
-  document.getElementById('report-controls').innerHTML='<div class="report-controls"><label>Reporting month<input id="report-month" type="month" value="'+reportMonthInput(reportMonth)+'" onchange="onReportMonthChange(this.value)"></label><label>Spent<input id="chair-spending" type="number" min="0" step="0.01" value="'+Number(r.moneySpent).toFixed(2)+'" oninput="chairEdited()"></label><label class="notes-field">Notes<textarea id="chair-notes" rows="3" maxlength="10000" oninput="chairEdited()">'+esc(r.other)+'</textarea></label></div><p class="report-help">Spent is the regional order placed after the reporting month, to replace what was sold that month. It is usually placed early the following month.</p>'+
-    '<div class="report-actions"><button onclick="saveChairDraftUI()">Save Draft</button><button id="chair-finalize" '+(!r.savedAt?'disabled':'')+' onclick="finalizeChairUI()">'+(d.finalized?'Update Final':'Finalize')+'</button><span id="chair-unsaved" class="report-help"></span></div>';
+  document.getElementById('report-controls').innerHTML='<div class="report-totals"><div class="report-total"><span>Groups served</span><strong>'+r.groupsServed+'</strong></div><div class="report-total"><span>Collected</span><strong>'+reportMoney(r.moneyCollected)+'</strong></div>'+(typeof r.hiCharged==='number'?'<div class="report-total"><span>H&amp;I charged</span><strong>'+reportMoney(r.hiCharged)+'</strong></div>':'')+'</div><div class="report-controls"><label>Reporting month<input id="report-month" type="month" value="'+reportMonthInput(reportMonth)+'" onchange="onReportMonthChange(this.value)"></label><label>Spent<input id="chair-spending" type="number" min="0" step="0.01" value="'+Number(r.moneySpent).toFixed(2)+'" oninput="chairEdited()"></label><label class="notes-field">Notes<textarea id="chair-notes" rows="3" maxlength="10000" oninput="chairEdited()">'+esc(r.other)+'</textarea></label></div>'+
+    '<div class="report-actions"><span id="chair-unsaved" class="report-help">'+(r.savedAt?'Saved':'')+'</span></div>';
   renderChairPreview();
 }
 function renderChairPreview(){
   const d=chairData,r=displayedChairReport();
   document.getElementById('report-panel').innerHTML='<div class="report-preview-head"><span class="report-badge">'+esc(chairStatusLabel())+'</span>'+
-    (d.finalized?'<div class="report-actions"><button onclick="showChairVersion(\''+(chairDisplay==='final'?'draft':'final')+'\')">'+(chairDisplay==='final'?'View Draft':'View Finalized')+'</button></div>':'')+
-    '<div class="report-actions"><button onclick="printChairUI()">Print / PDF</button><button '+(chairDisplay!=='final'?'disabled title="Finalize the draft or view the saved final to email."':'')+' onclick="previewChairUI()">Review Email</button></div></div><div class="report-card">'+chairPaperHTML(r)+'</div><div id="chair-email-preview"></div>';
+    (d.finalized?'<div class="report-actions"><button onclick="showChairVersion(\''+(chairDisplay==='final'?'draft':'final')+'\')">'+(chairDisplay==='final'?'View Working Copy':'View Last Sent')+'</button></div>':'')+
+    '<div class="report-actions"><button onclick="printChairUI()">Print / PDF</button><button '+(chairDisplay==='final'?'disabled title="Switch to the working copy to email it."':'')+' onclick="previewChairUI()">Review Email</button></div></div><div class="report-card">'+chairPaperHTML(r)+'</div><div id="chair-email-preview"></div>';
 }
 function showChairVersion(version){chairDisplay=version;chairPreview=null;chairPreviewSequence++;renderChairPreview();}
+function setChairStatus(text,isError){const el=document.getElementById('chair-unsaved');if(!el)return;el.textContent=text;el.style.color=isError?'#b3261e':'';el.style.fontWeight=isError?'600':'';}
+function chairInputs(){const a=document.getElementById('chair-spending'),n=document.getElementById('chair-notes');if(!a||!n)return null;const amount=a.value;return{amount:amount,notes:n.value,valid:amount!==''&&Number.isFinite(Number(amount))&&Number(amount)>=0};}
 function chairEdited(){
-  const amount=document.getElementById('chair-spending').value,notes=document.getElementById('chair-notes').value;
-  chairDirty=amount===''||Number(amount)!==Number(chairData.draft.moneySpent)||notes!==chairData.draft.other;
+  const i=chairInputs();if(!i)return;
+  chairDirty=!i.valid||Number(i.amount)!==Number(chairData.draft.moneySpent)||i.notes!==chairData.draft.other;
   chairDisplay='draft';chairPreview=null;chairPreviewSequence++;
-  document.getElementById('chair-finalize').disabled=chairDirty||!chairData.draft.savedAt;
-  document.getElementById('chair-unsaved').textContent=chairDirty?'Unsaved changes':'';renderChairPreview();
+  clearTimeout(chairSaveTimer);chairSaveTimer=null;
+  if(!i.valid)setChairStatus('Enter an amount to save.',true);
+  else if(chairDirty){setChairStatus('Saving...');chairSaveTimer=setTimeout(()=>chairAutosave(),700);}
+  else setChairStatus('Saved');
+  renderChairPreview();
 }
-function chairActionRunner(display){
-  const month=reportMonth;chairWritePending=true;document.querySelectorAll('#report-controls input,#report-controls textarea,#report-controls button').forEach(b=>b.disabled=true);
-  const finish=r=>{chairWritePending=false;if(!r.success){alert(r.error);if(reportMode==='chair'&&reportMonth===month){document.querySelectorAll('#report-controls input,#report-controls textarea,#report-controls button').forEach(b=>b.disabled=false);document.getElementById('chair-finalize').disabled=chairDirty||!chairData.draft.savedAt;}return;}if(reportMode==='chair'&&reportMonth===month){chairPreferredDisplay=display;chairDirty=false;fetchReport();}};
-  return google.script.run.withSuccessHandler(finish).withFailureHandler(e=>finish({success:false,error:e.message}));
-}
-function saveChairDraftUI(){if(chairWritePending)return;const amount=document.getElementById('chair-spending').value,notes=document.getElementById('chair-notes').value;if(amount===''||!Number.isFinite(Number(amount))||Number(amount)<0){alert('Enter a non-negative amount spent.');return;}chairActionRunner('draft').saveChairDraft(reportMonth,Number(amount),notes,chairData.revision,sessionToken);}
-function finalizeChairUI(){
-  if(chairWritePending||chairDirty||!chairData.draft.savedAt)return;
-  if(chairDisplay!=='draft'){chairDisplay='draft';renderChairPreview();alert('Review the saved draft, then choose Update Final.');return;}
-  if(!confirm(chairData.finalized?'Replace the saved final with this saved draft?':'Finalize this saved draft?'))return;
-  chairActionRunner('final').finalizeChairReport(reportMonth,chairData.revision,!!chairData.finalized,sessionToken);
+function chairFlushWaiters(ok){const w=chairSaveWaiters;chairSaveWaiters=[];w.forEach(f=>f(ok));}
+function chairAutosave(done){
+  clearTimeout(chairSaveTimer);chairSaveTimer=null;
+  if(done)chairSaveWaiters.push(done);
+  if(chairWritePending){chairSaveAgain=true;return;}
+  const i=chairInputs(),month=reportMonth;
+  if(!i||reportMode!=='chair'||!chairData){chairFlushWaiters(false);return;}
+  if(!i.valid){setChairStatus('Enter an amount to save.',true);chairFlushWaiters(false);return;}
+  if(chairData.draft.savedAt&&Number(i.amount)===Number(chairData.draft.moneySpent)&&i.notes===chairData.draft.other){chairDirty=false;chairFlushWaiters(true);return;}
+  chairWritePending=true;setChairStatus('Saving...');
+  const finish=r=>{
+    chairWritePending=false;
+    if(reportMode!=='chair'||reportMonth!==month||!chairData){chairFlushWaiters(false);return;}
+    if(!r.success){chairSaveAgain=false;setChairStatus('NOT SAVED: '+r.error+' Your changes are not stored. Reload this report.',true);chairFlushWaiters(false);return;}
+    chairData.revision=r.revision;
+    chairData.draft={...chairData.draft,moneySpent:Number(i.amount),other:i.notes,savedAt:r.savedAt};
+    const now=chairInputs();chairDirty=!!now&&(Number(now.amount)!==Number(i.amount)||now.notes!==i.notes);
+    if(chairSaveAgain||chairDirty){chairSaveAgain=false;chairAutosave();return;}
+    setChairStatus('Saved');chairFlushWaiters(true);
+  };
+  google.script.run.withSuccessHandler(finish).withFailureHandler(e=>finish({success:false,error:e.message})).saveChairDraft(reportMonth,Number(i.amount),i.notes,chairData.revision,sessionToken);
 }
 function printChairUI(){const r=displayedChairReport();printReportPage('Chair Report','<h1>NORVANA</h1><h2>Chair Report</h2><p>'+esc(r.reportingMonth)+' | '+esc(chairStatusLabel())+(chairDisplay==='draft'&&chairDirty?' | Unsaved changes':'')+'</p>'+chairPaperHTML(r));}
 
 function reopenFromPanel() {
   const oid = currentOrderId, order = allOrders.find(o => o.orderId === oid), btn = document.getElementById('reopen-btn');
   if (!order || !btn || btn.disabled) return;
-  if (!confirm('Reopen this Ready order? Its packed quantities will return to available stock. No email is sent until it is marked Ready again.')) return;
+  showConfirm('Reopen this Ready order? Its packed quantities will return to available stock. No email is sent until it is marked Ready again.', 'Reopen', () => runReopenOrder(oid, order, btn));
+}
+function runReopenOrder(oid, order, btn) {
+  if (btn.disabled) return;
   btn.disabled = true;
   google.script.run.withSuccessHandler(result => {
     if (!result.success) { btn.disabled = false; alert(result.error); return; }
@@ -204,10 +228,17 @@ function chairEmailSummary(email) {
   return text;
 }
 function previewChairUI() {
-  if (chairSendPending || !chairData || !chairData.finalized || chairDisplay !== 'final') return;
+  if (chairSendPending || !chairData || chairDisplay === 'final') return;
   const month = reportMonth, sequence = ++chairPreviewSequence;
   chairPreview = null;
-  document.getElementById('chair-email-preview').textContent = 'Loading email review...';
+  document.getElementById('chair-email-preview').textContent = 'Saving and loading email review...';
+  chairAutosave(saved => {
+    if (reportMode !== 'chair' || reportMonth !== month || sequence !== chairPreviewSequence) return;
+    if (!saved) { document.getElementById('chair-email-preview').textContent = 'Enter a valid Spent amount and make sure it saved before reviewing the email.'; return; }
+    requestChairEmailPreview(month, sequence);
+  });
+}
+function requestChairEmailPreview(month, sequence) {
   google.script.run.withSuccessHandler(r => {
     if (reportMode !== 'chair' || reportMonth !== month || sequence !== chairPreviewSequence) return;
     if (!r.success) { document.getElementById('chair-email-preview').textContent = r.error; return; } chairPreview = r;
@@ -220,17 +251,23 @@ function previewChairUI() {
 function sendChairUI() {
   if (!chairPreview || chairSendPending) return;
   const preview = chairPreview, month = reportMonth;
-  let prompt = 'Send the displayed finalized report to ' + preview.recipient + '?';
-  if (preview.action === 'resend') prompt = 'A previous report email was accepted for sending. Intentionally resend the displayed report to ' + preview.recipient + '? This may create another copy.';
+  let prompt = 'Send this report to ' + preview.recipient + ' and save it to Google Sheets?';
+  if (preview.action === 'resend') prompt = 'A previous report email was accepted for sending. Intentionally resend this report to ' + preview.recipient + '? It will be saved as a new version, and the earlier version is kept.';
   if (preview.action === 'retry') prompt = preview.previousEmail && preview.previousEmail.status === 'failed' ?
-    'Retry sending the displayed finalized report to ' + preview.recipient + '?' :
+    'Retry sending this report to ' + preview.recipient + '?' :
     'The previous email may have sent. Check sent mail before continuing. After checking, do you want to explicitly retry to ' + preview.recipient + '? This may create another copy.';
-  if (!confirm(prompt)) return;
+  showConfirm(prompt, preview.action === 'resend' ? 'Resend' : preview.action === 'retry' ? 'Retry Send' : 'Send', () => {
+    if (chairSendPending || chairPreview !== preview) return; // The preview changed while the question was open.
+    submitChairSend(preview, month);
+  });
+}
+function submitChairSend(preview, month) {
   chairSendPending = true; chairPreview = null; chairPreviewSequence++;
   const button = document.getElementById('chair-send'); if (button) { button.disabled = true; button.textContent = 'Sending...'; }
   google.script.run.withSuccessHandler(r => {
     chairSendPending = false;
     alert(r.success ? r.message : r.error);
+    if (r.success) chairPreferredDisplay = 'final';
     if (reportMode === 'chair' && reportMonth === month && !chairDirty && !chairWritePending) fetchSpecialReport();
   }).withFailureHandler(e => {
     chairSendPending = false;

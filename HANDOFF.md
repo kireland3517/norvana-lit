@@ -100,9 +100,10 @@ Admins can practice in a separate demo Apps Script project that points at its ow
   received = enter 80). Spending does not change stock.
 - Every order has a revision number so two people editing the same order cannot overwrite each other. If the app says
   "Order changed. Reload it," reload and try again.
-- Chair Report: pick the reporting month, enter Spending and Notes, Save Draft, then Finalize. A finalized report stays
-  frozen until it is replaced from a reviewed draft. The Secretary email shows the recipient and the full message before
-  anything is sent.
+- Chair Report: pick the reporting month and enter Spent and Notes. They save automatically (the line under the fields says
+  Saved, or NOT SAVED in red if something went wrong). Review Email shows the recipient and the full message; Send emails it
+  and saves that exact version, with its sent date, in the Chair Reports tab (column C, Finalized JSON). Later orders or
+  edits never change a sent version. Sending again saves a new version and keeps the earlier ones in its history.
 
 ## H&I Subcommittee (special rules)
 
@@ -119,7 +120,7 @@ H&I orders through the normal form by choosing the group **H&I Subcommittee**. T
   for cash/check.
 - **Reports:** Completed H&I orders count as **Charged to H&I**, not **Collected**. The Chair Report and the Secretary
   email show an "H&I charged to subcommittee budget" line, which is the number for the treasurer's transfer. Chair
-  Reports finalized before this change have no such line and are not altered.
+  Reports sent before this change have no such line and are not altered.
 
 ## Sheet layout (needed to rebuild the spreadsheet)
 

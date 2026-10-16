@@ -48,7 +48,10 @@ function getChairReport(reportingMonth, token) {
   return withWorkflowLock_(token, function() {
     const live = chairFigures_(reportingMonth, token);
     const rec = chairRecord_(live.reportingMonth);
-    return { success: true, draft: rec.draft || { ...live, moneySpent: 0, other: '' }, live: live,
+    // The working copy always shows live order figures; only Spent and Notes are saved by the Chair.
+    // `finalized` is the last version that was sent (and saved) to the Secretary, or null.
+    const saved = rec.draft || {};
+    return { success: true, draft: { ...live, moneySpent: saved.moneySpent || 0, other: saved.other || '', savedAt: saved.savedAt || null }, live: live,
       finalized: rec.finalized, revision: rec.revision, secretaryEmail: getSettings(token).secretaryEmail,
       email: chairEmailState_(rec.email) };
   });
@@ -61,23 +64,12 @@ function saveChairDraft(reportingMonth, spending, notes, revision, token) {
     if (String(notes).length > 10000) throw new Error('Keep notes under 10,000 characters.');
     const draft = { ...live, moneySpent: Math.round(Number(spending) * 100) / 100, other: String(notes || ''), savedAt: new Date().toISOString() };
     commitCells_([cellsRequest_(rec.sheet, rec.number, 1, [rec.storageKey, JSON.stringify(draft), rec.finalized ? JSON.stringify(rec.finalized) : '', rec.revision + 1])]);
-    return { success: true };
-  });
-}
-function finalizeChairReport(reportingMonth, revision, replaceFinalized, token) {
-  return withWorkflowLock_(token, function() {
-    const rec = chairRecord_(reportingMonth);
-    if (revision !== rec.revision) throw new Error('Report changed. Reload before finalizing.');
-    if (!rec.draft) throw new Error('Save and review the draft first.');
-    if (rec.finalized && replaceFinalized !== true) throw new Error('Explicitly update the finalized report.');
-    const snapshot = { ...rec.draft, finalizedAt: new Date().toISOString(), version: rec.revision + 1 };
-    commitCells_([cellsRequest_(rec.sheet, rec.number, 3, [JSON.stringify(snapshot), rec.revision + 1])]);
-    return { success: true };
+    return { success: true, revision: rec.revision + 1, savedAt: draft.savedAt };
   });
 }
 function chairReportText_(report) {
   return 'NORVANA Chair Report\nReporting month: ' + report.reportingMonth +
-    '\nFinalized (version ' + report.version + ')\n\nGroups Served: ' + report.groupsServed +
+    (report.version > 1 ? '\nRevised report (version ' + report.version + ')' : '') + '\n\nGroups Served: ' + report.groupsServed +
     '\nCollected: $' + report.moneyCollected.toFixed(2) +
     (typeof report.hiCharged === 'number' ? '\nH&I charged to subcommittee budget: $' + report.hiCharged.toFixed(2) : '') +
     '\nSpent: $' + report.moneySpent.toFixed(2) +
@@ -97,12 +89,14 @@ function chairEmailAction_(email) {
 }
 function previewChairEmail(reportingMonth, token) {
   return withWorkflowLock_(token, function() {
-    const rec = chairRecord_(reportingMonth);
-    if (!rec.finalized) throw new Error('Finalize and review the report first.');
+    const live = chairFigures_(reportingMonth, token), rec = chairRecord_(live.reportingMonth);
+    if (!rec.draft) throw new Error('Enter the Spent amount first.');
     const recipient = getSettings(token).secretaryEmail;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) throw new Error('Set Secretary Email in Settings first.');
-    const preview = { reportingMonthContract: true, month: rec.finalized.reportingMonth, version: rec.finalized.version, recipient: recipient,
-      subject: demoPrefix_() + 'NORVANA Chair Report - ' + rec.finalized.reportingMonth, body: chairReportText_(rec.finalized), token: token,
+    // The reviewed report is frozen here: it is exactly what is emailed and then saved.
+    const report = { ...live, moneySpent: rec.draft.moneySpent, other: rec.draft.other, version: (Number(rec.finalized && rec.finalized.version) || 0) + 1 };
+    const preview = { reportingMonthContract: true, month: live.reportingMonth, version: report.version, revision: rec.revision, report: report, recipient: recipient,
+      subject: demoPrefix_() + 'NORVANA Chair Report - ' + live.reportingMonth, body: chairReportText_(report), token: token,
       previousAttempt: chairEmailMarker_(rec.email), action: chairEmailAction_(rec.email) };
     const id = Utilities.getUuid();
     CacheService.getScriptCache().put('chair_preview_' + id, JSON.stringify(preview), 600);
@@ -117,7 +111,7 @@ function sendChairReport(previewId, token, confirmedAction) {
     const preview = JSON.parse(raw);
     if (!preview.reportingMonthContract) throw new Error('Review a fresh email preview.');
     const rec = chairRecord_(preview.month);
-    if (preview.token !== token || !rec.finalized || rec.finalized.version !== preview.version || getSettings(token).secretaryEmail !== preview.recipient) throw new Error('Report or recipient changed. Review a fresh preview.');
+    if (preview.token !== token || !rec.draft || rec.revision !== preview.revision || getSettings(token).secretaryEmail !== preview.recipient) throw new Error('Report or recipient changed. Review a fresh preview.');
     // A preview authorizes one attempt against the email state actually reviewed.
     // Different tabs/previews also compete against the same persisted state.
     if (preview.previousAttempt !== chairEmailMarker_(rec.email)) throw new Error('Email status changed or this send was already attempted. Reload and review before an explicit retry or resend.');
@@ -145,8 +139,14 @@ function sendChairReport(previewId, token, confirmedAction) {
     }
     attempt.status = 'accepted'; attempt.acceptedAt = new Date().toISOString();
     attempt.lastAccepted = { at: attempt.acceptedAt, recipient: attempt.recipient, version: attempt.version };
-    try { commitCells_([cellsRequest_(rec.sheet, rec.number, 5, [JSON.stringify(attempt)])]); }
-    catch (e) { return { success: false, error: 'The email service accepted the message for sending, but saving its status was unconfirmed. Check sent mail before explicitly retrying. Delivery is not confirmed.' }; }
-    return { success: true, email: attempt, message: 'Accepted for sending. Delivery is not confirmed.' };
+    // Save the exact reviewed report as the sent version; earlier sent versions are kept in its history.
+    const lastSent = rec.finalized, earlier = lastSent ? (lastSent.history || []).concat([{ ...lastSent, history: undefined }]) : [];
+    const sent = { ...preview.report, sentAt: attempt.acceptedAt, recipient: preview.recipient, history: earlier.length ? earlier : undefined };
+    try {
+      const json = JSON.stringify(sent);
+      if (json.length > 45000) throw new Error('Saved history is too large for one cell.');
+      commitCells_([cellsRequest_(rec.sheet, rec.number, 3, [json, rec.revision + 1, JSON.stringify(attempt)])]);
+    } catch (e) { return { success: false, error: 'The email was accepted for sending, but this report could NOT be saved to Google Sheets (' + e.message + '). Do not resend yet. Check sent mail and tell the committee so the saved record can be fixed.' }; }
+    return { success: true, email: attempt, message: 'Report sent and saved to Google Sheets (version ' + preview.version + '). Delivery is not confirmed.' };
   });
 }

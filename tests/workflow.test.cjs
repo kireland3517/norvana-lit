@@ -184,7 +184,7 @@ test('legacy Chair Report keys keep their reporting-month association and frozen
   assert.equal(f.c.getChairReport('November 2026','test').finalized,null);
   assert.equal(f.c.saveChairDraft('October 2026',95,'New notes',9,'test').success,true);
   assert.equal(f.tables['Chair Reports'][1][0],'November 2026');assert.equal(f.tables['Chair Reports'][1][2],finalJSON);assert.equal(f.tables['Chair Reports'][1][4],emailJSON);
-  const preview=f.c.previewChairEmail('October 2026','test');assert.match(preview.subject,/October 2026/);assert.match(preview.body,/Collected: \$123\.45/);assert.doesNotMatch(preview.body,/November|Presentation|Money collected|Other:/);
+  const preview=f.c.previewChairEmail('October 2026','test');assert.match(preview.subject,/October 2026/);assert.match(preview.body,/Spent: \$95\.00/);assert.doesNotMatch(preview.body,/November|Presentation|Money collected|Other:/);
   f.c.saveChairDraft('November 2026',10,'New report',0,'test');
   assert.equal(f.tables['Chair Reports'].length,3);assert.equal(f.c.getChairReport('November 2026','test').draft.moneySpent,10);assert.equal(f.c.getChairReport('October 2026','test').draft.moneySpent,95);
   assert.ok(f.c.getAvailableMonths('test').includes('October 2026'));
@@ -197,40 +197,54 @@ test('January Chair selection reports January and preserves legacy December asso
   assert.equal(f.c.getChairReport('January 2027','test').finalized,null);
   f.c.saveChairDraft('January 2027',2,'',0,'test');assert.equal(f.c.getChairReport('January 2027','test').draft.reportingMonth,'January 2027');
 });
-test('chair reports select the reporting meeting month; finalized snapshot changes only explicitly',()=>{
+test('chair reports select the reporting meeting month; the sent version changes only when sent again',()=>{
   const f=fixture();f.ready(3);f.c.completeOrder(f.oid,'test',1);
   f.tables.Orders.push(['another','','October 2026','Group A','','','',10,10,'Completed','',0],['nov','','November 2026','Group B','','','',100,100,'Completed','',0]);
   let r=f.c.getChairReport('October 2026','test');assert.equal(r.live.groupsServed,1);assert.equal(r.live.moneyCollected,40);assert.equal(r.draft.reportingMonth,'October 2026');
-  assert.equal(f.c.saveChairDraft('October 2026',75,'Notes',0,'test').success,true);
-  assert.equal(f.c.finalizeChairReport('October 2026',1,false,'test').success,true);const stock=f.stock();
+  assert.equal(f.c.saveChairDraft('October 2026',75,'Notes',0,'test').revision,1);
+  let p=f.c.previewChairEmail('October 2026','test');assert.equal(f.c.sendChairReport(p.previewId,'test',p.action).success,true);const stock=f.stock();
   f.c.uncompleteOrder(f.oid,'test',2);
-  r=f.c.getChairReport('October 2026','test');assert.equal(r.live.moneyCollected,10);assert.equal(r.finalized.moneyCollected,40);
-  f.c.saveChairDraft('October 2026',80,'Updated',2,'test');
-  assert.equal(f.c.finalizeChairReport('October 2026',3,false,'test').success,false);
-  assert.equal(f.c.finalizeChairReport('October 2026',3,true,'test').success,true);
-  r=f.c.getChairReport('October 2026','test');assert.equal(r.finalized.moneyCollected,10);assert.equal(r.finalized.moneySpent,80);assert.equal(f.stock(),stock);
+  r=f.c.getChairReport('October 2026','test');assert.equal(r.live.moneyCollected,10);assert.equal(r.draft.moneyCollected,10);
+  assert.equal(r.finalized.moneyCollected,40);assert.equal(r.finalized.version,1);assert.ok(r.finalized.sentAt);assert.equal(r.finalized.recipient,'secretary@example.invalid');
+  assert.equal(f.c.saveChairDraft('October 2026',80,'Updated',r.revision,'test').success,true);
+  r=f.c.getChairReport('October 2026','test');assert.equal(r.finalized.moneySpent,75);
+  p=f.c.previewChairEmail('October 2026','test');assert.equal(p.action,'resend');assert.match(p.body,/Revised report \(version 2\)/);
+  assert.equal(f.c.sendChairReport(p.previewId,'test',p.action).success,true);
+  r=f.c.getChairReport('October 2026','test');assert.equal(r.finalized.moneyCollected,10);assert.equal(r.finalized.moneySpent,80);assert.equal(r.finalized.version,2);
+  assert.equal(r.finalized.history.length,1);assert.equal(r.finalized.history[0].moneyCollected,40);assert.equal(r.finalized.history[0].moneySpent,75);assert.equal(f.stock(),stock);
+});
+test('autosaved Spent edits after a preview make that preview unusable',()=>{
+  const f=fixture();f.c.saveChairDraft('October 2026',20,'A',0,'test');
+  const p=f.c.previewChairEmail('October 2026','test');f.c.saveChairDraft('October 2026',25,'B',1,'test');
+  assert.equal(f.c.sendChairReport(p.previewId,'test',p.action).success,false);assert.equal(f.emails.length,0);
+  assert.match(f.c.saveChairDraft('October 2026',30,'C',1,'test').error,/Report changed/);
+  const g=fixture();assert.match(g.c.previewChairEmail('October 2026','test').error,/Enter the Spent amount/);
+});
+test('a failed send saves nothing and a failed save after sending is clearly flagged',()=>{
+  const f=chairFixture(),p=f.preview();f.quota(0);assert.equal(f.send(p).success,false);assert.equal(f.tables['Chair Reports'][1][2],'');
+  f.quota(100);const g=chairFixture(),q=g.preview();g.mailHook(()=>g.failBatch(true));
+  const result=g.send(q);assert.equal(result.success,false);assert.match(result.error,/accepted for sending.*NOT be saved/);assert.equal(g.mailCalls(),1);
 });
 test('Secretary preview is exact, requires explicit send, rejects duplicate sends and changed recipient',()=>{
-  const f=fixture();f.c.saveChairDraft('October 2026',20,'Reviewed',0,'test');f.c.finalizeChairReport('October 2026',1,false,'test');
+  const f=fixture();f.c.saveChairDraft('October 2026',20,'Reviewed',0,'test');
   const p=f.c.previewChairEmail('October 2026','test');assert.equal(f.emails.length,0);assert.match(p.body,/Reporting month: October 2026/);
   assert.equal(f.c.sendChairReport(p.previewId,'test','send').success,true);assert.equal(f.emails[0].body,p.body);
   assert.equal(f.c.sendChairReport(p.previewId,'test','send').success,false);assert.equal(f.emails.length,1);
-  const g=fixture();g.c.saveChairDraft('October 2026',0,'',0,'test');g.c.finalizeChairReport('October 2026',1,false,'test');const q=g.c.previewChairEmail('October 2026','test');
+  const g=fixture();g.c.saveChairDraft('October 2026',0,'',0,'test');const q=g.c.previewChairEmail('October 2026','test');
   g.tables.Config[3][1]='changed@example.invalid';assert.equal(g.c.sendChairReport(q.previewId,'test','send').success,false);assert.equal(g.emails.length,0);
 });
 
 function chairFixture() {
   const f=fixture();
   f.c.saveChairDraft('October 2026',20,'Reviewed',0,'test');
-  f.c.finalizeChairReport('October 2026',1,false,'test');
-  f.reportBefore=JSON.stringify(f.tables['Chair Reports'][1].slice(0,4));
+  f.reportBefore=f.tables['Chair Reports'][1][1];
   f.preview=()=>f.c.previewChairEmail('October 2026','test');
   f.send=p=>f.c.sendChairReport(p.previewId,'test',p.action);
   f.email=()=>f.c.getChairReport('October 2026','test').email;
-  f.assertUnchanged=()=>assert.equal(JSON.stringify(f.tables['Chair Reports'][1].slice(0,4)),f.reportBefore);
+  f.assertUnchanged=()=>assert.equal(f.tables['Chair Reports'][1][1],f.reportBefore);
   return f;
 }
-test('known pre-send failure permits explicit retry without changing finalized report',()=>{
+test('known pre-send failure permits explicit retry without changing the saved draft',()=>{
   const f=chairFixture(), p=f.preview();f.quota(0);
   const result=f.send(p);assert.equal(result.success,false);assert.match(result.error,/before contacting/);
   assert.equal(f.email().status,'failed');assert.equal(f.mailCalls(),0);f.assertUnchanged();
@@ -271,19 +285,19 @@ test('failed or uncertain status persistence after mail never permits replay',()
   for(const lostAfterWrite of [false,true]) {
     const f=chairFixture(), p=f.preview();
     f.mailHook(()=>lostAfterWrite?f.loseResponse():f.failBatch(true));
-    const result=f.send(p);assert.equal(result.success,false);assert.match(result.error,/accepted.*status was unconfirmed/);
+    const result=f.send(p);assert.equal(result.success,false);assert.match(result.error,/accepted for sending.*NOT be saved/);
     f.failBatch(false);f.mailHook(null);
     assert.equal(f.email().status,lostAfterWrite?'accepted':'uncertain');
     assert.equal(f.send(p).success,false);assert.equal(f.mailCalls(),1);
     assert.equal(f.send(f.preview()).success,true);assert.equal(f.mailCalls(),2);f.assertUnchanged();
   }
 });
-test('legacy email records support retry/resend and finalization preserves independent email state',()=>{
+test('legacy email records support retry/resend and saving a draft preserves independent email state',()=>{
   for(const status of ['attempted','sent']) {
     const f=chairFixture();f.tables['Chair Reports'][1][4]=JSON.stringify({version:2,status,recipient:'old@example.invalid',at:'2026-09-15T12:00:00Z'});
     const p=f.preview();assert.equal(p.action,status==='sent'?'resend':'retry');assert.equal(f.send(p).success,true);f.assertUnchanged();
     const before=f.tables['Chair Reports'][1][4];
-    f.c.saveChairDraft('October 2026',30,'Updated',2,'test');f.c.finalizeChairReport('October 2026',3,true,'test');
+    f.c.saveChairDraft('October 2026',30,'Updated',2,'test');
     assert.equal(f.tables['Chair Reports'][1][4],before);assert.equal(f.send(p).success,false);
   }
 });
@@ -294,14 +308,14 @@ test('failed resend retains previous accepted date and recipient',()=>{
 });
 function emailUIFixture() {
   const elements={}, calls=[], prompts=[], alerts=[];let answer=true, refreshes=0;
-  function el(id){return elements[id] ||= {innerHTML:'',textContent:'',disabled:false};}
+  function el(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},disabled:false,value:id==='chair-spending'?'20':''};}
   function runner(ok,fail){return {withSuccessHandler:f=>runner(f,fail),withFailureHandler:f=>runner(ok,f),
     sendChairReport:(...args)=>calls.push({name:'send',args,ok,fail}),previewChairEmail:(...args)=>calls.push({name:'preview',args,ok,fail})};}
-  const c=vm.createContext({Date,Number,String,console,reportMode:'chair',reportMonth:'November 2026',sessionToken:'test',
+  const c=vm.createContext({Date,Number,String,console,setTimeout:()=>0,clearTimeout(){},reportMode:'chair',reportMonth:'November 2026',sessionToken:'test',
     esc:s=>String(s||'').replace(/</g,'&lt;'),document:{getElementById:el,querySelectorAll:()=>[]},
-    confirm:p=>{prompts.push(p);return answer;},alert:m=>alerts.push(m),google:{script:{get run(){return runner();}}}});
+    confirm:p=>{prompts.push(p);return answer;},showConfirm:(p,label,yes,no)=>{prompts.push(p);if(answer)yes();else if(no)no();},alert:m=>alerts.push(m),google:{script:{get run(){return runner();}}}});
   const source=fs.readFileSync('ReportUI.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1];vm.runInContext(source,c);
-  c.reportMode='chair';c.reportMonth='October 2026';c.chairData={finalized:{version:2}};c.chairDisplay='final';
+  c.reportMode='chair';c.reportMonth='October 2026';c.chairData={draft:{moneySpent:20,other:'',savedAt:'saved'},finalized:{version:2},revision:1};c.chairDisplay='draft';
   c.fetchSpecialReport=()=>{refreshes++;};
   return {c,elements,calls,prompts,alerts,answer:v=>answer=v,refreshes:()=>refreshes};
 }
@@ -374,23 +388,46 @@ test('Inventory report defaults to all categories and a selected category keeps 
   ui.c.selectInventoryReportCategory('');assert.equal(ui.c.inventoryReportCategory,null);
 });
 
-test('Chair controls precede one preview; selected version determines print and email',()=>{
+test('Chair summary strip leads the controls; autosave replaces Save and Finalize; selected version determines print and email',()=>{
   const ui=emailUIFixture();let printed;
-  const draft={reportingMonth:'October 2026',groupsServed:2,moneyCollected:30,moneySpent:20,other:'Draft notes',savedAt:'today'};
-  ui.c.chairData={draft,live:draft,finalized:{...draft,moneySpent:10,other:'Final notes',version:4},revision:4};ui.c.chairDisplay='final';
+  const draft={reportingMonth:'October 2026',groupsServed:2,moneyCollected:30,hiCharged:4,moneySpent:20,other:'Draft notes',savedAt:'today'};
+  ui.c.chairData={draft,live:draft,finalized:{...draft,moneySpent:10,other:'Sent notes',version:4,sentAt:'2026-11-05T12:00:00Z'},revision:4};ui.c.chairDisplay='final';
   ui.c.printReportPage=(title,html)=>printed=html;ui.c.renderReportsShell();ui.c.renderChairReport();
   const shell=ui.elements['reports-content'].innerHTML;assert.ok(shell.indexOf('report-controls')<shell.indexOf('report-panel'));
   const controls=ui.elements['report-controls'].innerHTML;
-  assert.ok(controls.indexOf('Reporting month')<controls.indexOf('Spent'));assert.ok(controls.indexOf('Notes')<controls.indexOf('Save Draft'));assert.match(controls,/Update Final/);
+  assert.ok(controls.indexOf('Groups served')<controls.indexOf('Reporting month'));assert.ok(controls.indexOf('Collected')<controls.indexOf('Reporting month'));
+  assert.ok(controls.indexOf('Reporting month')<controls.indexOf('Spent'));assert.ok(controls.indexOf('Spent')<controls.indexOf('Notes'));
+  assert.doesNotMatch(controls,/Save Draft|Finalize|Update Final|regional order/i);
   assert.equal((ui.elements['report-panel'].innerHTML.match(/class="chair-paper"/g)||[]).length,1);assert.doesNotMatch(ui.elements['report-panel'].innerHTML,/Secretary:|Presentation|November|Unsaved changes/);
-  ui.c.printChairUI();assert.match(printed,/NORVANA/);assert.match(printed,/October 2026/);assert.match(printed,/Finalized \(version 4\)/);assert.match(printed,/Final notes/);assert.doesNotMatch(printed,/Draft notes/);
-  ui.c.showChairVersion('draft');ui.c.printChairUI();assert.match(printed,/Draft notes/);assert.match(printed,/Draft/);assert.doesNotMatch(printed,/Final notes/);
-  ui.c.previewChairUI();assert.equal(ui.calls.length,0); // Draft cannot be emailed.
+  ui.c.printChairUI();assert.match(printed,/Sent version 4/);assert.match(printed,/Sent notes/);assert.doesNotMatch(printed,/Draft notes/);
+  ui.c.showChairVersion('draft');ui.c.printChairUI();assert.match(printed,/Working copy/);assert.match(printed,/Draft notes/);assert.doesNotMatch(printed,/Sent notes/);
+  ui.c.showChairVersion('final');ui.c.previewChairUI();assert.equal(ui.calls.length,0);
+  ui.c.showChairVersion('draft');
   ui.c.document.getElementById('chair-spending').value='25';ui.c.document.getElementById('chair-notes').value='Edited notes';ui.c.chairEdited();
-  assert.equal(ui.elements['chair-unsaved'].textContent,'Unsaved changes');assert.equal(ui.elements['chair-finalize'].disabled,true);ui.c.printChairUI();assert.match(printed,/25\.00/);assert.match(printed,/Unsaved changes/);
-  ui.c.showChairVersion('final');ui.c.printChairUI();assert.match(printed,/10\.00/);assert.doesNotMatch(printed,/Unsaved changes/);
-  ui.c.previewChairUI();assert.equal(ui.calls[0].name,'preview');assert.equal(ui.calls[0].args[0],'October 2026');
-  ui.c.document.getElementById('chair-spending').value='20';ui.c.document.getElementById('chair-notes').value='Draft notes';ui.c.chairEdited();assert.equal(ui.c.chairDirty,false);assert.equal(ui.elements['chair-unsaved'].textContent,'');assert.equal(ui.elements['chair-finalize'].disabled,false);
+  assert.equal(ui.elements['chair-unsaved'].textContent,'Saving...');ui.c.printChairUI();assert.match(printed,/25\.00/);
+  ui.c.document.getElementById('chair-spending').value='';ui.c.chairEdited();assert.match(ui.elements['chair-unsaved'].textContent,/Enter an amount/);
+  ui.c.document.getElementById('chair-spending').value='20';ui.c.document.getElementById('chair-notes').value='Draft notes';ui.c.chairEdited();assert.equal(ui.c.chairDirty,false);assert.equal(ui.elements['chair-unsaved'].textContent,'Saved');
+});
+test('autosave stores Spent and Notes, keeps typing queued, and flags failures',()=>{
+  const ui=emailUIFixture(),saves=[];
+  ui.c.google={script:{get run(){const r=(ok,fail)=>({withSuccessHandler:f=>r(f,fail),withFailureHandler:f=>r(ok,f),saveChairDraft:(...a)=>saves.push({a,ok,fail})});return r();}}};
+  ui.c.chairData={draft:{reportingMonth:'October 2026',moneySpent:20,other:'',savedAt:'saved'},revision:1};
+  ui.c.document.getElementById('chair-spending').value='30';ui.c.chairEdited();
+  ui.c.chairAutosave();assert.equal(saves.length,1);assert.equal(saves[0].a[1],30);assert.equal(saves[0].a[3],1);
+  ui.c.document.getElementById('chair-notes').value='more';ui.c.chairEdited();ui.c.chairAutosave();assert.equal(saves.length,1);
+  saves[0].ok({success:true,revision:2,savedAt:'t2'});assert.equal(saves.length,2);assert.equal(saves[1].a[3],2);assert.equal(saves[1].a[2],'more');
+  saves[1].ok({success:false,error:'Report changed. Reload before saving.'});
+  assert.match(ui.elements['chair-unsaved'].textContent,/NOT SAVED.*Report changed/);assert.equal(ui.elements['chair-unsaved'].style.color,'#b3261e');
+});
+test('leaving a Chair Report saves first and only asks in-page when a change could not be saved',()=>{
+  const ui=emailUIFixture();let left=0;
+  ui.c.fetchReport=()=>{left++;};ui.c.chairDirty=true;
+  ui.c.onReportMonthChange('2026-11');assert.equal(left,1);assert.equal(ui.prompts.length,0);assert.equal(ui.c.reportMonth,'November 2026');
+  ui.c.reportMonth='October 2026';ui.c.chairDirty=true;ui.c.document.getElementById('chair-spending').value='';
+  ui.answer(false);ui.c.onReportMonthChange('2026-11');
+  assert.equal(left,1);assert.match(ui.prompts[0],/could not be saved/);assert.equal(ui.elements['report-month'].value,'2026-10');
+  ui.answer(true);ui.c.onReportMonthChange('2026-11');assert.equal(left,2);assert.equal(ui.c.reportMonth,'November 2026');
+  ui.c.chairDirty=false;ui.c.setReportMode('inventory');assert.equal(left,3);
 });
 test('manual ordering window includes final millisecond of meeting day in New York',()=>{
   const f=fixture();const NativeDate=Date;
@@ -576,7 +613,7 @@ test('UI renders inventory, fulfillment stock, Secretary setting and both report
   vm.runInContext(`inventoryReportData={meetingMonth:'October 2026',stockAsOf:'2026-10-10',items:[{name:'Book',groups:2,qtyOrdered:10,qtyFulfilled:3,unfilled:2,awaiting:5,stock:-2}]};renderInventoryReport();`,c);
   assert.match(elements['report-panel'].innerHTML,/<th>Item<\/th><th>Count<\/th>/);assert.doesNotMatch(elements['report-panel'].innerHTML,/demand|fulfillment|Ordering month/i);
   vm.runInContext(`const r={presentationMonth:'November 2026',reportingMonth:'October 2026',groupsServed:2,moneyCollected:30,moneySpent:20,other:'<script>unsafe</scr'+'ipt>',savedAt:'today'};chairData={draft:r,live:r,finalized:{...r,version:2},revision:2,secretaryEmail:'secretary@example.invalid'};renderChairReport();`,c);
-  assert.match(elements['report-controls'].innerHTML,/Update Final/);assert.match(elements['report-panel'].innerHTML,/&lt;script&gt;/);assert.doesNotMatch(elements['report-panel'].innerHTML,/orders awaiting pickup|completed-order counts/i);
+  assert.match(elements['report-controls'].innerHTML,/Groups served/);assert.match(elements['report-panel'].innerHTML,/&lt;script&gt;/);assert.doesNotMatch(elements['report-panel'].innerHTML,/orders awaiting pickup|completed-order counts/i);
 });
 
 // -- H&I Subcommittee: its own items, no Keytags/Medallions, paid from a budget instead of collected --
@@ -645,12 +682,12 @@ test('Chair Report keeps cash collected apart from H&I charged; old snapshots ar
   f.tables.Orders.push(['NL-2610-002','','October 2026',HI,'','','',20,12,'Completed','',0],['NL-2610-003','','October 2026','Group B','','','',40,30,'Completed','',0]);
   const live=f.c.getChairReport('October 2026','test').live;
   assert.equal(live.moneyCollected,30);assert.equal(live.hiCharged,12);assert.equal(live.groupsServed,2);
-  assert.equal(f.c.saveChairDraft('October 2026',5,'',0,'test').success,true);assert.equal(f.c.finalizeChairReport('October 2026',1,false,'test').success,true);
+  assert.equal(f.c.saveChairDraft('October 2026',5,'',0,'test').success,true);
   assert.match(f.c.previewChairEmail('October 2026','test').body,/Collected: \$30\.00\nH&I charged to subcommittee budget: \$12\.00\nSpent: \$5\.00/);
-  // A snapshot finalized before this feature has no hiCharged and its email body is unchanged.
+  // A version sent before this feature has no hiCharged and is left exactly as saved.
   const g=fixture();const legacy={reportingMonth:'October 2026',groupsServed:7,moneyCollected:123.45,moneySpent:90,other:'',version:9};
   g.tables['Chair Reports'].push(['October 2026',JSON.stringify(legacy),JSON.stringify(legacy),9,'']);
-  assert.doesNotMatch(g.c.previewChairEmail('October 2026','test').body,/H&I/);
+  assert.equal(g.c.getChairReport('October 2026','test').finalized.hiCharged,undefined);assert.equal(g.c.getChairReport('October 2026','test').finalized.moneyCollected,123.45);
 });
 
 test('order form: H&I group gets its own tab first and no Keytags/Medallions; switching groups clears quantities',()=>{

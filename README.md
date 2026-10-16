@@ -11,7 +11,7 @@ Sheet, so it costs nothing to run and can be maintained from inside the app by n
 |---|---|
 | `Code.gs` | Order form data, order submission, dashboard login and sessions, settings, catalog, groups, schedule |
 | `OrderWorkflow.gs` | Atomic fulfill / reopen / delete, inventory, monthly and annual reports |
-| `ChairReports.gs` | Chair Report drafts, finalized snapshots, reviewed Secretary email |
+| `ChairReports.gs` | Chair Report autosave, sent versions, reviewed Secretary email |
 | `EmailTemplate.gs` | The shared look (header, logo, item table) for the order emails |
 | `App.html` | The app: order form and dashboard |
 | `ReportUI.html` | Reports screens, CSV and print views (included by `App.html`) |

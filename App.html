@@ -608,8 +608,12 @@
   .card-check-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
   /* -- NOTICE (in-page replacement for alert pop-ups) -- */
-  #notice-modal { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(10,12,40,0.55); align-items: center; justify-content: center; padding: 20px; }
-  #notice-modal.open { display: flex; }
+  #notice-modal, #confirm-modal { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(10,12,40,0.55); align-items: center; justify-content: center; padding: 20px; }
+  #notice-modal.open, #confirm-modal.open { display: flex; }
+  #confirm-text { font-size: 14px; line-height: 1.5; margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; }
+  .confirm-row { display: flex; gap: 10px; }
+  .confirm-row .login-btn.secondary { background: transparent; color: var(--onyx); border: 1px solid var(--border); }
+  .confirm-row .login-btn.danger, body.dark .confirm-row .login-btn.danger { background: var(--danger); color: #fff; }
   .notice-sheet { background: var(--white); color: var(--onyx); border-radius: 14px; padding: 20px; max-width: 420px; width: 100%; box-shadow: 0 12px 40px rgba(0,0,0,0.3); }
   #notice-text { font-size: 14px; line-height: 1.5; margin-bottom: 16px; white-space: pre-wrap; word-break: break-word; }
 
@@ -1243,6 +1247,7 @@
 <!-- -- TOAST -- -->
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="notice-modal" role="alertdialog" aria-modal="true"><div class="notice-sheet"><div id="notice-text"></div><button type="button" class="login-btn" id="notice-ok" onclick="closeNotice()">OK</button></div></div>
+<div id="confirm-modal" role="alertdialog" aria-modal="true"><div class="notice-sheet"><div id="confirm-text"></div><div class="confirm-row"><button type="button" class="login-btn secondary" id="confirm-cancel" onclick="closeConfirm(false)">Cancel</button><button type="button" class="login-btn" id="confirm-ok" onclick="closeConfirm(true)">OK</button></div></div></div>
 
 <script>
 // -- State --
@@ -2186,8 +2191,27 @@ function closeNotice() {
   var box = document.getElementById('notice-modal');
   if (box) box.classList.remove('open');
 }
+// In-page yes/no question. Unlike confirm(), it cannot return an answer, so the action goes in onYes.
+var confirmYes = null, confirmNo = null;
+function showConfirm(msg, okLabel, onYes, onNo, danger) {
+  var box = document.getElementById('confirm-modal'), text = document.getElementById('confirm-text');
+  if (!box || !text) { if (window.confirm(msg)) onYes(); else if (onNo) onNo(); return; }
+  text.textContent = String(msg == null ? '' : msg);
+  var okBtn = document.getElementById('confirm-ok');
+  okBtn.textContent = okLabel || 'OK';
+  okBtn.classList.toggle('danger', !!danger);
+  confirmYes = onYes; confirmNo = onNo || null;
+  box.classList.add('open');
+  document.getElementById('confirm-cancel').focus();
+}
+function closeConfirm(yes) {
+  var box = document.getElementById('confirm-modal'), fn = yes ? confirmYes : confirmNo;
+  confirmYes = null; confirmNo = null;
+  if (box) box.classList.remove('open');
+  if (fn) fn();
+}
 // Browsers label every alert() from an embedded page with a long "embedded page at ... says" header.
-// Route alert() through the in-page box instead; confirm() questions stay native because they must pause for an answer.
+// Route alert() through the in-page box instead; yes/no questions use showConfirm() above.
 window.alert = showNotice;
 
 function showToast(msg, duration) {
@@ -2204,11 +2228,10 @@ function confirmDeleteOrder(orderId) {
   var order = allOrders.find(function(o) { return o.orderId === oid; });
   if (!order) return;
   if (order.status === 'Completed') { alert('Use Undo Pickup before deleting this order.'); return; }
-  var lineHint = (currentOrderId === oid && currentItems.length)
-    ? ('\n\nThis will remove ' + currentItems.length + ' line row(s) from Order Items.')
-    : '\n\nAll rows for this order will be removed from Order Items.';
-  var msg = 'Delete this order permanently?\n\n' + order.groupName + '\n' + oid + lineHint + '\n\nThis cannot be undone.';
-  if (!confirm(msg)) return;
+  var msg = 'Delete this order?\n\n' + order.groupName + '\n' + oid + '\n\nThis will permanently delete this order and all its items.';
+  showConfirm(msg, 'Delete Order', function() { runDeleteOrder(oid, order); }, null, true);
+}
+function runDeleteOrder(oid, order) {
   google.script.run
     .withSuccessHandler(function(result) {
       if (result && result.success) {
@@ -2823,7 +2846,9 @@ function deleteGroup(idx) {
   const groups = (window._settingsGroups || []).slice();
   const name = groups[idx];
   if (!name) return;
-  if (!confirm('Remove "' + name + '" from the groups list?')) return;
+  showConfirm('Remove "' + name + '" from the groups list?', 'Remove', function() { runDeleteGroup(groups, idx); }, null, true);
+}
+function runDeleteGroup(groups, idx) {
   groups.splice(idx, 1);
   google.script.run
     .withSuccessHandler(function() {
