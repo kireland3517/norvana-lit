@@ -3,6 +3,10 @@
 Order form and committee dashboard for NORVANA literature. A Google Apps Script web app that stores its data in a Google
 Sheet, so it costs nothing to run and can be maintained from inside the app by non-technical volunteers.
 
+**Who it's for:** NORVANA groups placing literature orders, and the Literature Committee that fulfills them.
+
+**Stack:** Google Apps Script (`.gs` + HTML), Google Sheets as the database, Node's built-in test runner.
+
 **Keeping it running, security rules and how to publish a change: read [HANDOFF.md](HANDOFF.md).**
 
 ## Files (the whole deployed project)
