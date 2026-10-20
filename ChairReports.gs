@@ -67,6 +67,7 @@ function saveChairDraft(reportingMonth, spending, notes, revision, token) {
     if (String(notes).length > 10000) throw new Error('Keep notes under 10,000 characters.');
     const draft = { ...live, moneySpent: Math.round(Number(spending) * 100) / 100, other: String(notes || ''), savedAt: new Date().toISOString() };
     commitCells_([cellsRequest_(rec.sheet, rec.number, 1, [rec.storageKey, JSON.stringify(draft), rec.finalized ? JSON.stringify(rec.finalized) : '', rec.revision + 1])]);
+    if (rec.revision === 0) refreshChairReportViewSafe_(); // a new row starts hidden in the readable view until it is sent
     return { success: true, revision: rec.revision + 1, savedAt: draft.savedAt };
   });
 }
@@ -151,6 +152,7 @@ function sendChairReport(previewId, token, confirmedAction) {
       if (json.length > 45000) throw new Error('Saved history is too large for one cell.');
       commitCells_([cellsRequest_(rec.sheet, rec.number, 3, [json, rec.revision + 1, JSON.stringify(attempt)])]);
     } catch (e) { return { success: false, error: 'The email was accepted for sending, but this report could NOT be saved to Google Sheets (' + e.message + '). Do not resend yet. Check sent mail and tell the committee so the saved record can be fixed.' }; }
+    refreshChairReportViewSafe_();
     return { success: true, email: attempt, message: 'Report sent and saved to Google Sheets (version ' + preview.version + '). Delivery is not confirmed.' };
   });
 }

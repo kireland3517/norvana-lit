@@ -717,6 +717,7 @@
   .dot-ok  { background: var(--success); }
   .dot-low { background: var(--warn); }
   .dot-out { background: var(--danger); }
+  .dot-request { background: var(--border); }
 
   /* inventory filter chips */
   .inv-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
@@ -746,6 +747,7 @@
     -webkit-appearance: none; appearance: none;
   }
   .inv-stock-input:focus { outline: none; border-color: var(--blue); background: var(--white); }
+  .inv-stock-input.ok { border-color: var(--success); color: var(--success); background: var(--success-pale); }
   .inv-stock-input.low { border-color: var(--warn); color: var(--warn); background: var(--warn-pale); }
   .inv-stock-input.out { border-color: var(--danger); color: var(--danger); background: var(--danger-pale); }
 
@@ -763,6 +765,12 @@
   .inv-price-ro { min-width: 48px; padding: 5px 4px; text-align: center; font-size: 13px; font-weight: 600; color: var(--onyx); }
   #inv-export-modal { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(10,12,40,0.55); align-items: center; justify-content: center; padding: 20px; }
   #inv-export-modal.open { display: flex; }
+  #chair-email-modal { display: none; position: fixed; inset: 0; z-index: 900; background: rgba(10,12,40,0.55); align-items: center; justify-content: center; padding: 20px; }
+  #chair-email-modal.open { display: flex; }
+  #chair-email-modal .notice-sheet { max-width: 560px; max-height: 88vh; overflow-y: auto; }
+  #chair-email-modal #chair-send { width: 100%; flex: 1 1 100%; padding: 14px; font-size: 15px; font-weight: 700; background: var(--blue); color: #fff; border-color: var(--blue); }
+  #chair-email-modal #chair-send:disabled { opacity: 0.6; }
+  body.dark #chair-email-modal #chair-send { background: var(--lime); color: #1a1a3e; border-color: var(--lime); }
   #inv-export-modal .export-title { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
   #inv-export-modal fieldset { border: 0; margin: 0 0 14px; padding: 0; }
   #inv-export-modal legend { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0; margin-bottom: 6px; }
@@ -1171,6 +1179,8 @@
       <div id="inventory-content">
         <div class="spinner"><div class="spin"></div>Loading inventory...</div>
       </div>
+      <div id="fs-order" style="display:none"></div>
+      <div id="trends-view" style="display:none"></div>
     </div>
 
     <!-- SETTINGS VIEW -->
@@ -1275,6 +1285,10 @@
     <label class="opt"><input type="radio" name="inv-export-output" value="csv"> CSV</label></fieldset>
   <div class="confirm-row"><button type="button" class="login-btn secondary" onclick="closeInventoryExport()">Cancel</button><button type="button" class="login-btn" id="inv-export-go" onclick="runInventoryExport()">Create report</button></div>
 </div></div>
+<div id="chair-email-modal" role="dialog" aria-modal="true" aria-label="Review email"><div class="notice-sheet">
+  <div id="chair-email-preview"></div>
+  <div class="confirm-row"><button type="button" class="login-btn secondary" onclick="closeChairEmail()">Close</button></div>
+</div></div>
 <div id="confirm-modal" role="alertdialog" aria-modal="true"><div class="notice-sheet"><div id="confirm-text"></div><div class="confirm-row"><button type="button" class="login-btn secondary" id="confirm-cancel" onclick="closeConfirm(false)">Cancel</button><button type="button" class="login-btn" id="confirm-ok" onclick="closeConfirm(true)">OK</button></div></div></div>
 
 <script>
@@ -1328,6 +1342,7 @@ function switchView(name) {
   if (name === 'orders') loadOrders();
   if (name === 'reports') loadReports();
   if (name === 'inventory' && !viewsLoaded.inventory) loadInventory();
+  if (name === 'inventory' && typeof fsRefresh === 'function') fsRefresh();
   if (name === 'settings'  && !viewsLoaded.settings)  loadSettings();
 }
 
@@ -1452,6 +1467,9 @@ function doLogin() {
     allOrders = []; currentOrderId = null; currentItems = [];
     inventoryCategories = []; activeInventoryCategory = null; window._settingsGroups = null;
     ordersReportData = null; chairData = null; chairPreview = null;
+    if (typeof fsReset === 'function') fsReset();
+    if (typeof trReset === 'function') trReset();
+    if (typeof closeChairEmail === 'function') closeChairEmail();
   }
 
   function doSignout() {
@@ -2078,7 +2096,7 @@ function clearAllFulfillDraftsFromStorage() {
     var toRemove = [];
     for (var i = 0; i < sessionStorage.length; i++) {
       var k = sessionStorage.key(i);
-      if (k && k.indexOf('norvana_fulfill_') === 0) toRemove.push(k);
+      if (k && (k.indexOf('norvana_fulfill_') === 0 || k === 'norvana_fs_draft')) toRemove.push(k);
     }
     toRemove.forEach(function(k) { sessionStorage.removeItem(k); });
   } catch (e) {}
@@ -2404,9 +2422,11 @@ function renderInventory(items) {
   if (dashboardSignedOut) return;
   viewsLoaded.inventory = true;
 
-  const okItems  = items.filter(function(i) { var t = Number(i.lowAt) || 5; return Number(i.stock) > t; });
-  const lowItems = items.filter(function(i) { var t = Number(i.lowAt) || 5; return Number(i.stock) > 0 && Number(i.stock) <= t; });
-  const outItems = items.filter(function(i) { return Number(i.stock) <= 0; });
+  // Order on Request products have no counts, so they are never in stock, low or out.
+  const stockedItems = items.filter(function(i) { return i.inventoryType !== 'Order on Request'; });
+  const okItems  = stockedItems.filter(function(i) { var t = isNaN(parseFloat(i.lowAt)) ? 5 : Number(i.lowAt); return Number(i.stock) > t; });
+  const lowItems = stockedItems.filter(function(i) { var t = isNaN(parseFloat(i.lowAt)) ? 5 : Number(i.lowAt); return Number(i.stock) > 0 && Number(i.stock) <= t; });
+  const outItems = stockedItems.filter(function(i) { return Number(i.stock) <= 0; });
 
   const cats = {};
   items.forEach(function(item) {
@@ -2419,7 +2439,9 @@ function renderInventory(items) {
 
   let html = '<div style="padding-top:16px">'
     + '<div style="height:12px"></div>'
-    + '<button class="save-inv-btn" style="margin-bottom:12px" onclick="openInventoryExport()">Print / Export</button>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px"><button class="save-inv-btn" style="margin:0;flex:1" onclick="openInventoryExport()">Print / Export</button>'
+    + '<button class="save-inv-btn" style="margin:0;flex:1" onclick="openTrends()">Trends</button>'
+    + '<button class="save-inv-btn" style="margin:0;flex:1" onclick="openFreeStateOrder()">Create Free State Order</button></div>'
     + '<div id="inv-status" role="status"></div>'
     + '<div class="inv-summary">'
     + '<div class="inv-tile inv-tile-ok" onclick="filterInventory(\'ok\',this)">'
@@ -2459,10 +2481,11 @@ function renderInventory(items) {
     cats[cat].forEach(function(item) {
       const stock = Number(item.stock);
       const isOff = item.active === false || item.active === 'false' || item.active === 'FALSE';
-      const lowAt = Number(item.lowAt) || 5;
-      const dotCls = stock <= 0 ? 'dot-out' : stock <= lowAt ? 'dot-low' : 'dot-ok';
-      const inpCls = stock <= 0 ? 'out' : stock <= lowAt ? 'low' : '';
-      const statusKey = isOff ? 'off' : stock <= 0 ? 'out' : stock <= lowAt ? 'low' : 'ok';
+      const lowAt = isNaN(parseFloat(item.lowAt)) ? 5 : Number(item.lowAt);
+      const onRequest = item.inventoryType === 'Order on Request';
+      const dotCls = onRequest ? 'dot-request' : stock <= 0 ? 'dot-out' : stock <= lowAt ? 'dot-low' : 'dot-ok';
+      const inpCls = stock <= 0 ? 'out' : stock <= lowAt ? 'low' : 'ok';
+      const statusKey = isOff ? 'off' : onRequest ? 'request' : stock <= 0 ? 'out' : stock <= lowAt ? 'low' : 'ok';
       html += '<div class="inv-row" data-status="' + statusKey + '" id="invrow-' + esc(item.itemId) + '">'
         + '<div class="inv-status-dot ' + dotCls + '"></div>'
         + '<div class="inv-name-wrap">'
@@ -2474,12 +2497,14 @@ function renderInventory(items) {
         + '<div class="inv-field-label">Price</div>'
         + '<div class="inv-price-line" id="invpricebox-' + esc(item.itemId) + '">' + priceViewHTML(item.itemId, Number(item.price), item.name) + '</div>'
         + '</div>'
-        + '<div class="inv-stock-wrap">'
-        + '<div class="inv-field-label">Count</div>'
-        + '<input class="inv-stock-input ' + inpCls + '" id="inv-' + esc(item.itemId) + '"'
-        + ' type="number" step="1" value="' + stock + '"'
-        + ' data-item-id="' + esc(item.itemId) + '" data-original="' + stock + '" data-low-at="' + lowAt + '" oninput="updateInvStyle(this);scheduleStockSave()" onblur="saveStockNow()">'
-        + '</div>'
+        + (onRequest
+          ? '<div class="inv-stock-wrap"><div class="inv-field-label">Count</div><div class="report-help" style="margin:0">On request</div></div>'
+          : '<div class="inv-stock-wrap">'
+          + '<div class="inv-field-label">Count</div>'
+          + '<input class="inv-stock-input ' + inpCls + '" id="inv-' + esc(item.itemId) + '"'
+          + ' type="number" step="1" value="' + stock + '"'
+          + ' data-item-id="' + esc(item.itemId) + '" data-original="' + stock + '" data-low-at="' + lowAt + '" oninput="updateInvStyle(this);scheduleStockSave()" onblur="saveStockNow()">'
+          + '</div>')
         + '</div>';
     });
     html += '</div>';
@@ -2529,10 +2554,11 @@ function filterInventory(filter, el) {
 
 function updateInvStyle(input) {
   const v = parseInt(input.value) || 0;
-  const lowAt = parseInt(input.dataset.lowAt) || 5;
-  input.classList.remove('low','out');
+  const lowAt = isNaN(parseInt(input.dataset.lowAt)) ? 5 : parseInt(input.dataset.lowAt);
+  input.classList.remove('ok','low','out');
   if (v <= 0) input.classList.add('out');
   else if (v <= lowAt) input.classList.add('low');
+  else input.classList.add('ok');
   const row = input.closest('.inv-row');
   if (row) {
     const dot = row.querySelector('.inv-status-dot');
@@ -2548,7 +2574,7 @@ function refreshInventoryTiles() {
     var inp = row.querySelector('.inv-stock-input');
     if (!inp) return;
     var v = parseInt(inp.value) || 0;
-    var lowAt = parseInt(inp.dataset.lowAt) || 5;
+    var lowAt = isNaN(parseInt(inp.dataset.lowAt)) ? 5 : parseInt(inp.dataset.lowAt);
     var isOff = row.dataset.status === 'off';
     if (isOff) return;
     if (v <= 0) { out++; row.dataset.status = 'out'; }
@@ -2646,7 +2672,12 @@ function saveStockNow() {
   clearTimeout(stockSaveTimer); stockSaveTimer = null;
   if (stockSaving) { stockSaveAgain = true; return; }
   var changed = Array.from(document.querySelectorAll('.inv-stock-input')).filter(function(inp) { return inp.value.trim() !== inp.dataset.original; });
-  if (!changed.length) { return; }
+  if (!changed.length) {
+    // A count typed back to its saved value leaves nothing to save; clear the "Saving..." shown while typing.
+    var st = document.getElementById('inv-status');
+    if (st && st.textContent === 'Saving...') setInvStatus('All changes saved');
+    return;
+  }
   var updates = changed.map(function(inp) { return { itemId: inp.dataset.itemId, stock: inp.value.trim() === '' ? '' : Number(inp.value) }; });
   if (updates.some(function(u) { return u.stock === '' || !Number.isInteger(u.stock); })) {
     setInvStatus('Enter whole-number counts to save, including negative counts when needed.', true);
@@ -2828,6 +2859,9 @@ function renderSettings(data, groups) {
     '<div class="settings-field"><label>Secretary Email</label><input class="settings-input" id="setting-secretary" type="email" value="' + esc(data.secretaryEmail || '') + '"></div>' +
     '<button class="settings-save-btn" onclick="saveGlobalSettings()">Save</button></div>' +
 
+    // Free State order information (filled in by FreeStateUI.html)
+    '<div class="report-card" id="fs-settings-card" style="padding:16px;margin-bottom:14px"><div class="settings-section-label">Free State Order Information</div><div class="view-sub">Loading...</div></div>' +
+
     // Schedule
     '<div class="report-card" style="margin-bottom:14px">' +
     '<div style="padding:16px 16px 0">' +
@@ -2843,7 +2877,7 @@ function renderSettings(data, groups) {
     '<button class="add-month-btn" onclick="addScheduleMonth()">+ Add Month</button>' +
     '</div>' +
     '<div style="padding:10px 16px 16px">' +
-    '<button class="settings-save-btn" style="margin-top:0" onclick="saveSchedule()">Save Schedule</button>' +
+    '<button class="settings-save-btn" style="margin-top:0" onclick="saveSchedule()">Save</button>' +
     '</div></div>' +
 
     // Groups
@@ -2858,6 +2892,7 @@ function renderSettings(data, groups) {
     '</div>';
 
   document.getElementById('settings-content').innerHTML = html;
+  if (typeof loadFreeStateSettingsCard === 'function') loadFreeStateSettingsCard();
   // Store groups in memory for delete operations
   window._settingsGroups = groups.slice();
 }
@@ -2902,7 +2937,7 @@ function saveSchedule() {
     .withSuccessHandler(function(result) {
       if (result && result.success === false) { btn.textContent = 'Save'; btn.disabled = false; alert(result.error); return; }
       btn.textContent = '\u2713 Saved';
-      setTimeout(function() { btn.textContent = 'Save Schedule'; btn.disabled = false; }, 2000);
+      setTimeout(function() { btn.textContent = 'Save'; btn.disabled = false; }, 2000);
     })
     .withFailureHandler(function() {
       btn.textContent = 'Save failed'; btn.disabled = false;
@@ -3012,5 +3047,7 @@ function esc(s) {
 }
 </script>
 <?!= HtmlService.createHtmlOutputFromFile('ReportUI').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('FreeStateUI').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('TrendsUI').getContent(); ?>
 </body>
 </html>

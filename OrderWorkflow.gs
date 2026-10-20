@@ -85,6 +85,7 @@ function transitionOrder_(orderId, action, revision, fulfilled, token) {
       requests.push(cellsRequest_(state.sheet, state.number, 9, [action === 'reopen' ? '' : total, status, action === 'reopen' ? '' : new Date().toISOString(), state.revision + 1]));
     }
     commitCells_(requests); // One atomic batch: no partially deducted inventory on a failed write.
+    refreshMonthlySummarySafe_();
     const result = { success: true, revision: state.revision + 1, fulfilledTotal: total };
     if (action === 'ready') {
       try { sendReadyNotice_(state.row, indices.map(i => ({ name: String(data[i][3]), price: Number(data[i][4]), qty: Number(fulfilled.find(f => String(f.rowId) === String(data[i][0])).qtyFulfilled) })), total, state.revision > 0); }

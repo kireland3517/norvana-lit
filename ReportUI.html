@@ -16,7 +16,7 @@ body.dark .report-actions button,body.dark .report-views button{color:var(--onyx
 <script>
 var requestedReportMode=null, reportMode='orders', reportMonth='', availableMonths=[], reportYear='', reportPeriod='monthly', reportView='group', reportGroup='';
 var ordersReportData=null, chairData=null, chairPreview=null;
-var reportRequest=0, chairSendPending=false, chairWritePending=false, chairPreviewSequence=0, chairDirty=false, chairDisplay='draft', chairPreferredDisplay=null, chairSaveTimer=null, chairSaveAgain=false, chairSaveWaiters=[];
+var reportWindowMonth='', reportRequest=0, chairSendPending=false, chairWritePending=false, chairPreviewSequence=0, chairDirty=false, chairDisplay='draft', chairPreferredDisplay=null, chairSaveTimer=null, chairSaveAgain=false, chairSaveWaiters=[];
 const REPORT_MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function reportMonthInput(label){const p=String(label).split(' '), i=REPORT_MONTH_NAMES.indexOf(p[0]);return i<0?'':p[1]+'-'+String(i+1).padStart(2,'0');}
 function reportMonthLabel(value){const p=String(value).split('-');return p.length===2&&Number(p[1])>=1&&Number(p[1])<=12?REPORT_MONTH_NAMES[Number(p[1])-1]+' '+p[0]:'';}
@@ -27,12 +27,25 @@ function reportCanLeave(go,stay){
   if(reportMode!=='chair'||!chairData||(!chairDirty&&!chairWritePending&&!chairSaveTimer)){go();return;}
   chairAutosave(ok=>{if(ok)go();else showConfirm('Your latest changes could not be saved. Leave anyway and lose them?','Leave',go,stay);});
 }
+// The reports open on the current ordering window's month. A page left open across a meeting keeps its old month, so
+// every visit asks the server which window is current and, if it moved on, switches to the new month once.
+function followReportWindow(){
+  const mode=reportMode;
+  google.script.run.withSuccessHandler(r=>{
+    if(!r||!r.valid||!reportMonthInput(r.meetingMonth))return;
+    meetingMonth=r.meetingMonth;
+    if(!reportWindowMonth||reportWindowMonth===r.meetingMonth){reportWindowMonth=r.meetingMonth;return;}
+    if(reportMode!==mode||chairWritePending||dashboardSignedOut)return; // try again on the next visit
+    reportWindowMonth=r.meetingMonth;reportMonth=r.meetingMonth;reportYear=reportMonth.split(' ')[1];renderReportsShell();fetchReport();
+  }).withFailureHandler(()=>{}).resumeSession(sessionToken);
+}
 function loadReports(){
   reportMode=requestedReportMode||'orders';requestedReportMode=null;
-  if(!reportMonthInput(reportMonth)){const n=new Date();reportMonth=reportMonthInput(meetingMonth)?meetingMonth:REPORT_MONTH_NAMES[n.getMonth()]+' '+n.getFullYear();}
+  if(!reportMonthInput(reportMonth)){const n=new Date();reportMonth=reportMonthInput(meetingMonth)?meetingMonth:REPORT_MONTH_NAMES[n.getMonth()]+' '+n.getFullYear();if(reportMonthInput(meetingMonth))reportWindowMonth=meetingMonth;}
   reportYear=reportYear||reportMonth.split(' ')[1];chairDirty=false;
   renderReportsShell();fetchReport();
   google.script.run.withSuccessHandler(months=>{availableMonths=Array.isArray(months)?months:[];if(reportMode==='orders')renderOrdersControls();}).withFailureHandler(()=>{}).getAvailableMonths(sessionToken);
+  followReportWindow();
 }
 function renderReportsShell(){
   document.getElementById('reports-content').innerHTML='<div style="padding-top:16px"><div class="report-mode-tabs">'+
@@ -106,7 +119,10 @@ function exportOrdersCSV(){if(ordersReportData)downloadReportCSV('NORVANA '+orde
 // -- Inventory Print / Export (opened from the Inventory tab) --
 // Counts, targets and suggested orders are all in singles, the unit Catalog stock is kept in.
 // Incoming (already ordered) stock is not tracked, so Suggested Order = max(0, Target Stock - On Hand).
-function inventoryStatusLabel(onHand,lowAt){const low=Number(lowAt)||5;return onHand<=0?'Out of stock':onHand<=low?'Low stock':'In stock';}
+// Order on Request items (H&I, Spanish and any product switched to it) have no counts or targets, so they are never
+// reported as low, out or missing stock; they sort after the stocked items in their category.
+function isOnRequestItem(i){return i.inventoryType==='Order on Request';}
+function inventoryStatusLabel(onHand,lowAt){const low=isNaN(parseFloat(lowAt))?5:Number(lowAt);return onHand<=0?'Out of stock':onHand<=low?'Low stock':'In stock';}
 function inventoryCategoryOrder(categories){
   const known=(typeof CAT_ORDER!=='undefined'?CAT_ORDER:[]).filter(c=>categories.includes(c));
   return known.concat(categories.filter(c=>!known.includes(c)));
@@ -114,23 +130,27 @@ function inventoryCategoryOrder(categories){
 // items: live values [{itemId,category,name,stock,lowAt,packSize,targetStock}]; options: {categories:null|[names], include:'all'|'reorder'}
 function inventoryReportModel(items,options){
   const wanted=options.categories&&options.categories.length?options.categories:null;
-  const sorted=typeof itemSortScore==='function'?items.slice().sort((a,b)=>itemSortScore(a)-itemSortScore(b)):items;
+  const base=typeof itemSortScore==='function'?items.slice().sort((a,b)=>itemSortScore(a)-itemSortScore(b)):items;
+  const sorted=base.filter(i=>!isOnRequestItem(i)).concat(base.filter(isOnRequestItem));
   const cats=inventoryCategoryOrder([...new Set(items.map(i=>i.category||'Other'))]).filter(c=>!wanted||wanted.includes(c));
   const groups=cats.map(cat=>({category:cat,rows:sorted.filter(i=>(i.category||'Other')===cat).map(i=>{
-    const onHand=Number(i.stock)||0,pack=Number(i.packSize)||1;
+    const onRequest=isOnRequestItem(i),onHand=Number(i.stock)||0,pack=Number(i.packSize)||1;
+    if(onRequest)return {itemId:i.itemId,name:i.name,pack:pack,onHand:null,target:null,suggested:null,packs:null,status:'On request',needsTarget:false,onRequest:true};
     const target=i.targetStock===null||i.targetStock===undefined||i.targetStock===''?null:Number(i.targetStock);
     const suggested=target===null?null:Math.max(0,target-onHand),status=inventoryStatusLabel(onHand,i.lowAt);
     return {itemId:i.itemId,name:i.name,pack:pack,onHand:onHand,target:target,suggested:suggested,
-      packs:suggested>0&&pack>1?Math.ceil(suggested/pack):null,status:status,needsTarget:target===null&&status!=='In stock'};
-  }).filter(r=>options.include!=='reorder'||r.suggested>0||r.needsTarget)})).filter(g=>g.rows.length);
+      packs:suggested>0&&pack>1?Math.ceil(suggested/pack):null,status:status,needsTarget:target===null&&status!=='In stock',onRequest:false};
+  }).filter(r=>options.include!=='reorder'||(!r.onRequest&&(r.suggested>0||r.needsTarget)))})).filter(g=>g.rows.length);
   const needTarget=groups.reduce((n,g)=>n+g.rows.filter(r=>r.needsTarget).length,0);
-  return {groups:groups,needTarget:needTarget,allCategories:inventoryCategoryOrder([...new Set(items.map(i=>i.category||'Other'))])};
+  const onRequestCount=groups.reduce((n,g)=>n+g.rows.filter(r=>r.onRequest).length,0);
+  return {groups:groups,needTarget:needTarget,onRequestCount:onRequestCount,allCategories:inventoryCategoryOrder([...new Set(items.map(i=>i.category||'Other'))])};
 }
 function inventoryScopeText(model,options){
   const picked=options.categories&&options.categories.length&&options.categories.length<model.allCategories.length;
   return 'Categories: '+(picked?options.categories.join(', '):'All categories')+' | Items: '+(options.include==='reorder'?'Items to reorder':'All items');
 }
 function inventorySuggestedText(r){
+  if(r.onRequest)return '-';
   if(r.target===null)return 'Set target';
   if(r.pack>1&&r.suggested>0)return r.suggested+' ('+r.packs+(r.packs===1?' pack':' packs')+' of '+r.pack+')';
   return String(r.suggested);
@@ -139,14 +159,14 @@ function inventoryPrintHTML(model,meta){
   const left='style="text-align:left"';
   const head='<tr><th '+left+'>Item #</th><th '+left+'>Item Name</th><th>On Hand</th><th>Target Stock</th><th>Suggested Order</th><th>Stock Status</th></tr>';
   const tables=model.groups.map(g=>'<h3 style="margin:18px 0 6px;font-size:14px">'+esc(g.category)+'</h3><table class="report-table" style="table-layout:fixed"><colgroup><col style="width:11%"><col style="width:31%"><col style="width:11%"><col style="width:12%"><col style="width:20%"><col style="width:15%"></colgroup><thead>'+head+'</thead><tbody>'+
-    g.rows.map(r=>'<tr><td '+left+'>'+esc(r.itemId)+'</td><td '+left+'>'+esc(r.name)+(r.pack>1?'<br><small>Pack of '+r.pack+' - counts are in singles</small>':'')+'</td><td>'+r.onHand+'</td><td>'+(r.target===null?'':r.target)+'</td><td>'+esc(inventorySuggestedText(r))+'</td><td>'+(r.status==='In stock'?'In stock':'<strong>'+esc(r.status.toUpperCase())+'</strong>')+'</td></tr>').join('')+'</tbody></table>').join('')||'<p>No items match this selection.</p>';
+    g.rows.map(r=>'<tr><td '+left+'>'+esc(r.itemId)+'</td><td '+left+'>'+esc(r.name)+(r.pack>1?'<br><small>Pack of '+r.pack+' - counts are in singles</small>':'')+'</td><td>'+(r.onRequest?'-':r.onHand)+'</td><td>'+(r.onRequest?'-':r.target===null?'':r.target)+'</td><td>'+esc(inventorySuggestedText(r))+'</td><td>'+(r.status==='In stock'||r.onRequest?esc(r.status):'<strong>'+esc(r.status.toUpperCase())+'</strong>')+'</td></tr>').join('')+'</tbody></table>').join('')||'<p>No items match this selection.</p>';
   return '<h2>NORVANA Literature Inventory</h2><p>Generated: '+esc(meta.generated)+'<br>'+esc(meta.scope)+'</p>'+
-    '<p style="font-size:12px">All counts are in singles (individual items). Target Stock is the item\'s Low At level from the Catalog sheet. Suggested Order = Target Stock - On Hand.'+(model.needTarget?' "Set target" marks '+model.needTarget+' low or out item'+(model.needTarget===1?'':'s')+' with no target.':'')+'</p>'+tables;
+    '<p style="font-size:12px">All counts are in singles (individual items). Target Stock is the item\'s Low At level from the Catalog sheet. Suggested Order = Target Stock - On Hand.'+(model.needTarget?' "Set target" marks '+model.needTarget+' low or out item'+(model.needTarget===1?'':'s')+' with no target.':'')+(model.onRequestCount?' Order on request items are ordered only when someone asks for them, so On Hand, Target Stock and Suggested Order do not apply to them.':'')+'</p>'+tables;
 }
 function inventoryCSVRows(model,meta){
   return [['NORVANA Literature Inventory'],['Generated',meta.generated],['Scope',meta.scope],['All counts are in singles. Suggested Order = Target Stock - On Hand.'],[],
-    ['Category','Item #','Item Name','On Hand','Target Stock','Suggested Order','Stock Status','Order Unit','Suggested Packs'],
-    ...model.groups.flatMap(g=>g.rows.map(r=>[g.category,r.itemId,r.name,r.onHand,r.target===null?'':r.target,r.target===null?'Set target':r.suggested,r.status,r.pack>1?'Pack of '+r.pack+' (counts are singles)':'Single items',r.packs===null?'':r.packs]))];
+    ['Category','Item #','Item Name','On Hand','Target Stock','Suggested Order','Stock Status','Order Unit','Suggested Packs','Inventory Type'],
+    ...model.groups.flatMap(g=>g.rows.map(r=>[g.category,r.itemId,r.name,r.onRequest?'':r.onHand,r.onRequest||r.target===null?'':r.target,r.onRequest?'':r.target===null?'Set target':r.suggested,r.status,r.pack>1?'Pack of '+r.pack+' (counts are singles)':'Single items',r.packs===null?'':r.packs,r.onRequest?'Order on Request':'Stocked']))];
 }
 function createInventoryReport(items,options,output){
   const model=inventoryReportModel(items,options),now=new Date(),meta={generated:now.toLocaleString(),scope:inventoryScopeText(model,options)};
@@ -176,7 +196,7 @@ function renderChairPreview(){
   const d=chairData,r=displayedChairReport();
   document.getElementById('report-panel').innerHTML='<div class="report-preview-head"><span class="report-badge">'+esc(chairStatusLabel())+'</span>'+
     (d.finalized?'<div class="report-actions"><button onclick="showChairVersion(\''+(chairDisplay==='final'?'draft':'final')+'\')">'+(chairDisplay==='final'?'Edit Report':'View Last Sent')+'</button></div>':'')+
-    '<div class="report-actions"><button onclick="printChairUI()">Print / PDF</button><button '+(chairDisplay==='final'?'disabled title="Click Edit Report to email a new version."':'')+' onclick="previewChairUI()">Review Email</button></div></div><div class="report-card">'+chairPaperHTML(r)+'</div><div id="chair-email-preview"></div>';
+    '<div class="report-actions"><button onclick="printChairUI()">Print / PDF</button><button '+(chairDisplay==='final'?'disabled title="Click Edit Report to email a new version."':'')+' onclick="previewChairUI()">Review Email</button></div></div><div class="report-card">'+chairPaperHTML(r)+'</div>';
 }
 function showChairVersion(version){chairDisplay=version;chairPreview=null;chairPreviewSequence++;renderChairPreview();}
 function setChairStatus(text,isError){const el=document.getElementById('chair-unsaved');if(!el)return;el.textContent=text;el.style.color=isError?'#b3261e':'';el.style.fontWeight=isError?'600':'';}
@@ -246,10 +266,18 @@ function chairEmailSummary(email) {
   if (email.status !== 'accepted' && email.status !== 'sent' && email.lastAccepted) text += ' Last accepted for sending: ' + date(email.lastAccepted.at) + ' to ' + email.lastAccepted.recipient + '. Delivery is not confirmed.';
   return text;
 }
+// The email review and Send button live in a popup so the report page stays uncluttered.
+function openChairEmail() { var m = document.getElementById('chair-email-modal'); if (m && m.classList) m.classList.add('open'); }
+function closeChairEmail() {
+  var m = document.getElementById('chair-email-modal'); if (m && m.classList) m.classList.remove('open');
+  chairPreview = null; chairPreviewSequence++;
+  var p = document.getElementById('chair-email-preview'); if (p) p.textContent = '';
+}
 function previewChairUI() {
   if (chairSendPending || !chairData || chairDisplay === 'final') return;
   const month = reportMonth, sequence = ++chairPreviewSequence;
   chairPreview = null;
+  openChairEmail();
   document.getElementById('chair-email-preview').textContent = 'Saving and loading email review...';
   chairAutosave(saved => {
     if (reportMode !== 'chair' || reportMonth !== month || sequence !== chairPreviewSequence) return;
@@ -285,11 +313,13 @@ function submitChairSend(preview, month) {
   const button = document.getElementById('chair-send'); if (button) { button.disabled = true; button.textContent = 'Sending...'; }
   google.script.run.withSuccessHandler(r => {
     chairSendPending = false;
+    closeChairEmail();
     alert(r.success ? r.message : r.error);
     if (r.success) chairPreferredDisplay = 'final';
     if (reportMode === 'chair' && reportMonth === month && !chairDirty && !chairWritePending) fetchSpecialReport();
   }).withFailureHandler(e => {
     chairSendPending = false;
+    closeChairEmail();
     alert('The send response was lost or failed. The email may have sent. Check sent mail, then review the report before an explicit Retry Send.');
     if (reportMode === 'chair' && reportMonth === month && !chairDirty && !chairWritePending) fetchSpecialReport();
   }).sendChairReport(preview.previewId, sessionToken, preview.action);

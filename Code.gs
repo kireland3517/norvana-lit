@@ -365,6 +365,7 @@ function submitOrder(payload) {
   } finally {
     lock.releaseLock();
   }
+  refreshMonthlySummarySafe_();
 
   // -- Send emails after the lock is released (order already saved; surface warning if mail fails) --
   const emailPayload = { groupName: groupName, contactName: contactName, email: email, phone: phone, meetingMonth: meetingMonth, items: items };
@@ -648,6 +649,10 @@ function meetingMonthFromOrdersCell_(cell) {
 
 function getOrders(meetingMonth, token) {
   if (!validateToken_(token)) return { error: 'Unauthorized' };
+  return readOrders_();
+}
+
+function readOrders_() {
   const ordersData = getSheet('Orders').getDataRange().getValues();
   const itemsData  = getSheet('Order Items').getDataRange().getValues();
   const itemCounts = buildItemQtyOrderedByOrder_(itemsData);
@@ -906,6 +911,20 @@ function saveSchedule(schedule, token) {
 
 // -- Dashboard: catalog management --
 
+// Inventory Type (Catalog column I): "Stocked" items have counts, a Low At / Target level and low-stock warnings.
+// "Order on Request" items are ordered from Free State only when someone asks for them, so On Hand does not apply.
+// A blank cell uses the category default (H&I and Spanish Lit are On Request); any value typed there wins.
+const INVENTORY_STOCKED_ = 'Stocked';
+const INVENTORY_ON_REQUEST_ = 'Order on Request';
+const ON_REQUEST_DEFAULT_CATEGORIES_ = ['H&I', 'Spanish Lit'];
+
+function inventoryTypeOf_(category, raw) {
+  const value = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (value === 'stocked') return INVENTORY_STOCKED_;
+  if (value === 'order on request') return INVENTORY_ON_REQUEST_;
+  return ON_REQUEST_DEFAULT_CATEGORIES_.indexOf(String(category).trim()) >= 0 ? INVENTORY_ON_REQUEST_ : INVENTORY_STOCKED_;
+}
+
 function getCatalogAll(token) {
   if (!validateToken_(token)) return [];
   const data  = getSheet('Catalog').getDataRange().getValues();
@@ -923,6 +942,7 @@ function getCatalogAll(token) {
       active:   String(row[5]).trim().toUpperCase() === 'YES',
       lowAt:    lowAt,
       packSize: Number(row[7]) || 1,
+      inventoryType: inventoryTypeOf_(row[1], row[8]),
       // The Inventory report's Target Stock is the item's Low At level (Catalog column G); there is no separate column.
       targetStock: lowAt,
       rowIndex: i + 1,

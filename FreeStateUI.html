@@ -1,0 +1,400 @@
+<style>
+#fs-order .fs-back{background:none;border:none;color:var(--blue);font:inherit;font-size:13px;cursor:pointer;padding:12px 0 4px}
+body.dark #fs-order .fs-back{color:var(--lime)}
+#fs-order .fs-title{font-size:20px;font-weight:600;color:var(--onyx);margin:6px 0 12px}
+#fs-order .fs-msg{font-size:13px;margin:10px 0;line-height:1.5;color:var(--onyx)}
+#fs-order .fs-msg.error{color:var(--danger);font-weight:600}
+#fs-order .fs-notice{background:var(--snow);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 12px;line-height:1.5}
+#fs-order .fs-table{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--border);border-radius:10px}
+#fs-order .fs-table th{background:var(--snow);font-size:11px;text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);color:var(--muted)}
+#fs-order .fs-table td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:top;color:var(--onyx)}
+#fs-order .fs-table td.fs-id{width:64px;white-space:nowrap}
+#fs-order .fs-table td.fs-q,#fs-order .fs-table th.fs-q{width:112px;text-align:right}
+#fs-order .fs-qty{width:64px;text-align:right;font:inherit;font-size:15px;padding:7px 8px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
+#fs-order .fs-x{background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:4px 6px}
+#fs-order .fs-req{width:100%;margin-top:6px;font:inherit;font-size:12px;padding:6px 8px;border:1px dashed var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
+#fs-order .fs-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+#fs-order .fs-actions button{flex:1;min-width:130px;font:inherit;font-size:14px;font-weight:600;padding:13px;border-radius:12px;border:1.5px solid var(--border);background:var(--white);color:var(--blue);cursor:pointer}
+body.dark #fs-order .fs-actions button{color:var(--onyx)}
+#fs-order .fs-actions button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+body.dark #fs-order .fs-actions button.primary{background:var(--lime);border-color:var(--lime);color:#1a1a3e}
+#fs-order .fs-actions button:disabled{opacity:.55;cursor:default}
+#fs-order .fs-picker{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px;margin:12px 0}
+#fs-order .fs-picker input{width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);color:var(--onyx)}
+#fs-order .fs-pick-list{max-height:300px;overflow-y:auto;margin-top:8px}
+#fs-order .fs-pick-cat{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);margin:10px 0 4px}
+body.dark #fs-order .fs-pick-cat{color:var(--lime-dark)}
+#fs-order .fs-pick{display:flex;gap:8px;width:100%;text-align:left;font:inherit;font-size:14px;padding:8px 6px;border:none;border-bottom:1px solid var(--border);background:none;color:var(--onyx);cursor:pointer}
+#fs-order .fs-pick:disabled{color:var(--muted);cursor:default}
+#fs-order .fs-pick .fs-pid{min-width:60px;color:var(--muted)}
+#fs-order .fs-meta{font-size:13px;line-height:1.6;margin:0 0 10px;color:var(--onyx)}
+#fs-order .fs-frame{width:100%;min-height:420px;border:1px solid var(--border);border-radius:10px;background:#fff}
+#fs-order .fs-lines{font-size:13px;margin:8px 0;padding-left:18px;color:var(--onyx)}
+</style>
+<script>
+// -- Free State order: edit, review, send, recover --
+// Unfinished edits live only in this browser tab (sessionStorage). Nothing reaches Order History until an order is sent.
+var FS_DRAFT_KEY = 'norvana_fs_draft';
+var fs = { screen: '', lines: [], preview: null, order: null, attention: null, missing: [], message: '', error: false, busy: false, pickerOpen: false, pickerText: '', note: '' };
+
+function fsEl() { return document.getElementById('fs-order'); }
+function fsItem(id) { return (typeof inventoryItems !== 'undefined' ? inventoryItems : []).find(function(i) { return i.itemId === id; }); }
+function fsOnRequest(id) { var it = fsItem(id); return !!it && it.inventoryType === 'Order on Request'; }
+function fsActive(it) { return it && !(it.active === false || it.active === 'false' || it.active === 'FALSE'); }
+
+function fsSaveDraft() {
+  try { sessionStorage.setItem(FS_DRAFT_KEY, JSON.stringify({ lines: fs.lines })); } catch (e) {}
+}
+function fsLoadDraft() {
+  try {
+    var raw = sessionStorage.getItem(FS_DRAFT_KEY), d = raw ? JSON.parse(raw) : null;
+    return d && Array.isArray(d.lines) ? d.lines : null;
+  } catch (e) { return null; }
+}
+function fsClearDraft() { try { sessionStorage.removeItem(FS_DRAFT_KEY); } catch (e) {} }
+
+// Leaves the order screens without losing the draft.
+function fsReset() {
+  fs.screen = ''; fs.preview = null; fs.attention = null; fs.busy = false; fs.pickerOpen = false;
+  var box = fsEl(), inv = document.getElementById('inventory-content');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+  if (inv) inv.style.display = '';
+}
+
+function fsSuggestedLines() {
+  // Same calculation as the inventory report: stocked, active products below their Target (Low At) level, across every category.
+  var stocked = liveInventoryItems().filter(function(i) { return fsActive(i) && i.inventoryType !== 'Order on Request'; });
+  var model = inventoryReportModel(stocked, { categories: null, include: 'reorder' }), lines = [];
+  model.groups.forEach(function(g) { g.rows.forEach(function(r) { if (r.suggested > 0) lines.push({ itemId: r.itemId, qty: String(r.suggested), requestedFor: '', manual: false }); }); });
+  return lines;
+}
+
+function fsSortedLines() {
+  var order = typeof CAT_ORDER !== 'undefined' ? CAT_ORDER : [];
+  function rank(l) { var it = fsItem(l.itemId), i = it ? order.indexOf(it.category) : -1; return i < 0 ? order.length : i; }
+  return fs.lines.slice().sort(function(a, b) {
+    return rank(a) - rank(b) || String(a.itemId).localeCompare(String(b.itemId), undefined, { numeric: true });
+  });
+}
+
+function openFreeStateOrder() {
+  var box = fsEl(), inv = document.getElementById('inventory-content');
+  if (!box) return;
+  if (inv) inv.style.display = 'none';
+  box.style.display = ''; box.innerHTML = '<div class="spinner"><div class="spin"></div>Opening...</div>';
+  fs.message = ''; fs.error = false; fs.note = '';
+  google.script.run
+    .withSuccessHandler(function(state) {
+      if (state && state.success && state.pending) { fs.attention = state.pending; fs.screen = 'attention'; fsRender(); return; }
+      fsStartEdit();
+    })
+    .withFailureHandler(function() { fsStartEdit(); })
+    .getFreeStateOrderState(sessionToken);
+}
+
+function fsStartEdit() {
+  var draft = fsLoadDraft(), dropped = 0;
+  if (draft) {
+    fs.lines = draft.filter(function(l) { var it = fsItem(l.itemId); if (!it || !fsActive(it)) { dropped++; return false; } return true; });
+    if (dropped) fs.note = dropped + ' product' + (dropped === 1 ? ' is' : 's are') + ' no longer available and was removed from your saved order.';
+  } else {
+    fs.lines = fsSuggestedLines();
+  }
+  fsSaveDraft();
+  fs.screen = 'edit';
+  fsLoadSettings(function() { fsRender(); });
+}
+
+function fsLoadSettings(done) {
+  google.script.run
+    .withSuccessHandler(function(r) { fs.missing = r && r.success ? (r.missing || []) : []; done(); })
+    .withFailureHandler(function() { fs.missing = []; done(); })
+    .getFreeStateSettings(sessionToken);
+}
+// Called when returning to Inventory from Settings: pick up newly saved Free State information.
+function fsRefresh() {
+  if (fs.screen !== 'edit' && fs.screen !== 'review') return;
+  fsLoadSettings(function() { var n = document.getElementById('fs-notice'); if (n) n.innerHTML = fsNoticeHTML(); });
+}
+// Missing settings, grouped under Order email / Bill To / Ship To, one per line.
+function fsMissingListHTML(missing) {
+  var groups = [['', []], ['Bill To', []], ['Ship To', []]];
+  missing.forEach(function(m) {
+    var g = m.indexOf('Bill To: ') === 0 ? 1 : m.indexOf('Ship To: ') === 0 ? 2 : 0;
+    groups[g][1].push(g ? m.slice(9) : m);
+  });
+  return groups.filter(function(g) { return g[1].length; }).map(function(g) {
+    return (g[0] ? '<div style="font-weight:600;margin-top:6px">' + g[0] + '</div>' : '') + '<ul style="margin:2px 0 0;padding-left:20px">' + g[1].map(function(x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+  }).join('');
+}
+function fsNoticeHTML() {
+  var html = '';
+  if (fs.note) html += '<div class="fs-notice">' + esc(fs.note) + '</div>';
+  if (fs.missing.length) html += '<div class="fs-notice">Fill in these Free State settings before sending:' + fsMissingListHTML(fs.missing) + '<button type="button" class="fs-back" style="padding:8px 0 0" onclick="fsOpenSettings()">Open Settings</button></div>';
+  return html;
+}
+function fsOpenSettings() {
+  switchView('settings');
+  setTimeout(function() { var c = document.getElementById('fs-settings-card'); if (c && c.scrollIntoView) c.scrollIntoView(); }, 300);
+}
+function fsExit() { fsReset(); }
+
+function fsRender() {
+  var box = fsEl(); if (!box) return;
+  var back = '<button type="button" class="fs-back" onclick="fsExit()">&larr; Back to Inventory</button>';
+  var msg = '<div class="fs-msg' + (fs.error ? ' error' : '') + '" id="fs-msg" role="status">' + esc(fs.message) + '</div>';
+  if (fs.screen === 'edit') box.innerHTML = back + '<div class="fs-title">Free State Order</div><div id="fs-notice">' + fsNoticeHTML() + '</div>' + fsEditHTML() + msg;
+  else if (fs.screen === 'review') box.innerHTML = fsReviewHTML() + msg;
+  else if (fs.screen === 'sent') box.innerHTML = fsSentHTML();
+  else if (fs.screen === 'attention') box.innerHTML = back + fsAttentionHTML() + msg;
+}
+
+// While editing, products just added sit at the bottom in the order they were added. Review & Send (and the email and
+// printout) always use item order.
+function fsDisplayLines() {
+  return fsSortedLines().filter(function(l) { return !l.fresh; }).concat(fs.lines.filter(function(l) { return l.fresh; }));
+}
+function fsEditHTML() {
+  var rows = fsDisplayLines().map(function(l) {
+    var it = fsItem(l.itemId), name = it ? it.name : l.itemId;
+    var req = l.manual && fsOnRequest(l.itemId) ? '<input class="fs-req" type="text" maxlength="100" placeholder="Requested for (optional, not sent to Free State)" aria-label="Requested for ' + esc(name) + '" value="' + esc(l.requestedFor || '') + '" oninput="fsSetRequested(\'' + esc(l.itemId) + '\',this.value)">' : '';
+    return '<tr><td class="fs-id">' + esc(l.itemId) + '</td><td>' + esc(name) + req + '</td><td class="fs-q">'
+      + '<input class="fs-qty" type="text" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Quantity for ' + esc(name) + '" value="' + esc(l.qty) + '" oninput="fsSetQty(\'' + esc(l.itemId) + '\',this)">'
+      + '<button type="button" class="fs-x" aria-label="Remove ' + esc(name) + '" onclick="fsRemove(\'' + esc(l.itemId) + '\')">&times;</button></td></tr>';
+  }).join('');
+  if (!rows) rows = '<tr><td colspan="3" style="color:var(--muted)">No products yet. Use Add Item.</td></tr>';
+  return '<table class="fs-table"><thead><tr><th>Item #</th><th>Description</th><th class="fs-q">Quantity</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    + (fs.pickerOpen ? fsPickerHTML() : '')
+    + '<div class="fs-actions"><button type="button" onclick="fsTogglePicker()">Add Item</button><button type="button" class="primary" id="fs-review-btn" onclick="fsReview()"' + (fs.busy ? ' disabled' : '') + '>Review &amp; Send</button></div>';
+}
+
+function fsLine(id) { return fs.lines.find(function(l) { return l.itemId === id; }); }
+function fsSetQty(id, input) {
+  var clean = input.value.replace(/\D/g, '').slice(0, 4);
+  if (clean !== input.value) input.value = clean;
+  var l = fsLine(id); if (l) { l.qty = clean; fsSaveDraft(); }
+  fs.message = ''; var m = document.getElementById('fs-msg'); if (m) m.textContent = '';
+}
+function fsSetRequested(id, value) { var l = fsLine(id); if (l) { l.requestedFor = value.slice(0, 100); fsSaveDraft(); } }
+function fsRemove(id) { fs.lines = fs.lines.filter(function(l) { return l.itemId !== id; }); fsSaveDraft(); fsRender(); }
+
+function fsTogglePicker() { fs.pickerOpen = !fs.pickerOpen; fs.pickerText = ''; fsRender(); if (fs.pickerOpen) { var i = document.getElementById('fs-pick-search'); if (i) i.focus(); } }
+function fsPickerHTML() {
+  return '<div class="fs-picker"><input id="fs-pick-search" type="search" placeholder="Search by item # or name" aria-label="Search products" oninput="fsPickerSearch(this.value)" value="' + esc(fs.pickerText) + '"><div class="fs-pick-list" id="fs-pick-list">' + fsPickerListHTML() + '</div></div>';
+}
+function fsPickerListHTML() {
+  var q = fs.pickerText.trim().toLowerCase(), order = typeof CAT_ORDER !== 'undefined' ? CAT_ORDER : [], items = (typeof inventoryItems !== 'undefined' ? inventoryItems : []).filter(function(i) {
+    return fsActive(i) && (!q || String(i.itemId).toLowerCase().indexOf(q) >= 0 || String(i.name).toLowerCase().indexOf(q) >= 0);
+  });
+  var cats = order.filter(function(c) { return items.some(function(i) { return i.category === c; }); }).concat(
+    items.map(function(i) { return i.category; }).filter(function(c, n, a) { return order.indexOf(c) < 0 && a.indexOf(c) === n; }));
+  var html = cats.map(function(cat) {
+    return '<div class="fs-pick-cat">' + esc(typeof catTabLabel === 'function' ? catTabLabel(cat) : cat) + '</div>' + items.filter(function(i) { return i.category === cat; })
+      .sort(function(a, b) { return String(a.itemId).localeCompare(String(b.itemId), undefined, { numeric: true }); }).map(function(i) {
+        var added = !!fsLine(i.itemId);
+        return '<button type="button" class="fs-pick"' + (added ? ' disabled' : '') + ' onclick="fsAdd(\'' + esc(i.itemId) + '\')"><span class="fs-pid">' + esc(i.itemId) + '</span><span>' + esc(i.name) + (added ? ' (added)' : '') + '</span></button>';
+      }).join('');
+  }).join('');
+  return html || '<div class="fs-msg">No matching products.</div>';
+}
+function fsPickerSearch(value) { fs.pickerText = value; var l = document.getElementById('fs-pick-list'); if (l) l.innerHTML = fsPickerListHTML(); }
+function fsAdd(id) {
+  var it = fsItem(id);
+  if (!it || !fsActive(it) || fsLine(id)) return;
+  fs.lines.push({ itemId: id, qty: '', requestedFor: '', manual: true, fresh: true });
+  fs.pickerOpen = false; fs.pickerText = ''; fsSaveDraft(); fsRender();
+  var inputs = document.querySelectorAll('.fs-qty'); // the new row sits among the sorted rows
+  Array.prototype.forEach.call(inputs, function(inp) { if (inp.getAttribute('oninput') && inp.getAttribute('oninput').indexOf("'" + id + "'") >= 0) inp.focus(); });
+}
+
+function fsPayload() { return fsSortedLines().map(function(l) { return { itemId: l.itemId, qty: l.qty, requestedFor: l.manual && fsOnRequest(l.itemId) ? l.requestedFor : '' }; }); }
+function fsMessage(text, isError) { fs.message = text; fs.error = !!isError; var m = document.getElementById('fs-msg'); if (m) { m.textContent = text; m.className = 'fs-msg' + (isError ? ' error' : ''); } }
+function fsFriendly(r, fallback) {
+  var e = r && r.error ? r.error : fallback;
+  return e === 'Unauthorized' ? 'Your session expired. Sign in again; your order is saved on this device.' : e;
+}
+
+function fsReview() {
+  if (fs.busy) return;
+  if (!fs.lines.some(function(l) { return Number(l.qty) > 0; })) { fsMessage('Enter a quantity for at least one product.', true); return; }
+  fs.busy = true; var b = document.getElementById('fs-review-btn'); if (b) { b.disabled = true; b.textContent = 'Preparing...'; }
+  fs.autoRetried = false;
+  fs.lines.forEach(function(l) { l.fresh = false; }); fsSaveDraft();
+  fsRequestPreview(function(r) {
+    fs.busy = false;
+    if (!r.success) {
+      var hasMissing = r.missing && r.missing.length;
+      if (hasMissing) fs.missing = r.missing;
+      fs.screen = 'edit'; fsRender();
+      fsMessage(hasMissing ? 'Fill in the Free State settings listed above, then try again.' : fsFriendly(r, 'Could not prepare the review.'), true);
+      return;
+    }
+    fs.preview = r; fs.reviewed = r.fingerprint; fs.screen = 'review'; fs.message = ''; fs.error = false; fsRender();
+  });
+}
+function fsRequestPreview(done) {
+  google.script.run
+    .withSuccessHandler(done)
+    .withFailureHandler(function(e) { done({ success: false, error: (e && e.message) || 'Could not prepare the review.' }); })
+    .previewFreeStateOrder(fsPayload(), sessionToken);
+}
+
+function fsReviewHTML() {
+  var p = fs.preview;
+  return '<button type="button" class="fs-back" onclick="fsBackToEdit()">&larr; Back to Edit</button><div class="fs-title">Review &amp; Send</div>'
+    + (fs.note ? '<div class="fs-notice">' + esc(fs.note) + '</div>' : '')
+    + '<div class="fs-meta"><strong>From:</strong> ' + esc(p.from) + '<br><strong>To:</strong> ' + esc(p.to) + '<br><strong>Subject:</strong> ' + esc(p.subject) + '</div>'
+    + '<iframe class="fs-frame" id="fs-frame" title="Email preview" sandbox="allow-same-origin" srcdoc="' + esc(p.html) + '" onload="fsSizeFrame(this)"></iframe>'
+    + '<div class="fs-actions"><button type="button" onclick="fsBackToEdit()">Back to Edit</button><button type="button" class="primary" id="fs-send-btn" onclick="fsSend()"' + (fs.busy ? ' disabled' : '') + '>' + (fs.busy ? 'Sending...' : 'Send Order') + '</button></div>';
+}
+function fsSizeFrame(frame) { try { frame.style.height = (frame.contentDocument.documentElement.scrollHeight + 12) + 'px'; } catch (e) {} }
+function fsBackToEdit() { if (fs.busy) return; fs.preview = null; fs.note = ''; fs.screen = 'edit'; fs.message = ''; fs.error = false; fsRender(); }
+
+function fsSetSending(on) {
+  fs.busy = on;
+  var b = document.getElementById('fs-send-btn'); if (b) { b.disabled = on; b.textContent = on ? 'Sending...' : 'Send Order'; }
+}
+function fsSend() {
+  if (fs.busy || !fs.preview) return;
+  fsSetSending(true); fsMessage('', false);
+  fsSendCall(fs.preview.previewId, 1);
+}
+function fsSendCall(previewId, retriesLeft) {
+  google.script.run
+    .withSuccessHandler(function(r) { fsSendResult(r); })
+    .withFailureHandler(function(e) {
+      // The same preview ID can safely be asked again: the server answers from its record and never emails twice.
+      if (retriesLeft > 0) { fsMessage('Checking whether the order was sent...'); setTimeout(function() { fsSendCall(previewId, retriesLeft - 1); }, 1500); return; }
+      fsSetSending(false);
+      fs.screen = 'attention';
+      google.script.run.withSuccessHandler(function(s) {
+        if (s && s.success && s.pending) { fs.attention = s.pending; fsRender(); }
+        else { fs.screen = 'review'; fsRender(); fsMessage('Could not reach the server, so the order status is unknown. Reload this page and open Create Free State Order to check before sending again.', true); }
+      }).withFailureHandler(function() { fs.screen = 'review'; fsRender(); fsMessage('Could not reach the server, so the order status is unknown. Reload this page and open Create Free State Order to check before sending again.', true); }).getFreeStateOrderState(sessionToken);
+    })
+    .sendFreeStateOrder(previewId, sessionToken);
+}
+function fsSendResult(r) {
+  if (r && r.success) { fsFinish(r.order); return; }
+  if (r && (r.expired || r.changed)) { fsRegenerate(!!r.changed); return; }
+  fsSetSending(false);
+  if (r && r.state) { fs.attention = { requestId: r.requestId, orderId: r.orderId, state: r.state, message: r.error, lines: (fs.preview && fs.preview.lines) || [] }; fs.screen = 'attention'; fsRender(); return; }
+  fsMessage(fsFriendly(r, 'The order was not sent.'), true);
+}
+// An expired preview is rebuilt from the saved quantities. If nothing you reviewed changed, the send you asked for goes ahead;
+// otherwise the new email is shown and needs another Send Order.
+function fsRegenerate(changed) {
+  fsMessage('Refreshing the preview...');
+  var before = fs.reviewed;
+  fsRequestPreview(function(n) {
+    if (!n.success) { fsSetSending(false); if (n.missing && n.missing.length) fs.missing = n.missing; fsMessage(fsFriendly(n, 'Could not refresh the preview.'), true); return; }
+    fs.preview = n; fs.reviewed = n.fingerprint;
+    if (!changed && n.fingerprint === before && !fs.autoRetried) { fs.autoRetried = true; fsSendCall(n.previewId, 1); return; }
+    fs.busy = false; fs.note = 'Some details changed since you last reviewed. Check the email below, then press Send Order.'; fs.screen = 'review'; fsRender();
+  });
+}
+
+function fsFinish(order) {
+  fs.busy = false; fs.order = order; fs.screen = 'sent'; fs.lines = []; fs.preview = null; fs.attention = null; fs.message = '';
+  fsClearDraft(); fsRender();
+}
+// Same look as the group order form's confirmation (lime check, title, order number).
+function fsSentHTML() {
+  var o = fs.order || {};
+  return '<div class="card success-screen" style="margin-top:16px">'
+    + '<div class="success-check">&#10003;</div>'
+    + '<div class="success-title">Order Sent</div>'
+    + '<div class="success-order-id">Order ' + esc(o.orderId || '') + '</div>'
+    + '<div class="success-group">Sent ' + esc(o.sentDate || '') + '</div>'
+    + '<div class="success-msg">Your Free State literature order was sent successfully and recorded in Google Sheets.</div>'
+    + '<div class="fs-actions" style="margin:0"><button type="button" onclick="fsPrintOrder()">Print Order</button><button type="button" class="primary" onclick="fsExit()">Done</button></div>'
+    + '</div>';
+}
+function fsPairsTable(rows) {
+  return '<table>' + rows.map(function(r) { return '<tr><td style="text-align:left;width:32%">' + esc(r[0]) + '</td><td style="text-align:left">' + esc(r[1]) + '</td></tr>'; }).join('') + '</table>';
+}
+function fsPrintOrder() {
+  var o = fs.order; if (!o) return;
+  var items = '<table><thead><tr><th style="text-align:left">Item #</th><th style="text-align:left">Description</th><th>Quantity</th></tr></thead><tbody>'
+    + o.lines.map(function(l) { return '<tr><td style="text-align:left">' + esc(l.itemId) + '</td><td style="text-align:left">' + esc(l.name) + '</td><td>' + esc(l.qty) + '</td></tr>'; }).join('') + '</tbody></table>';
+  printReportPage('Free State Literature Order', '<h1>NORVANA</h1><h2>Free State Literature Order</h2><p>Order ' + esc(o.orderId) + ' | Sent ' + esc(o.sentDate) + '</p>'
+    + '<h3>Bill To</h3>' + fsPairsTable(o.billTo) + '<h3>Ship To</h3>' + fsPairsTable(o.shipTo) + '<h3>Order Items</h3>' + items);
+}
+
+// -- An earlier order needs attention (uncertain, sent but not recorded, or in progress) --
+function fsAttentionHTML() {
+  var a = fs.attention, lines = (a.lines || []).map(function(l) { return '<li>' + esc(l.itemId) + ' - ' + esc(l.name) + ' (' + esc(l.qty) + ')</li>'; }).join('');
+  var body = '<div class="fs-title">Order ' + esc(a.orderId || '') + ' needs attention</div><div class="fs-msg">' + esc(a.message || '') + '</div>';
+  var buttons = '';
+  if (a.state === 'uncertain') {
+    body += '<div class="fs-notice">Open Gmail as norvanalit12@gmail.com and look in <strong>Sent</strong> for a message to Free State titled "NORVANA Literature Order". Only choose after you have checked. Sending again when it already went out will send a duplicate.</div>';
+    buttons = '<button type="button" onclick="fsResolve(\'record\')">It was sent: record it</button><button type="button" onclick="fsResolve(\'retry\')">It was not sent: send again</button>';
+  } else if (a.state === 'accepted') buttons = '<button type="button" class="primary" onclick="fsResolve(\'record\')">Record order</button>';
+  else if (a.state === 'failed') buttons = '<button type="button" class="primary" onclick="fsResolve(\'retry\')">Send again</button>';
+  else buttons = '<button type="button" class="primary" onclick="openFreeStateOrder()">Check again</button>';
+  return body + '<ul class="fs-lines">' + lines + '</ul><div class="fs-actions">' + buttons + '</div>';
+}
+function fsResolve(decision) {
+  if (fs.busy || !fs.attention) return;
+  var a = fs.attention;
+  var question = decision === 'retry' && a.state === 'uncertain'
+    ? 'You checked the Sent folder and the message is not there. Sending again could create a duplicate if it is. Send it again?'
+    : decision === 'record' && a.state === 'uncertain' ? 'Record this order as sent? Only do this if you saw it in the Sent folder.' : '';
+  function run() {
+    fs.busy = true; fsMessage('Working...');
+    google.script.run
+      .withSuccessHandler(function(r) {
+        fs.busy = false;
+        if (r && r.success) { fsFinish(r.order); return; }
+        if (r && r.state) { fs.attention = { requestId: r.requestId, orderId: r.orderId, state: r.state, message: r.error, lines: a.lines }; fsRender(); fsMessage(''); return; }
+        fsMessage(fsFriendly(r, 'That did not work.'), true);
+      })
+      .withFailureHandler(function(e) { fs.busy = false; fsMessage((e && e.message) || 'That did not work. Reload and check the order status.', true); })
+      .resolveFreeStateOrder(a.requestId, decision, sessionToken);
+  }
+  if (question) showConfirm(question, decision === 'retry' ? 'Send again' : 'Record', run, null, decision === 'retry'); else run();
+}
+
+// -- Settings: Free State Order Information --
+var FS_SETTING_GROUPS = [
+  { title: 'Free State order email', fields: [['email', 'Order email address', 'email']] },
+  { title: 'Bill To', fields: [['billLocation', 'Group Location'], ['billAddress', 'Mailing Address'], ['billCity', 'City'], ['billState', 'State'], ['billZip', 'ZIP Code'], ['billContact', 'Contact Person'], ['billPhone', 'Phone Number', 'tel']] },
+  { title: 'Ship To', fields: [['shipName', 'Name'], ['shipPhone', 'Phone', 'tel'], ['shipStreet', 'Street Address'], ['shipCity', 'City'], ['shipState', 'State'], ['shipZip', 'ZIP Code']] }
+];
+function loadFreeStateSettingsCard() {
+  google.script.run
+    .withSuccessHandler(function(r) { fsRenderSettingsCard(r); })
+    .withFailureHandler(function() { fsRenderSettingsCard(null); })
+    .getFreeStateSettings(sessionToken);
+}
+function fsRenderSettingsCard(r) {
+  var card = document.getElementById('fs-settings-card'); if (!card || dashboardSignedOut) return;
+  if (!r || !r.success) { card.innerHTML = '<div class="settings-section-label">Free State Order Information</div><div class="view-sub">Could not load these settings.</div>'; return; }
+  var html = '<div class="settings-section-label">Free State Order Information</div>';
+  FS_SETTING_GROUPS.forEach(function(g) {
+    html += '<div style="font-size:13px;font-weight:600;margin:12px 0 8px;color:var(--onyx)">' + esc(g.title) + '</div>';
+    if (g.title === 'Bill To') html += '<div class="settings-field"><label>Group Name</label><div style="font-size:14px;color:var(--onyx)">' + esc(r.groupName) + '</div></div>';
+    g.fields.forEach(function(f) {
+      html += '<div class="settings-field"><label for="fs-set-' + f[0] + '">' + esc(f[1]) + '</label><input class="settings-input" id="fs-set-' + f[0] + '" type="' + (f[2] || 'text') + '" maxlength="100" value="' + esc(r.values[f[0]] || '') + '"></div>';
+    });
+    if (g.title === 'Bill To') html += '<div class="settings-field"><label>Email</label><div style="font-size:14px;color:var(--onyx)">' + esc(r.litChairEmail) + '</div><div style="font-size:11px;color:var(--muted);margin-top:4px">This is the Lit Chair Email in Access above.</div></div>';
+  });
+  html += '<div id="fs-set-status" class="view-sub" style="margin:10px 0 0" role="status"></div>'
+    + '<button class="settings-save-btn" id="fs-set-save" onclick="saveFreeStateSettings()">Save</button>';
+  card.innerHTML = html;
+}
+function saveFreeStateSettings() {
+  var values = {}, btn = document.getElementById('fs-set-save'), status = document.getElementById('fs-set-status');
+  FS_SETTING_GROUPS.forEach(function(g) { g.fields.forEach(function(f) { var el = document.getElementById('fs-set-' + f[0]); values[f[0]] = el ? el.value : ''; }); });
+  btn.disabled = true; btn.textContent = 'Saving...'; status.textContent = '';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || r.success === false) { btn.disabled = false; btn.textContent = 'Save'; status.textContent = (r && r.error) || 'Save failed.'; status.style.color = 'var(--danger)'; return; }
+      fs.missing = r.missing || [];
+      btn.textContent = '\u2713 Saved';
+      setTimeout(function() { btn.textContent = 'Save'; btn.disabled = false; }, 2000);
+    })
+    .withFailureHandler(function() { btn.textContent = 'Save failed'; btn.disabled = false; })
+    .saveFreeStateSettings(values, sessionToken);
+}
+</script>

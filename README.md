@@ -17,8 +17,10 @@ Sheet, so it costs nothing to run and can be maintained from inside the app by n
 | `OrderWorkflow.gs` | Atomic fulfill / reopen / delete, inventory, monthly and annual reports |
 | `ChairReports.gs` | Chair Report autosave, sent versions, reviewed Secretary email |
 | `EmailTemplate.gs` | The shared look (header, logo, item table) for the order emails |
+| `FreeStateOrders.gs` | Free State order: settings, review email, direct send with duplicate protection, Order History |
 | `App.html` | The app: order form and dashboard |
 | `ReportUI.html` | Reports screens, CSV and print views (included by `App.html`) |
+| `FreeStateUI.html` | Free State order screens and its Settings card (included by `App.html`) |
 | `authorizeMailApp.gs` | Run once from the editor to grant email permission (sends nothing) |
 | `tests/` | Automated tests |
 

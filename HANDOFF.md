@@ -1,6 +1,6 @@
 # NORVANA Literature Orders - keeping it running (handoff notes)
 
-Written for whoever looks after this next, technical or not. Last updated 2026-10-05.
+Written for whoever looks after this next, technical or not. Last updated 2026-10-19.
 
 ## What it is
 
@@ -21,6 +21,8 @@ Sign in through **Dashboard** with the access code. From there you can:
 | Reports, CSV downloads, print/PDF, Chair Report and Secretary email | Reports |
 | Stock counts, prices, turn items on/off, add new items | Inventory |
 | Change the access code, Lit Chair email, Secretary email | Settings > Access |
+| Free State order email, Bill To and Ship To details | Settings > Free State Order Information |
+| Order from Free State and email it | Inventory > Create Free State Order |
 | Add or edit months and order-window dates | Settings > Order Window Schedule |
 | Add or remove groups | Settings > NA Groups |
 
@@ -41,7 +43,7 @@ currently ends December 2027.
    set it to "Anyone with the link": that shows the Config tab (with the access code) and every group's contact details.
 2. **The committee Google account is the master key.** Turn on 2-step verification and change its password whenever
    the Lit Chair or Secretary role changes hands.
-3. **Keep the live Apps Script project to the seven files in this repo.** Any top-level function in the live project can be
+3. **Keep the live Apps Script project to the nine files in this repo.** Any top-level function in the live project can be
    called by any visitor to the link. Helper functions whose names end with an underscore (`_`) are private and safe;
    plain names are public. Never add one-time setup, cleanup or debugging functions to the live project. If one is ever
    needed, use a separate copy of the project and spreadsheet.
@@ -63,6 +65,42 @@ The group confirmation, the Lit Chair alert, the pickup notice and the receipt a
 lives in one place, `EmailTemplate.gs`, and the logo is a small PNG stored inside that file, so nothing is hosted
 elsewhere. Each email also carries a plain-text version, and if the styled version ever fails to build, the plain email is
 still sent. The Secretary report email is deliberately plain: the Lit Chair reviews its exact text before it is sent.
+
+## Free State orders
+
+**Inventory > Create Free State Order** builds the monthly order to Free State and emails it from the committee account.
+
+- The list starts with every **Stocked**, active product below its Target Stock (Low At), across all categories, with the
+  Suggested Order quantity in singles. Quantities are editable; blank or 0 leaves a product out. **Add Item** lists every
+  active product by category, including Order on Request ones. An optional **Requested For** note on a manually added Order on
+  Request product is kept for the chair (in Order History) and is never in the email or printout.
+- **Review & Send** shows the exact email (From, To, Subject and the Bill To, Ship To and items tables). **Send Order**
+  emails it directly; there is no Gmail draft. The recipient and addresses are read from Settings on the server, never from the browser.
+- Unfinished edits live only in that browser tab (sessionStorage) so a refresh keeps them; they do not follow you to another
+  device and nothing is saved to the sheet until the order is sent. Signing out clears them.
+- Sending never changes On Hand, Target or any count. When stock arrives, update counts the normal way.
+- **Settings > Free State Order Information** holds the order email address, Bill To (Group Location, Mailing Address,
+  City, State, ZIP, Contact Person, Phone) and Ship To. The Bill To email is the **Lit Chair Email** and the group name is
+  fixed in `FreeStateOrders.gs`. The order cannot be sent until every field is filled in; the screen lists what is missing.
+  These are stored as `Free State ...` rows in the Config tab.
+- **If something goes wrong.** Before it emails, the app writes a "Sending" record (with the whole order) to the
+  **Free State Order Log** tab. A repeat of the same review can therefore never email twice.
+  - *Email not sent* (for example no quota left): choose **Send again**.
+  - *Not certain it was sent* (the mail service gave no clear answer): open Gmail as the committee account, look in **Sent**
+    for "NORVANA Literature Order", then choose **It was sent: record it** or **It was not sent: send again**. Sending again when
+    it already went out makes a duplicate.
+  - *Sent but not recorded* (the history write failed): choose **Record order**. It never emails again.
+  - Until an order like this is settled, a new one cannot be sent.
+- A successful send means the email was accepted for sending, not that Free State received it. About 100 emails a day are
+  available on a normal Gmail account; each Free State order uses one.
+- In the demo project, leave the Free State Order Email blank or set it to your own address so test orders never reach Free State.
+
+**Inventory Type.** Each Catalog product is **Stocked** or **Order on Request** (Catalog column I, edited in the sheet like
+Low At; there is no control for it in the app). H&I and Spanish Lit default to Order on Request when column I is blank;
+typing `Stocked` (or `Order on Request`) there overrides the category for that one product. To start keeping a count of an
+H&I or Spanish product, type `Stocked` in its column I cell, then enter its current count and Low At. Order on Request products have no count, Low At or Target, never show as low or out, are never suggested
+automatically, and appear last (marked "On request") in the Inventory Print / Export report. Marking an order Ready still
+deducts their stored count as before, so switching one to Stocked later needs a fresh count.
 
 ## Publishing a change
 
@@ -134,13 +172,17 @@ advanced service turned on (Services > Sheets API) and the script time zone set 
 |---|---|
 | Orders | Order ID, Timestamp, Area Meeting Month, Group Name, Contact Name, Email, Phone, Estimated Total, Fulfilled Total, Status, Fulfilled At, **Revision** (column L must be exactly "Revision") |
 | Order Items | Row ID, Order ID, Item ID, Item Name, Unit Price, Qty Ordered, Qty Fulfilled, Line Total |
-| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size |
+| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size, Inventory Type (optional: Stocked or Order on Request) |
 | Config | Two columns, Setting and Value, with rows: Lit Chair Email, Dashboard Access Code, Secretary Email |
 | Schedule | Meeting Month (e.g. "October 2026"), Window Open, Window Close |
 | Groups | Group Name (one group per row) |
 | Chair Reports | Presentation Month (or Reporting Month), Draft JSON, Finalized JSON, Revision, Email Attempt JSON |
+| Order History | Order ID, Sent At, Item #, Description, Quantity, Inventory Type, Requested For, Status, Recipient, Bill To, Ship To, Recorded At (one row per product, created by the app on the first sent order) |
+| Free State Order Log | Request ID, Order ID, Status, Created, Updated, Attempt JSON, Snapshot JSON (technical send record, created by the app; leave it alone) |
 
 The Inventory tab's Print / Export button builds one report (Print / PDF or CSV). Its Target Stock is each item's Low At (Catalog column G), so Suggested Order = Low At - On Hand, in singles (never below 0). Low At also decides when an item turns orange (low) or red (out). There is no separate target column. Incoming (already ordered) stock is not tracked.
+
+**Trends and Monthly Summary:** the Inventory tab's Trends button and the sheet's **Monthly Summary** tab both calculate from Orders and Order Items on every view; nothing is saved, so corrected orders and old months always agree. Requested counts every order for the meeting month; Distributed counts Completed orders only (Ready means packed); value uses the price saved on each order line; the average is the up-to-3 earlier months since tracking began (`TRENDS_START_MONTH_` in `TrendsReport.gs`, October 2026), zero months included. Monthly Summary is written by the script (`MonthlySummary.gs`) from the same calculation as Trends, so the two always match. Run `setupMonthlySummary()` once from the Apps Script editor: it rebuilds the Monthly Summary tab in place (keeping the month in B1; the old layout is replaced), and installs an edit trigger (approve the permission prompt). The tab refreshes when B1, Orders or Order Items is edited by hand and when the app submits, packs, completes, reopens or deletes an order. Spreadsheet formulas were tried and dropped because they break when Order Items has fewer rows than the formula ranges.
 
 Catalog column E counts single items, and Pack Size (column H) is how many singles one ordered unit contains (for
 example 5 for a five-pack), so orders count packs while stock counts singles. Leave the Revision,

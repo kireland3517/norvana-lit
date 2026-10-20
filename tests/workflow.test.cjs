@@ -35,6 +35,25 @@ test('assembled local preview loads Reports (Orders and Chair Report only; inven
   assert.equal(vm.runInContext('allOrders.length',c),0);assert.equal(vm.runInContext('ordersReportData',c),null);assert.equal(vm.runInContext('chairData',c),null);
 });
 
+test('Reports move to the new ordering month after a meeting passes, but never during a save',()=>{
+  const html=require('./preview.cjs').renderPreview(), elements={}, timers=[];
+  function element(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return false;}},insertAdjacentHTML(where,s){this.innerHTML+=s;}};}
+  const storage={getItem:()=>null,setItem(){},removeItem(){}};
+  const c=vm.createContext({console,Date,Number,Set,Map,Math,JSON,Object,Array,String,Proxy,
+    setTimeout:f=>{timers.push(f);return timers.length;},clearTimeout(){},localStorage:storage,sessionStorage:storage,
+    document:{body:element('body'),getElementById:element,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){}}});
+  c.window=c;c.addEventListener=()=>{};c.scrollTo=()=>{};
+  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c,{filename:'assembled-preview.html'});
+  function flush(){let n=0;while(timers.length){assert.ok(n++<30,'callbacks must settle');timers.shift()();}}
+  vm.runInContext("meetingMonth='October 2026';sessionToken='fixture';switchView('reports');",c);flush();
+  assert.equal(vm.runInContext('reportMonth',c),'October 2026');
+  vm.runInContext("responses.resumeSession=()=>({valid:true,token:'fixture',meetingMonth:'November 2026'});chairWritePending=true;switchView('reports');",c);flush();
+  assert.equal(vm.runInContext('reportMonth',c),'October 2026');
+  vm.runInContext("chairWritePending=false;switchView('reports');",c);flush();
+  assert.equal(vm.runInContext('reportMonth',c),'November 2026');
+  assert.equal(vm.runInContext('meetingMonth',c),'November 2026');
+});
+
 function fixture() {
   const headers = ['Order ID','Timestamp','Area Meeting Month','Group Name','Contact Name','Email','Phone','Estimated Total','Fulfilled Total','Status','Fulfilled At','Revision'];
   const tables = {
@@ -48,22 +67,25 @@ function fixture() {
   };
   const names = Object.keys(tables), cache = new Map([['session_test','1']]), props = new Map();
   let locked = false, failBatch = false, loseResponse = false, failMail = false, hook = null, quota = 100, mailHook = null, acceptThenThrow = false, mailCalls = 0;
-  const emails = [], appendLog = [];
+  const emails = [], appendLog = [], formats = [], hidden = new Set();
   function range(name,row,col,n=1,m=1) {
     return { getValues: () => Array.from({length:n},(_,i)=>Array.from({length:m},(_,j)=>tables[name][row-1+i]?.[col-1+j] ?? '')),
       setValues(values) { values.forEach((r,i)=>r.forEach((v,j)=> {tables[name][row-1+i] ||= [];tables[name][row-1+i][col-1+j]=v;})); return this; },
-      setValue(v) {return this.setValues([[v]]);} };
+      setValue(v) {return this.setValues([[v]]);}, setNumberFormat(f) { formats.push([name,row,col,n,m,f]); return this; },
+      getDisplayValue() { return String(tables[name][row-1]?.[col-1] ?? ''); },
+      clearContent() { for(let i=0;i<n;i++) for(let j=0;j<m;j++) if(tables[name][row-1+i]) tables[name][row-1+i][col-1+j]=''; return this; } };
   }
-  const sheet = name => tables[name] ? { getSheetId:()=>names.indexOf(name), getDataRange:()=>({getValues:()=>tables[name].map(r=>r.slice())}), getRange:(...a)=>range(name,...a), appendRow:r=>{appendLog.push({sheet:name,row:r.slice()});return tables[name].push(r);}, getLastRow:()=>tables[name].length, clearContents:()=>tables[name]=[], deleteRow:r=>tables[name].splice(r-1,1), deleteRows:(r,n)=>tables[name].splice(r-1,n) } : null;
+  const sheet = name => tables[name] ? { getSheetId:()=>names.indexOf(name), getDataRange:()=>({getValues:()=>tables[name].map(r=>r.slice())}), getRange:(...a)=>{if(typeof a[0]==='string'){const m=a[0].match(/^([A-Z]+)(\d+)$/);a=[Number(m[2]),[...m[1]].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)];}return range(name,...a);}, appendRow:r=>{appendLog.push({sheet:name,row:r.slice()});return tables[name].push(r);}, getLastRow:()=>tables[name].length, getMaxRows:()=>tables[name].length+50, hideRows:r=>hidden.add(r), showRows:r=>hidden.delete(r), clearContents:()=>tables[name]=[], deleteRow:r=>tables[name].splice(r-1,1), deleteRows:(r,n)=>tables[name].splice(r-1,n) } : null;
   function formatDate(d,tz,format) {
     const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d).map(p=>[p.type,p.value]));
     if(format==='yyyy-MM-dd') return `${parts.year}-${parts.month}-${parts.day}`;
+    if(format==='yyyy-MM-dd HH:mm') return `${parts.year}-${parts.month}-${parts.day} ${new Intl.DateTimeFormat('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false}).format(d)}`;
     const month = new Intl.DateTimeFormat('en-US',{timeZone:tz,month:'long'}).format(d);
     if(format==='MMMM yyyy') return month+' '+parts.year;
     return month+' '+Number(parts.day)+', '+parts.year;
   }
   const context = vm.createContext({console,Date,Set,Map,JSON,Math,Number,Object,String,Array,RegExp,Error,
-    SpreadsheetApp:{openById:()=>({getSheetByName:sheet})}, Session:{getScriptTimeZone:()=> 'America/New_York'},
+    SpreadsheetApp:{openById:()=>({getSheetByName:sheet,insertSheet:name=>{tables[name]=[];names.push(name);return sheet(name);}})}, Session:{getScriptTimeZone:()=> 'America/New_York'},
     Utilities:{formatDate,getUuid:()=>require('node:crypto').randomUUID(),base64Decode:b=>Array.from(Buffer.from(b,'base64')),newBlob:(bytes,type,name)=>({bytes,type,name,size:bytes.length})},
     CacheService:{getScriptCache:()=>({get:k=>cache.get(k),put:(k,v)=>cache.set(k,v),remove:k=>cache.delete(k)})},
     PropertiesService:{getScriptProperties:()=>({getProperty:k=>props.get(k),setProperty:(k,v)=>props.set(k,v)})},
@@ -75,15 +97,16 @@ function fixture() {
       const copy=structuredClone(tables);
       for(const req of requests){
         if(req.updateCells){const u=req.updateCells,n=names[u.start.sheetId];u.rows.forEach((r,i)=>{copy[n][u.start.rowIndex+i] ||= [];r.values.forEach((c,j)=>{const v=c.userEnteredValue;copy[n][u.start.rowIndex+i][u.start.columnIndex+j]=v.numberValue ?? v.stringValue;});});}
+        else if(req.appendCells){const u=req.appendCells,n=names[u.sheetId];u.rows.forEach(r=>copy[n].push(r.values.map(c=>c.userEnteredValue.numberValue ?? c.userEnteredValue.stringValue)));}
         else {const r=req.deleteDimension.range;copy[names[r.sheetId]].splice(r.startIndex,r.endIndex-r.startIndex);}
       }
       Object.assign(tables,copy);
       if(loseResponse){loseResponse=false;throw Error('Response lost after commit');}
     }}}
   });
-  for(const file of ['Code.gs','OrderWorkflow.gs','ChairReports.gs','EmailTemplate.gs']) vm.runInContext(fs.readFileSync(file,'utf8'),context,{filename:file});
+  for(const file of ['Code.gs','OrderWorkflow.gs','ChairReports.gs','EmailTemplate.gs','FreeStateOrders.gs','TrendsReport.gs','MonthlySummary.gs','ChairReportView.gs']) vm.runInContext(fs.readFileSync(file,'utf8'),context,{filename:file});
   const oid='NL-2610-001', quantities=q=>[{rowId:oid+'-01',qtyFulfilled:q}];
-  return {c:context,tables,emails,appendLog,oid,quantities,stock:()=>tables.Catalog[1][4],rev:()=>tables.Orders[1][11],
+  return {c:context,tables,emails,appendLog,formats,hidden,oid,quantities,stock:()=>tables.Catalog[1][4],rev:()=>tables.Orders[1][11],
     ready:q=>context.fulfillOrder(oid,quantities(q),999999,'test',tables.Orders[1][11]),
     failBatch:v=>failBatch=v,loseResponse:()=>loseResponse=true,failMail:(v=true)=>failMail=v,hook:h=>hook=h,lock:v=>locked=v,quota:v=>quota=v,mailHook:h=>mailHook=h,acceptThenThrow:v=>acceptThenThrow=v,mailCalls:()=>mailCalls};
 }
@@ -133,6 +156,84 @@ test('selected-month inventory distinguishes unfinished demand and counts distin
   assert.equal(r.groups,1);assert.equal(r.qtyOrdered,7);assert.equal(r.qtyFulfilled,1);assert.equal(r.unfilled,1);assert.equal(r.awaiting,5);
   assert.equal(f.c.getMonthlyReport('December 2026','test').rows.length,0);
   assert.equal(f.c.getItemSummaryReport('October 2026','test').items[0].qtyFulfilled,1);
+});
+
+test('Trends count requested from every order, distributed from Completed only, and average only tracked months',()=>{
+  const f=fixture(), plain=x=>JSON.parse(JSON.stringify(x));
+  f.tables.Orders.push(['NL-2610-002','','October 2026','B','','','',20,10,'Completed','',0],['NL-2611-001','','Nov 2026','C','','','',100,100,'Completed','',0],
+    ['NL-2611-002','','November 2026','D','','','',30,30,'Ready','',0],['NL-2612-001','','December 2026','E','','','',80,40,'Completed','',0],
+    ['NL-2609-001','','September 2026','F','','','',990,990,'Completed','',0]);
+  f.tables['Order Items'].push(['NL-2610-002-01','NL-2610-002','B1','Book',10,2,1,10],['NL-2611-001-01','NL-2611-001','B1','Book',10,10,10,100],
+    ['NL-2611-002-01','NL-2611-002','B1','Book',10,3,3,30],['NL-2612-001-01','NL-2612-001','B1','Book',12,8,4,48],['NL-2609-001-01','NL-2609-001','B1','Book',10,99,99,990]);
+  const dec=f.c.trendsReport_(f.c.getOrders('','test'),f.tables['Order Items'],f.c.getCatalogMap_(),'December 2026','December 2026');
+  const row=dec.items[0];
+  assert.deepEqual([row.requested,row.distributed,row.value,row.prev,row.avg],[8,4,48,10,5.5]);
+  assert.deepEqual(plain([dec.avgMonths,dec.prevMonth,dec.monthToDate,dec.months]),[2,'November 2026',true,['October 2026','November 2026','December 2026']]);
+  assert.deepEqual(plain(row.series),[1,10,4]);assert.deepEqual(plain(dec.series.map(m=>m.requested)),[7,13,8]);
+  assert.deepEqual(plain(dec.availableMonths),['December 2026','November 2026','October 2026']);
+  const oct=f.c.trendsReport_(f.c.getOrders('','test'),f.tables['Order Items'],f.c.getCatalogMap_(),'October 2026','December 2026').items[0];
+  assert.deepEqual([oct.requested,oct.distributed,oct.prev,oct.avg],[7,1,null,null]);
+  assert.throws(()=>f.c.trendsReport_(f.c.getOrders('','test'),f.tables['Order Items'],f.c.getCatalogMap_(),'September 2026','December 2026'),/start with October 2026/);
+  assert.equal(f.c.getTrendsReport('November 2026','test').totals.distributed,10);
+  assert.equal(f.c.getTrendsReport('November 2026','bad').success,false);
+});
+
+test('Monthly Summary is written from the Trends numbers, follows B1, and never blocks an order',()=>{
+  const f=fixture();
+  f.tables.Orders.push(['NL-2610-002','','October 2026','B','','','',20,10,'Completed','',0],['NL-2611-001','','Nov 2026','C','','','',100,100,'Completed','',0],['NL-2612-001','','December 2026','E','','','',80,40,'Completed','',0]);
+  f.tables['Order Items'].push(['NL-2610-002-01','NL-2610-002','B1','Book',10,2,1,10],['NL-2611-001-01','NL-2611-001','B1','Book',10,10,10,100],['NL-2612-001-01','NL-2612-001','B1','Book',12,8,4,48]);
+  assert.doesNotThrow(()=>f.c.refreshMonthlySummary_());assert.doesNotThrow(()=>f.c.refreshMonthlySummarySafe_());
+  f.tables['Monthly Summary']=[['Month Filter','December 2026']];
+  f.c.refreshMonthlySummary_();
+  const t=f.tables['Monthly Summary'];
+  assert.equal(t[1][1],'November 2026');assert.equal(t[1][0],'Compare with');assert.ok(f.formats.some(x=>x[2]===10&&x[5]==='@')&&f.formats.some(x=>x[2]===2&&x[3]===4&&x[5]==='@'));assert.equal(t[0][0],'Month Filter');assert.deepEqual(t.slice(1,4).map(r=>r[9]),['December 2026','November 2026','October 2026']);assert.equal(t[0][2],'Last updated');assert.deepEqual([...t[4].slice(0,8)],['All items','',8,4,48,10,5.5,2]);
+  assert.deepEqual([...t[6].slice(0,8)],['Books','Book',8,4,48,10,5.5,2]);
+  t[0][1]='October 2026';f.c.refreshMonthlySummary_();
+  assert.equal(t[1][1],'n/a (before tracking began)');assert.deepEqual([...t[6].slice(0,8)],['Books','Book',7,1,10,'','',0]);
+  t[0][1]='September 2026';f.c.refreshMonthlySummary_();
+  assert.match(t[3][1],/start with October 2026/);assert.equal(t[6]?.[0]??'','');
+  const sheetOf=name=>({getSheet:()=>({getName:()=>name}),getRow:()=>1,getColumn:()=>2});
+  t[0][1]='December 2026';f.c.handleSummaryEdit({range:sheetOf('Orders')});assert.equal(t[1][1],'November 2026');
+  assert.match(fs.readFileSync('MonthlySummary.gs','utf8'),/^[ -]*$/);
+});
+
+test('Monthly Summary formatting and setup run end to end (guarded to the editor)',()=>{
+  const f=fixture(), calls=[], chain=new Proxy(function(){},{get:(_,k)=>k==='getValue'?()=>'':(...a)=>{calls.push(k);return chain;}});
+  const sheet=new Proxy({},{get:(_,k)=>k==='getRange'?()=>chain:k==='getMaxRows'?()=>400:k==='getMaxColumns'?()=>30:(...a)=>{calls.push(k);return chain;}});
+  Object.assign(f.c.SpreadsheetApp,{DataValidationCriteria:{VALUE_IN_RANGE:'r'},BorderStyle:{SOLID_MEDIUM:'m'},newDataValidation:()=>chain,newConditionalFormatRule:()=>chain});
+  f.c.formatMonthlySummary_(sheet);
+  assert.ok(calls.includes('setDataValidation')&&calls.includes('hideColumns')&&calls.includes('setFrozenRows')&&calls.includes('setConditionalFormatRules'));
+  f.c.Session.getActiveUser=()=>({getEmail:()=>''});
+  assert.throws(()=>f.c.requireEditor_(),/Apps Script editor/);
+  f.c.Session.getActiveUser=()=>({getEmail:()=>'owner@example.invalid'});
+  assert.doesNotThrow(()=>f.c.requireEditor_());
+});
+
+test('Chair Reports view shows only sent reports, hides drafts, and leaves the storage columns alone',()=>{
+  const f=fixture(), plain=x=>JSON.parse(JSON.stringify(x));
+  const sent={reportingMonth:'November 2026',ordersMonth:'October 2026',groupsServed:1,moneyCollected:18.25,hiCharged:0,moneySpent:5,other:'Notes here',version:2,sentAt:'2026-11-12T15:00:00.000Z',recipient:'secretary@example.invalid'};
+  f.tables['Chair Reports'].push(['October 2026',JSON.stringify({reportingMonth:'October 2026',groupsServed:0}),'',1,''],
+    ['November 2026',JSON.stringify({reportingMonth:'November 2026'}),JSON.stringify(sent),3,'{"status":"accepted"}']);
+  const before=plain(f.tables['Chair Reports'].map(r=>r.slice(0,5)));
+  f.c.refreshChairReportView_();
+  const t=f.tables['Chair Reports'];
+  assert.deepEqual(plain(t[0].slice(5,14)),['Orders recap','Groups served','Collected','H&I charged','Spent','Notes','Version','Sent on','Sent to']);
+  assert.deepEqual(plain(t[1].slice(5,14)),['','','','','','','','','']);
+  assert.deepEqual(plain(t[2].slice(5,12)),['October 2026',1,18.25,0,5,'Notes here',2]);
+  assert.match(t[2][12],/^Nov(ember)? 12, 2026/);assert.equal(t[2][13],'secretary@example.invalid');
+  assert.deepEqual(plain(t.map(r=>r.slice(0,5))),before);
+  assert.deepEqual([...f.hidden],[2]);
+  assert.doesNotThrow(()=>f.c.refreshChairReportViewSafe_());
+});
+
+test('Chair Reports setup runs end to end and only from the editor',()=>{
+  const f=fixture(), calls=[], chain=new Proxy(function(){},{get:(_,k)=>(...a)=>{calls.push(k);return chain;}});
+  f.c.getSheet=()=>new Proxy({},{get:(_,k)=>k==='getDataRange'?()=>({getValues:()=>[['Reporting Month'],['October 2026','{}','','','']]}):k==='getMaxRows'?()=>200:k==='getRange'?()=>chain:(...a)=>{calls.push(k);return chain;}});
+  f.c.Session.getActiveUser=()=>({getEmail:()=>''});
+  assert.throws(()=>f.c.setupChairReportView(),/Apps Script editor/);
+  f.c.Session.getActiveUser=()=>({getEmail:()=>'owner@example.invalid'});
+  assert.match(f.c.setupChairReportView(),/JSON columns/);
+  assert.ok(calls.includes('hideColumns')&&calls.includes('hideRows'));
 });
 
 test('annual orders aggregate each order once and separate order totals from item values',()=>{
@@ -826,4 +927,239 @@ test('Inventory tab: Print / Export replaces View Inventory Report, Reports tab 
   assert.doesNotMatch(ui, /\['inventory','Inventory'\]/); assert.doesNotMatch(ui, /openInventoryReport|getStockReport/);
   assert.doesNotMatch(app, /invtarget-|inv-target/); assert.match(app, /data-low-at=/);
   assert.match(app, /name="inv-export-include" value="all" checked/); assert.match(app, /id="inv-export-all" checked/);
+});
+
+// -- Free State orders --
+const FS_VALUES = {email:'freestate@example.invalid',billLocation:'Church Hall',billAddress:'1 Main St',billCity:'Arlington',billState:'VA',billZip:'22204',billContact:'Jane D.',billPhone:'703-555-0100',shipName:'Jane D.',shipPhone:'703-555-0100',shipStreet:'2 Side St',shipCity:'Arlington',shipState:'VA',shipZip:'22204'};
+function fsFixture(skipSettings) {
+  const f = fixture();
+  f.tables.Catalog.push(['P1','IPs','IP #1 <Who>',1,3,'YES',5,10],['S1','Spanish Lit','Spanish Basic Text',9,0,'YES'],['H1','H&I','H&I Booklet',1,0,'YES'],['H2','H&I','H&I Stocked Booklet',1,0,'YES',5,1,'Stocked']);
+  if (!skipSettings) assert.equal(f.c.saveFreeStateSettings(FS_VALUES,'test').success,true);
+  f.preview = lines => f.c.previewFreeStateOrder(lines || [{itemId:'B1',qty:20},{itemId:'P1',qty:40,requestedFor:''},{itemId:'S1',qty:3,requestedFor:'Spanish group'}],'test');
+  f.log = () => f.tables['Free State Order Log'];
+  f.history = () => f.tables['Order History'];
+  return f;
+}
+test('Free State settings: missing fields are named, saved to Config once, and validated; Bill To email is the Lit Chair email',()=>{
+  const f = fsFixture(true), s = f.c.getFreeStateSettings('test');
+  assert.equal(s.success,true);assert.equal(s.groupName,'Northern Virginia Area of NA');assert.equal(s.litChairEmail,'chair@example.invalid');assert.equal(s.missing.length,14);
+  assert.equal(f.c.saveFreeStateSettings({...FS_VALUES,email:'nope'},'test').success,false);
+  assert.equal(f.c.saveFreeStateSettings(FS_VALUES,'test').success,true);assert.equal(f.c.getFreeStateSettings('test').missing.length,0);
+  const rows = f.tables.Config.length;f.c.saveFreeStateSettings({...FS_VALUES,billCity:'Fairfax'},'test');
+  assert.equal(f.tables.Config.length,rows);assert.equal(f.c.getFreeStateSettings('test').values.billCity,'Fairfax');
+  assert.equal(f.c.saveFreeStateSettings(FS_VALUES,'bad-token').success,false);assert.equal(f.c.getFreeStateSettings('bad-token').success,false);
+  assert.equal(f.c.getFreeStateSettings('test').values.billCity,'Fairfax');
+  f.c.saveFreeStateSettings({...FS_VALUES,billPhone:''},'test');assert.equal(f.c.getFreeStateSettings('test').missing.length,1);
+});
+test('Free State preview: validates every line on the server and never exposes stock, requested-for notes or types',()=>{
+  const f = fsFixture(), bad = lines => f.preview(lines);
+  assert.equal(bad([]).success,false);assert.equal(bad([{itemId:'B1',qty:0},{itemId:'P1',qty:''}]).success,false);
+  assert.equal(bad([{itemId:'B1',qty:-1}]).success,false);assert.equal(bad([{itemId:'B1',qty:1.5}]).success,false);assert.equal(bad([{itemId:'B1',qty:'abc'}]).success,false);
+  assert.equal(bad([{itemId:'B1',qty:1},{itemId:'B1',qty:2}]).success,false);assert.equal(bad([{itemId:'NOPE',qty:1}]).success,false);assert.equal(bad([{itemId:'B2',qty:1}]).success,false);
+  const g = fsFixture(true);assert.match(g.preview().error,/Fill in these Free State settings/);assert.equal(g.preview().missing.length,14);
+  assert.equal(f.c.previewFreeStateOrder([{itemId:'B1',qty:1}],'bad-token').success,false);
+  const p = f.preview();assert.equal(p.success,true);assert.equal(p.to,'freestate@example.invalid');assert.equal(p.from,'norvanalit12@gmail.com');assert.equal(p.subject,'NORVANA Literature Order');
+  assert.deepEqual(JSON.parse(JSON.stringify(p.lines)),[{itemId:'B1',name:'Book',qty:20},{itemId:'P1',name:'IP #1 <Who>',qty:40},{itemId:'S1',name:'Spanish Basic Text',qty:3}]);
+  assert.match(p.html,/Bill To[\s\S]*Ship To[\s\S]*Order Items/);assert.match(p.html,/IP #1 &lt;Who&gt;/);assert.match(p.html,/Northern Virginia Area of NA/);assert.match(p.html,/chair@example\.invalid/);
+  assert.match(p.text,/BILL TO\nGroup Name: Northern Virginia Area of NA/);assert.match(p.text,/P1 \| IP #1 <Who> \| 40/);
+  assert.doesNotMatch(p.html+p.text+JSON.stringify(p.lines),/Spanish group|Stocked|Order on Request|On Hand|Low At|stock/i);
+});
+test('Free State send: logs the pending record before emailing, emails once, records history, never touches stock',()=>{
+  const f = fsFixture(), p = f.preview(), stockBefore = JSON.stringify(f.tables.Catalog.map(r=>r[4]));let claimSeen = null;
+  f.mailHook(()=>claimSeen = f.log().slice(1).map(r=>r[2]));
+  assert.equal(f.c.sendFreeStateOrder(p.previewId,'bad-token').success,false);assert.equal(f.emails.length,0);
+  const r = f.c.sendFreeStateOrder(p.previewId,'test');
+  assert.equal(r.success,true);assert.deepEqual(claimSeen,['Sending']);assert.equal(f.emails.length,1);
+  assert.equal(f.emails[0].to,'freestate@example.invalid');assert.equal(f.emails[0].subject,'NORVANA Literature Order');assert.match(f.emails[0].htmlBody,/Order Items/);assert.match(f.emails[0].body,/ORDER ITEMS/);
+  assert.match(r.order.orderId,/^FS-\d{4}-001$/);assert.equal(r.order.lines.length,3);assert.doesNotMatch(JSON.stringify(r.order),/Spanish group|Order on Request/);
+  assert.equal(f.log()[1][2],'Recorded');
+  const h = f.history().slice(1);assert.equal(h.length,3);assert.deepEqual(h.map(x=>[x[2],x[3],x[4],x[5],x[6],x[7],x[8]]),[['B1','Book',20,'Stocked','','Sent','freestate@example.invalid'],['P1','IP #1 <Who>',40,'Stocked','','Sent','freestate@example.invalid'],['S1','Spanish Basic Text',3,'Order on Request','Spanish group','Sent','freestate@example.invalid']]);
+  assert.match(h[0][9],/Group Location: Church Hall/);assert.match(h[0][10],/Street Address: 2 Side St/);
+  assert.equal(JSON.stringify(f.tables.Catalog.map(r=>r[4])),stockBefore);
+  const again = f.c.sendFreeStateOrder(p.previewId,'test');assert.equal(again.success,true);assert.equal(again.alreadySent,true);assert.equal(f.emails.length,1);assert.equal(f.history().length,4);
+  const q = f.preview([{itemId:'B1',qty:5}]);assert.match(f.c.sendFreeStateOrder(q.previewId,'test').order.orderId,/-002$/);assert.equal(f.emails.length,2);
+});
+test('Free State send: concurrent requests, a lost claim write, expired and changed previews send nothing',()=>{
+  const f = fsFixture(), p = f.preview();let inner;
+  f.hook(()=>inner = f.c.sendFreeStateOrder(p.previewId,'test'));f.c.sendFreeStateOrder(p.previewId,'test');
+  assert.equal(inner.success,false);assert.equal(f.emails.length,1);
+  const g = fsFixture(), q = g.preview();g.failBatch(true);const r = g.c.sendFreeStateOrder(q.previewId,'test');
+  assert.equal(r.success,false);assert.match(r.error,/nothing was emailed/);assert.equal(g.emails.length,0);assert.equal(g.mailCalls(),0);
+  const h = fsFixture(), s = h.preview();h.c.CacheService.getScriptCache().remove('fs_preview_'+s.previewId);
+  const e = h.c.sendFreeStateOrder(s.previewId,'test');assert.equal(e.expired,true);assert.equal(h.emails.length,0);
+  const t = h.preview(), fp = t.fingerprint;h.c.saveFreeStateSettings({...FS_VALUES,email:'other@example.invalid'},'test');
+  const c = h.c.sendFreeStateOrder(t.previewId,'test');assert.equal(c.changed,true);assert.equal(h.emails.length,0);
+  const u = h.preview();assert.notEqual(u.fingerprint,fp);assert.equal(h.c.sendFreeStateOrder(u.previewId,'test').success,true);assert.equal(h.emails[0].to,'other@example.invalid');
+  const w = fsFixture(), x = w.preview();w.quota(0);const nq = w.c.sendFreeStateOrder(x.previewId,'test');assert.equal(nq.success,false);assert.equal(w.mailCalls(),0);assert.equal(w.log().length,1);
+});
+test('Free State send: a failed or uncertain email is never resent automatically; recovery is explicit',()=>{
+  const f = fsFixture(), p = f.preview();f.failMail(true);
+  const u = f.c.sendFreeStateOrder(p.previewId,'test');
+  assert.equal(u.success,false);assert.equal(u.state,'uncertain');assert.match(u.error,/Sent folder/);assert.equal((f.history()||[]).length,0);
+  assert.equal(f.log()[1][2],'Uncertain');assert.equal(f.mailCalls(),1);
+  assert.equal(f.c.sendFreeStateOrder(p.previewId,'test').state,'uncertain');assert.equal(f.mailCalls(),1);
+  const blocked = f.c.sendFreeStateOrder(f.preview([{itemId:'B1',qty:1}]).previewId,'test');assert.equal(blocked.blocked,true);assert.equal(f.mailCalls(),1);
+  assert.equal(f.c.getFreeStateOrderState('test').pending.state,'uncertain');
+  const rid = f.log()[1][0];assert.equal(f.c.resolveFreeStateOrder(rid,'bogus','test').success,false);assert.equal(f.c.resolveFreeStateOrder(rid,'retry','bad-token').success,false);
+  f.failMail(false);const done = f.c.resolveFreeStateOrder(rid,'retry','test');
+  assert.equal(done.success,true);assert.equal(f.emails.length,1);assert.equal(f.history().length,4);assert.equal(f.c.getFreeStateOrderState('test').pending,null);
+  assert.equal(f.c.resolveFreeStateOrder(rid,'retry','test').alreadySent,true);assert.equal(f.emails.length,1);
+});
+test('Free State recovery: record-only after an uncertain send, and history retries are safe after a failed history write',()=>{
+  const f = fsFixture(), p = f.preview();f.acceptThenThrow(true);
+  const u = f.c.sendFreeStateOrder(p.previewId,'test');assert.equal(u.state,'uncertain');assert.equal(f.emails.length,1);assert.equal((f.history()||[]).length,0);
+  const rid = f.log()[1][0];f.acceptThenThrow(false);
+  const r = f.c.resolveFreeStateOrder(rid,'record','test');assert.equal(r.success,true);assert.equal(f.emails.length,1);assert.equal(f.history().length,4);assert.equal(f.log()[1][2],'Recorded');
+  assert.equal(f.c.resolveFreeStateOrder(rid,'record','test').alreadySent,true);assert.equal(f.history().length,4);
+  const g = fsFixture(), q = g.preview(), realBatch = g.c.Sheets.Spreadsheets.batchUpdate;let failHistory = true;
+  g.c.Sheets.Spreadsheets.batchUpdate = (a,id)=>{if(failHistory&&a.requests.some(r=>r.appendCells&&r.appendCells.rows[0].values.length===12))throw Error('History write failed');return realBatch(a,id);};
+  const a = g.c.sendFreeStateOrder(q.previewId,'test');
+  assert.equal(a.success,false);assert.equal(a.state,'accepted');assert.match(a.error,/Do not send it again/);assert.equal(g.emails.length,1);assert.ok((g.history()||[]).length<=1);
+  failHistory = false;assert.equal(g.c.getFreeStateOrderState('test').pending.state,'accepted');
+  const blocked = g.c.sendFreeStateOrder(g.preview([{itemId:'B1',qty:1}]).previewId,'test');assert.equal(blocked.blocked,true);
+  const rid2 = g.c.getFreeStateOrderState('test').pending.requestId;
+  assert.equal(g.c.resolveFreeStateOrder(rid2,'retry','test').success,false);assert.equal(g.emails.length,1);
+  assert.equal(g.c.resolveFreeStateOrder(rid2,'record','test').success,true);assert.equal(g.history().length,4);assert.equal(g.emails.length,1);
+});
+test('Free State: an unfinished order creates no history rows',()=>{
+  const f = fsFixture();f.preview();f.preview([{itemId:'B1',qty:2}]);
+  assert.equal(f.history(),undefined);assert.equal(f.log(),undefined);
+});
+test('Inventory Type: H&I and Spanish default to Order on Request; the Catalog sheet (column I) overrides it per product',()=>{
+  const f = fsFixture(), type = id => f.c.getCatalogAll('test').find(i=>i.itemId===id).inventoryType;
+  const items = Object.fromEntries(f.c.getCatalogAll('test').map(i=>[i.itemId,i.inventoryType]));
+  assert.deepEqual(items,{B1:'Stocked',B2:'Stocked',P1:'Stocked',S1:'Order on Request',H1:'Order on Request',H2:'Stocked'});
+  f.tables.Catalog[4][8] = 'Stocked';assert.equal(type('S1'),'Stocked');
+  f.tables.Catalog[4][8] = ' order on request ';assert.equal(type('S1'),'Order on Request');
+  f.tables.Catalog[1][8] = 'Order on Request';assert.equal(type('B1'),'Order on Request');
+  f.tables.Catalog[1][8] = 'garbage';assert.equal(type('B1'),'Stocked');
+  assert.equal(f.c.updateInventoryType,undefined);
+  assert.equal(f.c.getCatalogForForm().every(i=>!('inventoryType' in i)),true);
+});
+
+test('inventory report: Order on Request items are separate, never low or out, never in Items to reorder',()=>{
+  const c=vm.createContext({console,Math,Number,String,Array,Set,JSON,Object,CAT_ORDER:['Books','Spanish Lit','H&I']});
+  const html=fs.readFileSync('ReportUI.html','utf8');
+  vm.runInContext("function esc(s){return String(s);}",c);
+  vm.runInContext(html.match(/<script>([\s\S]*)<\/script>/)[1],c);
+  vm.runInContext("var ITEMS=[{itemId:'B1',category:'Books',name:'Basic Text',stock:0,lowAt:5,targetStock:5,packSize:1,inventoryType:'Stocked'},{itemId:'S1',category:'Spanish Lit',name:'Spanish Text',stock:0,lowAt:5,targetStock:5,packSize:5,inventoryType:'Order on Request'},{itemId:'B2',category:'Books',name:'Request Book',stock:0,lowAt:5,targetStock:5,packSize:1,inventoryType:'Order on Request'}];",c);
+  const all=vm.runInContext("inventoryReportModel(ITEMS,{categories:null,include:'all'})",c);
+  const books=all.groups.find(g=>g.category==='Books').rows;
+  assert.deepEqual(JSON.parse(JSON.stringify(books.map(r=>r.itemId))),['B1','B2']);assert.equal(books[0].status,'Out of stock');assert.equal(books[1].status,'On request');
+  assert.equal(books[1].onHand,null);assert.equal(books[1].suggested,null);assert.equal(all.onRequestCount,2);
+  const reorder=vm.runInContext("inventoryReportModel(ITEMS,{categories:null,include:'reorder'})",c);
+  assert.deepEqual(JSON.parse(JSON.stringify(reorder.groups.flatMap(g=>g.rows.map(r=>r.itemId)))),['B1']);
+  const page=vm.runInContext("inventoryPrintHTML(inventoryReportModel(ITEMS,{categories:null,include:'all'}),{generated:'now',scope:'all'})",c);
+  assert.match(page,/On request/);assert.match(page,/ordered only when someone asks/);assert.match(page,/Spanish Text[\s\S]*?<td>-<\/td><td>-<\/td><td>-<\/td><td>On request<\/td>/);assert.equal((page.match(/OUT OF STOCK/g)||[]).length,1);
+  const csv=vm.runInContext("inventoryCSVRows(inventoryReportModel(ITEMS,{categories:null,include:'all'}),{generated:'now',scope:'all'})",c);
+  const header=csv.find(r=>r[0]==='Category');assert.equal(header[header.length-1],'Inventory Type');
+  assert.deepEqual(JSON.parse(JSON.stringify(csv.find(r=>r[1]==='S1').slice(3))),['','','','On request','Pack of 5 (counts are singles)','','Order on Request']);
+});
+
+test('Free State screens: suggestions, quantity limits, picker, draft kept across screens, review and send',()=>{
+  const html=require('./preview.cjs').renderPreview(), elements={}, timers=[], store=new Map();
+  function element(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},value:'',classList:{add(){},remove(){},contains(){return false;},toggle(){}},focus(){},scrollIntoView(){},setAttribute(){},getAttribute(){return null;},querySelector:()=>null,insertAdjacentHTML(where,s){this.innerHTML+=s;}};}
+  const storage={getItem:k=>store.has(k)?store.get(k):null,setItem:(k,v)=>store.set(k,String(v)),removeItem:k=>store.delete(k),get length(){return store.size;},key:i=>Array.from(store.keys())[i]};
+  const c=vm.createContext({console,Date,Number,Set,Map,Math,JSON,Object,Array,String,Proxy,
+    setTimeout:f=>{timers.push(f);return timers.length;},clearTimeout(){},localStorage:storage,sessionStorage:storage,
+    document:{body:element('body'),getElementById:element,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){}}});
+  c.window=c;c.addEventListener=()=>{};c.scrollTo=()=>{};
+  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c,{filename:'assembled-preview.html'});
+  function flush(){let n=0;while(timers.length){assert.ok(n++<30,'callbacks must settle');timers.shift()();}}
+  vm.runInContext("sessionToken='fixture';dashboardSignedOut=false;renderInventory(demoCatalog);openFreeStateOrder();",c);flush();
+  assert.match(elements['inventory-content'].innerHTML,/Create Free State Order/);
+  assert.equal(elements['inventory-content'].style.display,'none');
+  assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(fs.lines.map(l=>[l.itemId,l.qty]))",c)),[['B1','7']]);
+  const screen=elements['fs-order'].innerHTML;
+  assert.match(screen,/Free State Order/);assert.match(screen,/Item #<\/th><th>Description<\/th><th class="fs-q">Quantity/);assert.doesNotMatch(screen,/On Hand|Target|Total |In stock|Low stock/i);
+  assert.match(screen,/Add Item/);assert.match(screen,/Review &amp; Send/);assert.doesNotMatch(screen,/Spanish|SP3101/);
+  // Quantity box only keeps digits; blank or zero is left out of the order.
+  const input={value:'-4.5x'};vm.runInContext("fsSetQty('B1',INPUT)",Object.assign(c,{INPUT:input}));
+  assert.equal(input.value,'45');assert.equal(vm.runInContext("fsLine('B1').qty",c),'45');
+  // Picker lists every active product by category, greys out what is already ordered, and adds each product once.
+  vm.runInContext("fsTogglePicker()",c);
+  const picker=elements['fs-order'].innerHTML;assert.match(picker,/Spanish/);assert.match(picker,/SP3101/);assert.match(picker,/Basic Text \(added\)/);
+  vm.runInContext("fsAdd('SP3101');fsAdd('SP3101');",c);
+  assert.equal(vm.runInContext("fs.lines.filter(l=>l.itemId==='SP3101').length",c),1);
+  assert.match(elements['fs-order'].innerHTML,/Requested for \(optional, not sent to Free State\)/);
+  vm.runInContext("fsSetRequested('SP3101','Spanish group')",c);
+  // Edits survive a refresh of the order screens and leaving for Settings (draft kept in this tab only).
+  assert.match(store.get('norvana_fs_draft'),/Spanish group/);
+  vm.runInContext("fsReset()",c);assert.equal(elements['inventory-content'].style.display,'');
+  vm.runInContext("openFreeStateOrder()",c);flush();
+  assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(fs.lines.map(l=>[l.itemId,l.qty,l.requestedFor]))",c)),[['B1','45',''],['SP3101','','Spanish group']]);
+  // Review needs a quantity, then shows the email; Back to Edit keeps every change.
+  vm.runInContext("fsLine('B1').qty='';fsReview()",c);flush();assert.equal(vm.runInContext("fs.screen",c),'edit');assert.match(elements['fs-msg'].textContent,/Enter a quantity for at least one product/);vm.runInContext("fsLine('B1').qty='45'",c);
+  vm.runInContext("fsLine('SP3101').qty='12';fsReview()",c);flush();
+  assert.equal(vm.runInContext("fs.screen",c),'review');assert.match(elements['fs-order'].innerHTML,/From:<\/strong> norvanalit12@gmail.com/);assert.match(elements['fs-order'].innerHTML,/To:<\/strong> freestate@example.invalid/);assert.match(elements['fs-order'].innerHTML,/srcdoc=/);
+  vm.runInContext("fsBackToEdit()",c);assert.equal(vm.runInContext("fs.screen",c),'edit');assert.equal(vm.runInContext("fsLine('SP3101').qty",c),'12');
+  // Sending shows the confirmation only after the server says it worked, then clears the draft.
+  vm.runInContext("fsReview()",c);flush();vm.runInContext("fsSend()",c);
+  assert.equal(vm.runInContext("fs.busy",c),true);vm.runInContext("fsSend()",c);flush();
+  assert.equal(vm.runInContext("fs.screen",c),'sent');assert.match(elements['fs-order'].innerHTML,/Order Sent/);assert.match(elements['fs-order'].innerHTML,/sent successfully and recorded in Google Sheets/);assert.match(elements['fs-order'].innerHTML,/Print Order[\s\S]*Done/);
+  assert.equal(store.has('norvana_fs_draft'),false);
+  vm.runInContext("fsExit()",c);assert.equal(elements['fs-order'].innerHTML,'');
+  // Sign-out clears the saved order.
+  vm.runInContext("fs.lines=[{itemId:'B1',qty:'3'}];fsSaveDraft();clearAllFulfillDraftsFromStorage();",c);assert.equal(store.has('norvana_fs_draft'),false);
+});
+
+test('Free State recovery: a send that died leaving a Sending record is uncertain once the lock is held, never auto-resent',()=>{
+  const f = fsFixture(), p = f.preview();f.acceptThenThrow(true);f.mailHook(()=>f.failBatch(true));
+  const r = f.c.sendFreeStateOrder(p.previewId,'test');assert.equal(r.state,'uncertain');assert.equal(f.log()[1][2],'Sending');assert.equal(f.emails.length,1);
+  f.failBatch(false);f.mailHook(null);f.acceptThenThrow(false);
+  assert.equal(f.c.getFreeStateOrderState('test').pending.state,'sending');
+  assert.equal(f.c.sendFreeStateOrder(p.previewId,'test').state,'uncertain');assert.equal(f.emails.length,1);
+  const rid = f.log()[1][0];assert.equal(f.c.resolveFreeStateOrder(rid,'record','test').success,true);assert.equal(f.emails.length,1);assert.equal(f.history().length,4);
+});
+
+test('Free State missing-settings notice lists each field on its own line under Order email, Bill To and Ship To',()=>{
+  const html=require('./preview.cjs').renderPreview(), elements={}, timers=[];
+  function element(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return false;}},insertAdjacentHTML(){}};}
+  const storage={getItem:()=>null,setItem(){},removeItem(){}};
+  const c=vm.createContext({console,Date,Number,Set,Map,Math,JSON,Object,Array,String,Proxy,setTimeout:f=>{timers.push(f);return timers.length;},clearTimeout(){},localStorage:storage,sessionStorage:storage,
+    document:{body:element('body'),getElementById:element,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){}}});
+  c.window=c;c.addEventListener=()=>{};c.scrollTo=()=>{};
+  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c,{filename:'assembled-preview.html'});
+  const out=vm.runInContext("fs.missing=['Free State Order Email','Bill To: Group Location','Bill To: City','Ship To: Name'];fsNoticeHTML()",c);
+  assert.match(out,/Bill To<\/div><ul[^>]*><li>Group Location<\/li><li>City<\/li><\/ul>/);assert.match(out,/Ship To<\/div><ul[^>]*><li>Name<\/li><\/ul>/);assert.match(out,/<li>Free State Order Email<\/li>/);assert.doesNotMatch(out,/Bill To: /);
+});
+
+test('Free State: saving settings and sending do not depend on reading back a write made in the same run',()=>{
+  const f = fsFixture(true), realGet = f.c.getSheet, frozen = structuredClone(f.tables.Config);
+  f.c.getSheet = name => name === 'Config' ? {getSheetId:()=>realGet('Config').getSheetId(),getDataRange:()=>({getValues:()=>frozen.map(r=>r.slice())})} : realGet(name);
+  const saved = f.c.saveFreeStateSettings(FS_VALUES,'test');
+  assert.equal(saved.success,true);assert.equal(saved.missing.length,0);
+  f.c.getSheet = realGet;
+  const g = fsFixture(), p = g.preview(), realOpen = g.c.SpreadsheetApp.openById, stale = {};
+  g.c.SpreadsheetApp.openById = id => { const ss = realOpen(id); return {insertSheet:n=>ss.insertSheet(n),getSheetByName:n=>{const s=ss.getSheetByName(n);return !s||n!=='Free State Order Log'?s:{...s,getDataRange:()=>({getValues:()=>(stale.v ||= s.getDataRange().getValues().map(r=>r.slice()))})};}}; };
+  const r = g.c.sendFreeStateOrder(p.previewId,'test');
+  assert.equal(r.success,true);assert.equal(g.emails.length,1);assert.equal(g.log()[1][2],'Recorded');assert.equal(g.history().length,4);
+});
+
+test('Free State edit screen: an added product sits at the bottom, then the order, review and email use item order',()=>{
+  const html=require('./preview.cjs').renderPreview(), elements={}, timers=[];
+  function element(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},value:'',classList:{add(){},remove(){},contains(){return false;}},focus(){},insertAdjacentHTML(){}};}
+  const storage={getItem:()=>null,setItem(){},removeItem(){}};
+  const c=vm.createContext({console,Date,Number,Set,Map,Math,JSON,Object,Array,String,Proxy,setTimeout:f=>{timers.push(f);return timers.length;},clearTimeout(){},localStorage:storage,sessionStorage:storage,
+    document:{body:element('body'),getElementById:element,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){}}});
+  c.window=c;c.addEventListener=()=>{};c.scrollTo=()=>{};
+  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c,{filename:'assembled-preview.html'});
+  const ids="JSON.stringify(fsDisplayLines().map(l=>l.itemId))", sent="JSON.stringify(fsPayload().map(l=>l.itemId))";
+  vm.runInContext("sessionToken='fixture';dashboardSignedOut=false;renderInventory(demoCatalog);fs.lines=[{itemId:'P1',qty:'5',requestedFor:'',manual:false},{itemId:'SP3101',qty:'2',requestedFor:'',manual:false}];fsAdd('B1');",c);
+  assert.equal(vm.runInContext(ids,c),'["P1","SP3101","B1"]');assert.equal(vm.runInContext(sent,c),'["B1","P1","SP3101"]');
+  vm.runInContext("fsLine('B1').qty='1';fsReview();",c);while(timers.length)timers.shift()();
+  assert.equal(vm.runInContext(ids,c),'["B1","P1","SP3101"]');assert.equal(vm.runInContext(sent,c),'["B1","P1","SP3101"]');
+});
+
+test('Inventory screen: Order on Request products show no count and no inventory type control',()=>{
+  const html=require('./preview.cjs').renderPreview(), elements={}, timers=[];
+  function element(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},value:'',classList:{add(){},remove(){},contains(){return false;}},focus(){},insertAdjacentHTML(){}};}
+  const storage={getItem:()=>null,setItem(){},removeItem(){}};
+  const c=vm.createContext({console,Date,Number,Set,Map,Math,JSON,Object,Array,String,Proxy,setTimeout:f=>{timers.push(f);return timers.length;},clearTimeout(){},localStorage:storage,sessionStorage:storage,
+    document:{body:element('body'),getElementById:element,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){}}});
+  c.window=c;c.addEventListener=()=>{};c.scrollTo=()=>{};
+  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c,{filename:'assembled-preview.html'});
+  vm.runInContext("sessionToken='fixture';dashboardSignedOut=false;renderInventory([{itemId:'B1',name:'Basic Text',category:'Books',price:1,stock:1,lowAt:5,inventoryType:'Stocked',active:true},{itemId:'S1',name:'Spanish Text',category:'Spanish Lit',price:1,stock:0,lowAt:5,inventoryType:'Order on Request',active:true}]);",c);
+  const page=elements['inventory-content'].innerHTML;
+  assert.doesNotMatch(page,/Inventory type|<select/i);assert.match(page,/On request/);assert.match(page,/id="inv-B1"/);assert.doesNotMatch(page,/id="inv-S1"/);
 });
