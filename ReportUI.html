@@ -48,8 +48,8 @@ function loadReports(){
   followReportWindow();
 }
 function renderReportsShell(){
-  document.getElementById('reports-content').innerHTML='<div style="padding-top:16px"><div class="report-mode-tabs">'+
-    [['orders','Orders'],['trends','Trends'],['chair','Chair Report']].map(([key,label])=>'<button class="report-mode-tab'+(reportMode===key?' active':'')+'" onclick="setReportMode(\''+key+'\')">'+label+'</button>').join('')+
+  document.getElementById('reports-content').innerHTML='<div style="padding-top:16px"><div class="report-mode-btns">'+
+    [['orders','Orders'],['trends','Trends'],['chair','Chair Report']].map(([key,label])=>'<button class="save-inv-btn report-mode-btn'+(reportMode===key?' active':'')+'" aria-pressed="'+(reportMode===key)+'" onclick="setReportMode(\''+key+'\')">'+label+'</button>').join('')+
     '</div><div id="report-controls"></div><div id="report-panel"></div><div id="footer-reports"></div></div>';
 }
 function setReportMode(mode){

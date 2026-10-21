@@ -27,10 +27,10 @@ function trendsMonthRange_(fromYm, toYm) {
   return list;
 }
 
-// orders: rows from getOrders(); lines: Order Items values (row 0 = header); catalog: getCatalogMap_().
-function trendsReport_(orders, lines, catalog, month, currentMonth) {
-  const startYm = meetingLabelToYm_(TRENDS_START_MONTH_);
-  const currentYm = meetingLabelToYm_(currentMonth);
+const trendsBlank_ = function() { return { requested: 0, distributed: 0, value: 0 }; };
+
+// Groups the tracked orders by meeting month (the first copy of an order ID wins; months before tracking began are ignored).
+function trendsGroup_(orders, startYm) {
   const seen = new Set(), byYm = {};
   let latestYm = startYm;
   orders.forEach(function(o) {
@@ -40,21 +40,13 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
     (byYm[ym] = byYm[ym] || []).push(o);
     if (ym > latestYm) latestYm = ym;
   });
-  const lastYm = Math.max(latestYm, currentYm != null && currentYm >= startYm ? currentYm : startYm);
-  let selYm = meetingLabelToYm_(month);
-  if (selYm == null) selYm = currentYm != null && currentYm >= startYm ? currentYm : latestYm;
-  if (selYm < startYm) throw new Error('Trends start with ' + TRENDS_START_MONTH_ + '.');
+  return { byYm: byYm, latestYm: latestYm };
+}
 
-  const seriesYms = trendsMonthRange_(Math.max(startYm, selYm - (TRENDS_SERIES_MONTHS_ - 1)), selYm);
-  const avgYms = trendsMonthRange_(Math.max(startYm, selYm - TRENDS_AVERAGE_MONTHS_), selYm - 1);
-  const wanted = {};
-  seriesYms.concat(avgYms).forEach(function(ym) { wanted[ym] = true; });
-
-  const items = {};
-  const blank = function() { return { requested: 0, distributed: 0, value: 0 }; };
-  const monthTotals = {}, unknownPack = {};
-  Object.keys(wanted).forEach(function(ym) {
-    const completed = [];
+// Adds up every order line of the given months: per item and month, and the totals for each month.
+function trendsAggregate_(byYm, lines, catalog, yms) {
+  const items = {}, monthTotals = {}, unknownPack = {};
+  yms.forEach(function(ym) {
     (byYm[ym] || []).forEach(function(o) {
       const done = o.status === 'Completed';
       orderItemRowIndicesForOrder_(lines, String(o.orderId).trim()).forEach(function(i) {
@@ -66,15 +58,43 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
         const known = catalog[itemId];
         const item = items[itemId] || (items[itemId] = { itemId: itemId, name: known ? known.name : String(r[3]),
           category: known ? known.category : 'Other', months: {} });
-        const cell = item.months[ym] || (item.months[ym] = blank());
+        const cell = item.months[ym] || (item.months[ym] = trendsBlank_());
         cell.requested += requested; cell.distributed += distributed;
         cell.value = roundTo_(cell.value + roundTo_((done ? packs : 0) * (Number(r[4]) || 0), 2), 2);
-        const total = monthTotals[ym] || (monthTotals[ym] = blank());
+        const total = monthTotals[ym] || (monthTotals[ym] = trendsBlank_());
         total.requested += requested; total.distributed += distributed;
         total.value = roundTo_(total.value + roundTo_((done ? packs : 0) * (Number(r[4]) || 0), 2), 2);
       });
     });
   });
+  return { items: items, monthTotals: monthTotals, unknownPack: unknownPack };
+}
+
+// The years that can be picked: from the year tracking began through the latest tracked month.
+function trendsYears_(startYm, lastYm) {
+  const years = [];
+  for (let y = Math.floor(lastYm / 12); y >= Math.floor(startYm / 12); y--) years.push(String(y));
+  return years;
+}
+
+// orders: rows from getOrders(); lines: Order Items values (row 0 = header); catalog: getCatalogMap_().
+function trendsReport_(orders, lines, catalog, month, currentMonth) {
+  const startYm = meetingLabelToYm_(TRENDS_START_MONTH_);
+  const currentYm = meetingLabelToYm_(currentMonth);
+  const grouped = trendsGroup_(orders, startYm), byYm = grouped.byYm, latestYm = grouped.latestYm;
+  const lastYm = Math.max(latestYm, currentYm != null && currentYm >= startYm ? currentYm : startYm);
+  let selYm = meetingLabelToYm_(month);
+  if (selYm == null) selYm = currentYm != null && currentYm >= startYm ? currentYm : latestYm;
+  if (selYm < startYm) throw new Error('Trends start with ' + TRENDS_START_MONTH_ + '.');
+
+  const seriesYms = trendsMonthRange_(Math.max(startYm, selYm - (TRENDS_SERIES_MONTHS_ - 1)), selYm);
+  const avgYms = trendsMonthRange_(Math.max(startYm, selYm - TRENDS_AVERAGE_MONTHS_), selYm - 1);
+  const wanted = {};
+  seriesYms.concat(avgYms).forEach(function(ym) { wanted[ym] = true; });
+
+  const blank = trendsBlank_;
+  const agg = trendsAggregate_(byYm, lines, catalog, Object.keys(wanted).map(Number));
+  const items = agg.items, monthTotals = agg.monthTotals, unknownPack = agg.unknownPack;
 
   const get = function(cells, ym) { return (cells && cells[ym]) || blank(); };
   const average = function(valueOf) {
@@ -94,6 +114,7 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
 
   const sel = get(monthTotals, selYm);
   return {
+    period: 'monthly', availableYears: trendsYears_(startYm, Math.max(lastYm, selYm)),
     month: monthLabel_(selYm), startMonth: TRENDS_START_MONTH_, monthToDate: selYm === currentYm,
     avgMonths: avgYms.length, prevMonth: prevYm == null ? '' : monthLabel_(prevYm),
     months: seriesYms.map(monthLabel_),
@@ -108,9 +129,55 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
     items: rows };
 }
 
-function getTrendsReport(month, token) {
+// Annual view: one calendar year, adding up only the months since tracking began. The comparison is the whole previous
+// year (when it was tracked) and the average is items per tracked month. The year in progress is "year to date".
+function trendsAnnualReport_(orders, lines, catalog, yearText, currentMonth) {
+  const startYm = meetingLabelToYm_(TRENDS_START_MONTH_);
+  const currentYm = meetingLabelToYm_(currentMonth);
+  const grouped = trendsGroup_(orders, startYm), byYm = grouped.byYm;
+  const lastYm = Math.max(grouped.latestYm, currentYm != null && currentYm >= startYm ? currentYm : startYm);
+  const startYear = Math.floor(startYm / 12), lastYear = Math.floor(lastYm / 12);
+  let year = /^\d{4}$/.test(String(yearText == null ? '' : yearText)) ? Number(yearText) : (currentYm != null && currentYm >= startYm ? Math.floor(currentYm / 12) : lastYear);
+  if (year < startYear) throw new Error('Trends start with ' + TRENDS_START_MONTH_ + '.');
+  if (year > lastYear) year = lastYear;
+  const yearYms = trendsMonthRange_(Math.max(startYm, year * 12), Math.min(year * 12 + 11, lastYm));
+  const prevEnd = (year - 1) * 12 + 11;
+  const prevYms = prevEnd >= startYm ? trendsMonthRange_(Math.max(startYm, (year - 1) * 12), prevEnd) : [];
+  const agg = trendsAggregate_(byYm, lines, catalog, yearYms.concat(prevYms));
+  const blank = trendsBlank_;
+  const sumOf = function(cells, yms) {
+    return yms.reduce(function(t, ym) {
+      const c = (cells && cells[ym]) || blank();
+      return { requested: t.requested + c.requested, distributed: t.distributed + c.distributed, value: roundTo_(t.value + c.value, 2) };
+    }, blank());
+  };
+  const perMonth = function(n) { return yearYms.length ? roundTo_(n / yearYms.length, 1) : null; };
+  const rows = Object.keys(agg.items).map(function(id) {
+    const it = agg.items[id], sel = sumOf(it.months, yearYms), prev = prevYms.length ? sumOf(it.months, prevYms).distributed : null;
+    return { itemId: it.itemId, name: it.name, category: it.category, requested: sel.requested, distributed: sel.distributed, value: sel.value,
+      prev: prev, avg: perMonth(sel.distributed),
+      series: yearYms.map(function(ym) { return ((it.months[ym]) || blank()).distributed; }) };
+  }).filter(function(r) { return r.requested || r.distributed || r.prev || r.series.some(Boolean); })
+    .sort(compareItems_);
+  const sel = sumOf(agg.monthTotals, yearYms);
+  return {
+    period: 'annual', year: String(year), availableYears: trendsYears_(startYm, lastYm), startMonth: TRENDS_START_MONTH_,
+    yearToDate: year === lastYear && lastYm < year * 12 + 11, monthsCounted: yearYms.length,
+    prevYear: prevYms.length ? String(year - 1) : '', months: yearYms.map(monthLabel_),
+    totals: { requested: sel.requested, distributed: sel.distributed, value: sel.value,
+      prev: prevYms.length ? sumOf(agg.monthTotals, prevYms).distributed : null, avg: perMonth(sel.distributed) },
+    series: yearYms.map(function(ym) { const c = agg.monthTotals[ym] || blank(); return { month: monthLabel_(ym), requested: c.requested, distributed: c.distributed, value: c.value }; }),
+    categories: Array.from(new Set(rows.map(function(r) { return r.category; }))),
+    unknownPackLines: Object.keys(agg.unknownPack).sort(),
+    items: rows };
+}
+
+// selection is a month ("October 2026") for the monthly view, or a year ("2026") for the annual view.
+function getTrendsReport(selection, token, period) {
   return withWorkflowLock_(token, function() {
-    return trendsReport_(getOrders('', token), getSheet('Order Items').getDataRange().getValues(),
-      getCatalogMap_(), month, getCurrentWindow().meetingMonth);
+    const orders = getOrders('', token), lines = getSheet('Order Items').getDataRange().getValues(), catalog = getCatalogMap_();
+    return period === 'annual'
+      ? trendsAnnualReport_(orders, lines, catalog, selection, getCurrentWindow().meetingMonth)
+      : trendsReport_(orders, lines, catalog, selection, getCurrentWindow().meetingMonth);
   });
 }

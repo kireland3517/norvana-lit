@@ -98,10 +98,18 @@ function fsCatalog_() {
   const data = getSheet('Catalog').getDataRange().getValues(), map = {};
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
-    map[String(data[i][0])] = { name: String(data[i][2]), category: String(data[i][1]), active: String(data[i][5]).trim().toUpperCase() === 'YES', inventoryType: inventoryTypeOf_(data[i][1], data[i][8]) };
+    map[String(data[i][0])] = { name: String(data[i][2]), category: String(data[i][1]), price: Number(data[i][3]) || 0, packSize: Number(data[i][7]) || 1, active: String(data[i][5]).trim().toUpperCase() === 'YES', inventoryType: inventoryTypeOf_(data[i][1], data[i][8]) };
   }
   return map;
 }
+
+// Catalog price is per pack for pack items and each otherwise; quantities are in singles. Rounded to cents.
+function fsLineTotal_(qty, price, packSize) {
+  return Math.round((Number(qty) / (Number(packSize) > 1 ? Number(packSize) : 1)) * Number(price) * 100) / 100;
+}
+function fsMoney_(n) { return '$' + Number(n || 0).toFixed(2); }
+function fsGrandTotal_(lines) { return Math.round(lines.reduce(function(sum, l) { return sum + Number(l.total || 0); }, 0) * 100) / 100; }
+function fsPublicLines_(lines) { return lines.map(function(l) { return { itemId: l.itemId, name: l.name, qty: l.qty, price: l.price, total: l.total }; }); }
 
 // Validates raw lines from the browser and rebuilds everything else (names, addresses, recipient) from the sheet.
 function fsBuildSnapshot_(rawLines) {
@@ -126,7 +134,7 @@ function fsBuildSnapshot_(rawLines) {
     if (!item) throw new Error('A product in this order is no longer in the catalog. Remove it and review again.');
     if (qty === 0) return;
     if (!item.active) throw new Error(item.name + ' is no longer active. Remove it and review again.');
-    lines.push({ itemId: itemId, name: item.name, qty: qty, inventoryType: item.inventoryType, requestedFor: cleanText_(l.requestedFor, FS_MAX_TEXT_) });
+    lines.push({ itemId: itemId, name: item.name, qty: qty, price: item.price, total: fsLineTotal_(qty, item.price, item.packSize), inventoryType: item.inventoryType, requestedFor: cleanText_(l.requestedFor, FS_MAX_TEXT_) });
   });
   if (!lines.length) throw new Error('Enter a quantity for at least one product.');
   const v = cfg.values;
@@ -141,7 +149,7 @@ function fsBuildSnapshot_(rawLines) {
 
 // Change detector only (not a security hash): the email content plus the recipient.
 function fsFingerprint_(snap) {
-  const text = JSON.stringify([snap.recipient, snap.subject, snap.billTo, snap.shipTo, snap.lines.map(function(l) { return [l.itemId, l.name, l.qty]; })]);
+  const text = JSON.stringify([snap.recipient, snap.subject, snap.billTo, snap.shipTo, snap.lines.map(function(l) { return [l.itemId, l.name, l.qty, l.price, l.total]; })]);
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
   return h.toString(16) + '-' + text.length;
@@ -150,7 +158,8 @@ function fsFingerprint_(snap) {
 function fsText_(snap) {
   const pairs = function(rows) { return rows.map(function(r) { return r[0] + ': ' + r[1]; }).join('\n'); };
   return 'NORVANA Literature Order\n\nBILL TO\n' + pairs(snap.billTo) + '\n\nSHIP TO\n' + pairs(snap.shipTo) +
-    '\n\nORDER ITEMS\nItem # | Description | Quantity\n' + snap.lines.map(function(l) { return l.itemId + ' | ' + l.name + ' | ' + l.qty; }).join('\n');
+    '\n\nORDER ITEMS\nItem # | Description | Quantity | Price | Total\n' + snap.lines.map(function(l) { return l.itemId + ' | ' + l.name + ' | ' + l.qty + ' | ' + fsMoney_(l.price) + ' | ' + fsMoney_(l.total); }).join('\n') +
+    '\nORDER TOTAL: ' + fsMoney_(fsGrandTotal_(snap.lines));
 }
 
 function fsHtml_(snap) {
@@ -159,14 +168,14 @@ function fsHtml_(snap) {
   const band = function(i) { return i % 2 ? 'background:#f5f6f7;' : 'background:#ffffff;'; };
   const pairRows = function(rows) { return rows.map(function(r, i) { return '<tr><td width="34%" style="' + cell + band(i) + '">' + emailEsc_(r[0]) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(r[1]) + '</td></tr>'; }).join(''); };
   const itemRows = snap.lines.map(function(l, i) {
-    return '<tr><td width="18%" style="' + cell + band(i) + '">' + emailEsc_(l.itemId) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(l.name) + '</td><td width="18%" align="right" style="' + cell + band(i) + 'text-align:right">' + l.qty + '</td></tr>';
-  }).join('');
+    return '<tr><td width="18%" style="' + cell + band(i) + '">' + emailEsc_(l.itemId) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(l.name) + '</td><td width="12%" align="right" style="' + cell + band(i) + 'text-align:right">' + l.qty + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.price) + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.total) + '</td></tr>';
+  }).join('') + '<tr><td colspan="4" align="right" style="' + cell + 'font-weight:bold;text-align:right">Order Total</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">' + fsMoney_(fsGrandTotal_(snap.lines)) + '</td></tr>';
   const table = function(inner) { return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 16px 0">' + inner + '</table>'; };
   return '<!DOCTYPE html><html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body style="margin:0;padding:16px;background:#ffffff">' +
     '<div style="max-width:640px;margin:0 auto">' +
     '<div style="font:bold 18px/1.4 ' + F + ';color:#202020;margin:0 0 12px 0">NORVANA Literature Order</div>' +
     table(bar('Bill To', 2) + pairRows(snap.billTo)) + table(bar('Ship To', 2) + pairRows(snap.shipTo)) +
-    table(bar('Order Items', 3) + '<tr><td style="' + cell + 'font-weight:bold">Item #</td><td style="' + cell + 'font-weight:bold">Description</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Quantity</td></tr>' + itemRows) +
+    table(bar('Order Items', 5) + '<tr><td style="' + cell + 'font-weight:bold">Item #</td><td style="' + cell + 'font-weight:bold">Description</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Quantity</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Price</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Total</td></tr>' + itemRows) +
     '</div></body></html>';
 }
 
@@ -174,7 +183,7 @@ function fsHtml_(snap) {
 function fsPublicOrder_(snap, rec) {
   const sent = rec.attempt && rec.attempt.acceptedAt ? new Date(rec.attempt.acceptedAt) : new Date();
   return { orderId: rec.orderId, sentDate: Utilities.formatDate(sent, Session.getScriptTimeZone(), 'MMMM d, yyyy'),
-    billTo: snap.billTo, shipTo: snap.shipTo, lines: snap.lines.map(function(l) { return { itemId: l.itemId, name: l.name, qty: l.qty }; }) };
+    billTo: snap.billTo, shipTo: snap.shipTo, lines: fsPublicLines_(snap.lines), orderTotal: fsGrandTotal_(snap.lines) };
 }
 
 function previewFreeStateOrder(lines, token) {
@@ -183,7 +192,7 @@ function previewFreeStateOrder(lines, token) {
     const stored = snap.lines.map(function(l) { return { itemId: l.itemId, qty: l.qty, requestedFor: l.requestedFor }; });
     CacheService.getScriptCache().put('fs_preview_' + previewId, JSON.stringify({ token: token, lines: stored, fingerprint: fingerprint }), FS_PREVIEW_SECONDS_);
     return { success: true, previewId: previewId, fingerprint: fingerprint, from: FREE_STATE_FROM_, to: snap.recipient, subject: snap.subject,
-      html: fsHtml_(snap), text: fsText_(snap), lines: snap.lines.map(function(l) { return { itemId: l.itemId, name: l.name, qty: l.qty }; }) };
+      html: fsHtml_(snap), text: fsText_(snap), lines: fsPublicLines_(snap.lines), orderTotal: fsGrandTotal_(snap.lines) };
   });
 }
 

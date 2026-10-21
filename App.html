@@ -668,9 +668,10 @@
   tfoot td:last-child { text-align: right; font-size: 18px; color: var(--onyx); }
 
   /* -- REPORT MODE TABS -- */
-  .report-mode-tabs { display: flex; background: var(--snow); border: 1.5px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; margin-bottom: 14px; }
-  .report-mode-tab { flex: 1; padding: 7px 6px; border: none; border-radius: 7px; font-family: "Outfit", sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; background: none; color: var(--muted); transition: background 0.18s, color 0.18s; }
-  .report-mode-tab.active { background: var(--white); color: var(--blue); box-shadow: 0 1px 4px rgba(46,49,146,0.10); }
+  /* The Orders / Trends / Chair Report switch looks like the three buttons on the Inventory tab; the open one gets a lime bar. */
+  .report-mode-btns { display: flex; gap: 8px; margin-bottom: 12px; }
+  .report-mode-btn { margin: 0; flex: 1; }
+  .report-mode-btn.active { box-shadow: inset 0 -4px 0 var(--lime); }
   .report-month-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 5px; }
   .report-month-select { width: 100%; padding: 9px 30px 9px 12px; border-radius: 10px; border: 1.5px solid var(--border); background-color: var(--white); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6.5L8 10l3.5-3.5' stroke='%232e3192' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; background-size: 14px 14px; color: var(--onyx); font-family: "Outfit", sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; -webkit-appearance: none; appearance: none; }
   .report-month-select:focus { outline: none; border-color: var(--blue); }
@@ -1035,9 +1036,6 @@
   body.dark tfoot td:last-child { color: #e8eaf6 !important; -webkit-text-fill-color: #e8eaf6 !important; }
 
   /* report mode tabs dark */
-  body.dark .report-mode-tabs { background: #1c1e3a; border-color: var(--border); }
-  body.dark .report-mode-tab { color: var(--mid); }
-  body.dark .report-mode-tab.active { background: #2e3175; color: #e8eaf6; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
   body.dark .report-month-select { background-color: #323665; border-color: var(--border); color: #e8eaf6; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6.5L8 10l3.5-3.5' stroke='%23e8eaf6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
   body.dark .summary-item-row { border-top-color: #2e3060; }
   body.dark .summary-item-name { color: #e8eaf6; }

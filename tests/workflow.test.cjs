@@ -15,7 +15,7 @@ test('assembled local preview loads Reports (Orders, Trends and Chair Report; in
   function flush(){let n=0;while(timers.length){assert.ok(n++<30,'callbacks must settle');timers.shift()();}}
   vm.runInContext("meetingMonth='October 2026';sessionToken='fixture';switchView('reports');",c);flush();
   assert.doesNotMatch(elements['reports-content'].innerHTML,/>Inventory</);
-  assert.equal((elements['reports-content'].innerHTML.match(/class="report-mode-tab/g)||[]).length,4);assert.match(elements['reports-content'].innerHTML,/>Trends</);
+  assert.equal((elements['reports-content'].innerHTML.match(/class="save-inv-btn report-mode-btn/g)||[]).length,3,'the three Reports buttons use the Inventory button style');assert.match(elements['reports-content'].innerHTML,/>Trends</);assert.match(elements['reports-content'].innerHTML,/report-mode-btn active" aria-pressed="true"/);
   assert.match(elements['report-panel'].innerHTML,/Example Group/);
   vm.runInContext("changeOrdersPeriod('annual');",c);flush();
   assert.match(elements['report-panel'].innerHTML,/Monthly breakdown/);
@@ -28,6 +28,13 @@ test('assembled local preview loads Reports (Orders, Trends and Chair Report; in
   vm.runInContext("setReportMode('trends');",c);flush();
   assert.match(elements['report-panel'].innerHTML,/id="trends-view"/);assert.doesNotMatch(elements['trends-view'].innerHTML,/Inventory/);
   assert.match(elements['trends-view'].innerHTML,/Quantities represent individual items, except readings, which are counted as sets\./);assert.match(elements['trends-view'].innerHTML,/include the H&amp;I Subcommittee/);
+  assert.match(elements['trends-view'].innerHTML,/<span>Items distributed<\/span>/);assert.match(elements['trends-view'].innerHTML,/<small>items distributed<\/small>/);assert.match(elements['trends-view'].innerHTML,/<option value="monthly" selected>/);
+  vm.runInContext("trSetPeriod('annual');",c);flush();
+  const annual=elements['trends-view'].innerHTML;
+  assert.match(annual,/<option value="annual" selected>/);assert.match(annual,/<label>Year<select/);assert.match(annual,/<option value="2027">/);assert.match(annual,/Year to date/);
+  assert.match(annual,/<span>Monthly average<\/span>/);assert.match(annual,/Avg\/month/);assert.match(annual,/Counts only the 3 months of 2026 since tracking began/);
+  assert.match(annual,/<span>Items distributed<\/span><strong>140<\/strong>/,'annual total is the sum of the tracked months across items (15 + 125)');
+  vm.runInContext("trSetPeriod('monthly');",c);flush();assert.match(elements['trends-view'].innerHTML,/<label>Month<select/);
   vm.runInContext("setReportMode('orders');",c);flush();
   assert.match(elements['report-panel'].innerHTML,/individual items, except readings, which are counted as sets\. Orders and totals include the H&I Subcommittee, which is not a group\./);
   vm.runInContext("requestedReportMode=null;reportMode='orders';openTrendsShortcut();",c);flush();
@@ -186,6 +193,32 @@ test('Trends count requested from every order, distributed from Completed only, 
   assert.equal(f.c.getTrendsReport('November 2026','bad').success,false);
 });
 
+test('Trends annual view: adds up the tracked months of a year, compares with the whole previous year, averages per tracked month, and flags the year in progress', () => {
+  const f = fixture(), plain = x => JSON.parse(JSON.stringify(x));
+  f.tables.Orders.push(['NL-2610-002','','October 2026','B','','','',20,10,'Completed','',0],['NL-2611-001','','November 2026','C','','','',100,100,'Completed','',0],
+    ['NL-2611-002','','November 2026','D','','','',30,30,'Ready','',0],['NL-2612-001','','December 2026','E','','','',80,40,'Completed','',0],
+    ['NL-2701-001','','January 2027','F','','','',60,60,'Completed','',0],['NL-2609-001','','September 2026','G','','','',990,990,'Completed','',0]);
+  f.tables['Order Items'].push(['NL-2610-002-01','NL-2610-002','B1','Book',10,2,1,10,1],['NL-2611-001-01','NL-2611-001','B1','Book',10,10,10,100,1],
+    ['NL-2611-002-01','NL-2611-002','B1','Book',10,3,3,30,1],['NL-2612-001-01','NL-2612-001','B1','Book',12,8,4,48,1],
+    ['NL-2701-001-01','NL-2701-001','B1','Book',10,6,6,60,1],['NL-2609-001-01','NL-2609-001','B1','Book',10,99,99,990,1]);
+  f.tables['Order Items'][1][8] = 1;
+  const run = (year, now) => f.c.trendsAnnualReport_(f.c.getOrders('', 'test'), f.tables['Order Items'], f.c.getCatalogMap_(), year, now);
+  const y26 = run('2026', 'January 2027'), row26 = y26.items[0];
+  assert.deepEqual(plain([y26.period, y26.year, y26.yearToDate, y26.monthsCounted, y26.prevYear, y26.months]), ['annual', '2026', false, 3, '', ['October 2026', 'November 2026', 'December 2026']]);
+  assert.deepEqual([row26.requested, row26.distributed, row26.value, row26.prev, row26.avg], [28, 15, 158, null, 5], 'Oct + Nov + Dec only; September is before tracking; a Ready order is not distributed');
+  assert.deepEqual(plain(row26.series), [1, 10, 4]); assert.deepEqual(plain(plain(y26.availableYears)), ['2027', '2026']);
+  const y27 = run('2027', 'January 2027'), row27 = y27.items[0];
+  assert.deepEqual(plain([y27.year, y27.yearToDate, y27.monthsCounted, y27.prevYear]), ['2027', true, 1, '2026']);
+  assert.deepEqual([row27.requested, row27.distributed, row27.prev, row27.avg, y27.totals.prev, y27.totals.avg], [6, 6, 15, 6, 15, 6], 'compared with the whole of 2026');
+  assert.equal(run('2031', 'January 2027').year, '2027', 'a year after the latest tracked month falls back to the latest year');
+  assert.throws(() => run('2025', 'January 2027'), /start with October 2026/);
+  // Through the public function: the selection is a year, the default is the current year, and the monthly call is unchanged.
+  assert.equal(f.c.getTrendsReport('2026', 'test', 'annual').year, '2026');
+  assert.equal(f.c.getTrendsReport('2026', 'bad', 'annual').success, false);
+  assert.equal(f.c.getTrendsReport('', 'test', 'annual').period, 'annual');
+  const monthly = f.c.getTrendsReport('December 2026', 'test');
+  assert.equal(monthly.period, 'monthly'); assert.deepEqual(plain(monthly.availableYears), ['2027', '2026']); assert.equal(monthly.items[0].distributed, 4);
+});
 test('Monthly Summary is written from the Trends numbers, follows B1, and never blocks an order',()=>{
   const f=fixture();
   f.tables.Orders.push(['NL-2610-002','','October 2026','B','','','',20,10,'Completed','',0],['NL-2611-001','','Nov 2026','C','','','',100,100,'Completed','',0],['NL-2612-001','','December 2026','E','','','',80,40,'Completed','',0]);
@@ -1048,7 +1081,9 @@ test('Free State preview: validates every line on the server and never exposes s
   const g = fsFixture(true);assert.match(g.preview().error,/Fill in these Free State settings/);assert.equal(g.preview().missing.length,14);
   assert.equal(f.c.previewFreeStateOrder([{itemId:'B1',qty:1}],'bad-token').success,false);
   const p = f.preview();assert.equal(p.success,true);assert.equal(p.to,'freestate@example.invalid');assert.equal(p.from,'norvanalit12@gmail.com');assert.equal(p.subject,'NORVANA Literature Order');
-  assert.deepEqual(JSON.parse(JSON.stringify(p.lines)),[{itemId:'B1',name:'Book',qty:20},{itemId:'P1',name:'IP #1 <Who>',qty:40},{itemId:'S1',name:'Spanish Basic Text',qty:3}]);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.lines)),[{itemId:'B1',name:'Book',qty:20,price:99,total:1980},{itemId:'P1',name:'IP #1 <Who>',qty:40,price:1,total:4},{itemId:'S1',name:'Spanish Basic Text',qty:3,price:9,total:27}]);
+  // Price is per pack for pack items (P1: 40 singles = 4 packs of 10 at $1), each otherwise; the grand total is the sum of the line totals.
+  assert.equal(p.orderTotal,2011);assert.match(p.html,/Order Total[\s\S]*\$2011\.00/);assert.match(p.text,/ORDER TOTAL: \$2011\.00/);assert.match(p.text,/P1 \| IP #1 <Who> \| 40 \| \$1\.00 \| \$4\.00/);
   assert.match(p.html,/Bill To[\s\S]*Ship To[\s\S]*Order Items/);assert.match(p.html,/IP #1 &lt;Who&gt;/);assert.match(p.html,/Northern Virginia Area of NA/);assert.match(p.html,/chair@example\.invalid/);
   assert.match(p.text,/BILL TO\nGroup Name: Northern Virginia Area of NA/);assert.match(p.text,/P1 \| IP #1 <Who> \| 40/);
   assert.doesNotMatch(p.html+p.text+JSON.stringify(p.lines),/Spanish group|Stocked|Order on Request|On Hand|Low At|stock/i);
@@ -1160,7 +1195,8 @@ test('Free State screens: suggestions, quantity limits, picker, draft kept acros
   assert.equal(elements['inventory-content'].style.display,'none');
   assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(fs.lines.map(l=>[l.itemId,l.qty]))",c)),[['B1','7']]);
   const screen=elements['fs-order'].innerHTML;
-  assert.match(screen,/Free State Order/);assert.match(screen,/Item #<\/th><th>Description<\/th><th class="fs-q">Quantity/);assert.doesNotMatch(screen,/On Hand|Target|Total |In stock|Low stock/i);
+  assert.match(screen,/Free State Order/);assert.match(screen,/Item #<\/th><th>Description<\/th><th class="fs-m">Price<\/th><th class="fs-m">Total<\/th><th class="fs-q">Quantity/);assert.doesNotMatch(screen,/On Hand|Target|In stock|Low stock/i);
+  assert.match(screen,/id="fs-total-B1">\$70\.00/);assert.match(screen,/id="fs-grand">\$70\.00/);
   assert.match(screen,/Add Item/);assert.match(screen,/Review &amp; Send/);assert.doesNotMatch(screen,/Spanish|SP3101/);
   // Quantity box only keeps digits; blank or zero is left out of the order.
   const input={value:'-4.5x'};vm.runInContext("fsSetQty('B1',INPUT)",Object.assign(c,{INPUT:input}));

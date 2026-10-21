@@ -40,12 +40,12 @@ body.dark #trends-view .tr-table tr.cat td{color:var(--lime)}
 </style>
 <script>
 // Trends: distribution over time, calculated by the server from the order records on every open.
-var trends = { data: null, scope: 'all', loading: false, error: '', request: 0 };
+var trends = { data: null, scope: 'all', period: 'monthly', loading: false, error: '', request: 0 };
 
 function trEl() { return document.getElementById('trends-view'); }
 
 function trReset() {
-  trends.data = null; trends.scope = 'all'; trends.loading = false; trends.error = ''; trends.request++;
+  trends.data = null; trends.scope = 'all'; trends.period = 'monthly'; trends.loading = false; trends.error = ''; trends.request++;
   var box = trEl();
   if (box) box.innerHTML = '';
 }
@@ -53,11 +53,12 @@ function trReset() {
 // Trends is a Reports tab screen; the Reports tab creates the trends-view box and then calls this.
 function openTrends() {
   if (!trEl()) return;
-  trends.data = null; trends.scope = 'all';
+  trends.data = null; trends.scope = 'all'; trends.period = 'monthly';
   trLoad('');
 }
 
-function trLoad(month) {
+// selection is a month for the Monthly view and a year for the Annual view; blank means the current one.
+function trLoad(selection) {
   var request = ++trends.request;
   trends.loading = true; trends.error = '';
   trRender();
@@ -74,7 +75,7 @@ function trLoad(month) {
       if (request !== trends.request || dashboardSignedOut) return;
       trends.loading = false; trends.error = 'Could not load trends. Check your connection and try again.'; trRender();
     })
-    .getTrendsReport(month, sessionToken);
+    .getTrendsReport(selection, sessionToken, trends.period);
 }
 
 function trScopeExists(scope) {
@@ -115,7 +116,7 @@ function trScopeOptions() {
 
 function trChartHTML(series, months) {
   var max = Math.max.apply(null, series.concat([1])), last = series.length - 1;
-  var title = 'Distributed per month (picked up)';
+  var title = 'Items distributed per month (picked up)';
   return '<div class="tr-chart"><h3>' + title + '</h3><div class="tr-bars">' + series.map(function(v, i) {
     return '<div class="tr-col' + (i === last ? ' sel' : '') + '"><div class="tr-val">' + trNum(v) + '</div><div class="tr-bar" style="height:' + Math.round(v / max * 100) + '%"></div></div>';
   }).join('') + '</div><div class="tr-labels">' + months.map(function(m, i) {
@@ -125,7 +126,7 @@ function trChartHTML(series, months) {
 
 function trTableHTML(rows) {
   if (!rows.length) return '<div class="tr-tablewrap"><div class="tr-empty">No orders for this selection yet.</div></div>';
-  var d = trends.data, html = '<div class="tr-tablewrap"><table class="tr-table"><thead><tr><th>Item</th><th>Distributed</th><th>' + (d.prevMonth ? esc(trShort(d.prevMonth)) : 'Last month') + '</th><th>' + (d.avgMonths ? d.avgMonths + '-mo avg' : 'Avg') + '</th><th>Requested</th><th>Value</th></tr></thead><tbody>';
+  var d = trends.data, html = '<div class="tr-tablewrap"><table class="tr-table"><thead><tr><th>Item</th><th>Distributed</th><th>' + (d.period === 'annual' ? (d.prevYear ? esc(d.prevYear) : 'Last year') : (d.prevMonth ? esc(trShort(d.prevMonth)) : 'Last month')) + '</th><th>' + (d.period === 'annual' ? 'Avg/month' : (d.avgMonths ? d.avgMonths + '-mo avg' : 'Avg')) + '</th><th>Requested</th><th>Value</th></tr></thead><tbody>';
   var cat = null;
   rows.forEach(function(r) {
     if (r.category !== cat) { cat = r.category; html += '<tr class="cat"><td colspan="6">' + esc(trCat(cat)) + '</td></tr>'; }
@@ -137,29 +138,45 @@ function trTableHTML(rows) {
 function trRender() {
   var box = trEl(), d = trends.data;
   if (!box || dashboardSignedOut) return;
-  var html = '<div class="tr-sub">What groups picked up each month, and how it compares with earlier months.</div>';
+  var html = '<div class="tr-sub">What groups picked up, and how it compares with earlier months and years.</div>';
   if (trends.error) html += '<div class="tr-msg error" role="alert">' + esc(trends.error) + '</div>';
   if (!d) { box.innerHTML = html + (trends.loading ? '<div class="spinner"><div class="spin"></div>Loading trends...</div>' : ''); return; }
+  var annual = d.period === 'annual', dis = trends.loading ? ' disabled' : '';
   var rows = trRows(), series = trSeriesTotals(rows), last = series.length - 1, n = d.avgMonths;
   var sum = function(key) { return rows.reduce(function(total, r) { return total + (Number(r[key]) || 0); }, 0); };
-  var prev = d.prevMonth ? series[last - 1] : null;
-  var avg = n ? series.slice(last - n, last).reduce(function(a, b) { return a + b; }, 0) / n : null;
-  html += '<div class="tr-controls"><label>Month<select onchange="trLoad(this.value)"' + (trends.loading ? ' disabled' : '') + '>'
-    + d.availableMonths.map(function(m) { return '<option value="' + esc(m) + '"' + (m === d.month ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('')
-    + '</select></label><label>Show<select onchange="trSetScope(this.value)">' + trScopeOptions() + '</select></label></div>';
-  html += '<div class="tr-notice"><strong>' + esc(d.month) + '</strong>' + (d.monthToDate ? '<span class="tr-badge">Month to date</span>' : '')
-    + '<br>' + (d.monthToDate ? 'Orders waiting for pickup are not counted yet, so Distributed looks low until they are picked up. ' : '')
-    + 'Distributed counts picked-up orders only. Quantities represent individual items, except readings, which are counted as sets. Totals include the H&amp;I Subcommittee. '
-    + (d.unknownPackLines && d.unknownPackLines.length ? '<br><strong>Warning:</strong> ' + d.unknownPackLines.length + ' order line(s) have no saved pack size (Order Items column I) and are counted as single items. '  : '')
-    + (n ? 'Average of the ' + n + ' earlier month' + (n === 1 ? '' : 's') + ' since tracking began (' + esc(d.startMonth) + ').' : 'No earlier months since tracking began (' + esc(d.startMonth) + ').') + '</div>';
+  var total = series.reduce(function(a, b) { return a + b; }, 0);
+  var shown = annual ? total : series[last];
+  var prev = annual ? (d.prevYear ? sum('prev') : null) : (d.prevMonth ? series[last - 1] : null);
+  var avg = annual ? (d.monthsCounted ? total / d.monthsCounted : null) : (n ? series.slice(last - n, last).reduce(function(a, b) { return a + b; }, 0) / n : null);
+  var pick = annual
+    ? '<label>Year<select onchange="trLoad(this.value)"' + dis + '>' + d.availableYears.map(function(y) { return '<option value="' + esc(y) + '"' + (y === d.year ? ' selected' : '') + '>' + esc(y) + '</option>'; }).join('') + '</select></label>'
+    : '<label>Month<select onchange="trLoad(this.value)"' + dis + '>' + d.availableMonths.map(function(m) { return '<option value="' + esc(m) + '"' + (m === d.month ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select></label>';
+  html += '<div class="tr-controls"><label>View<select onchange="trSetPeriod(this.value)"' + dis + '><option value="monthly"' + (annual ? '' : ' selected') + '>Monthly</option><option value="annual"' + (annual ? ' selected' : '') + '>Annual</option></select></label>'
+    + pick + '<label>Show<select onchange="trSetScope(this.value)">' + trScopeOptions() + '</select></label></div>';
+  var common = 'Distributed counts picked-up orders only. Quantities represent individual items, except readings, which are counted as sets. Totals include the H&amp;I Subcommittee. '
+    + (d.unknownPackLines && d.unknownPackLines.length ? '<br><strong>Warning:</strong> ' + d.unknownPackLines.length + ' order line(s) have no saved pack size (Order Items column I) and are counted as single items. ' : '');
+  if (annual) {
+    html += '<div class="tr-notice"><strong>' + esc(d.year) + '</strong>' + (d.yearToDate ? '<span class="tr-badge">Year to date</span>' : '')
+      + '<br>' + (d.yearToDate ? 'Orders waiting for pickup are not counted yet, so Distributed looks low until they are picked up. ' : '') + common
+      + 'Counts only the ' + d.monthsCounted + ' month' + (d.monthsCounted === 1 ? '' : 's') + ' of ' + esc(d.year) + ' since tracking began (' + esc(d.startMonth) + ').</div>';
+  } else {
+    html += '<div class="tr-notice"><strong>' + esc(d.month) + '</strong>' + (d.monthToDate ? '<span class="tr-badge">Month to date</span>' : '')
+      + '<br>' + (d.monthToDate ? 'Orders waiting for pickup are not counted yet, so Distributed looks low until they are picked up. ' : '') + common
+      + (n ? 'Average of the ' + n + ' earlier month' + (n === 1 ? '' : 's') + ' since tracking began (' + esc(d.startMonth) + ').' : 'No earlier months since tracking began (' + esc(d.startMonth) + ').') + '</div>';
+  }
   html += '<div class="tr-cards">'
-    + '<div class="tr-card lead"><span>Distributed</span><strong>' + trNum(series[last]) + '</strong><small>' + trMoney(sum('value')) + ' value</small></div>'
-    + '<div class="tr-card"><span>' + (d.prevMonth ? esc(d.prevMonth) : 'Last month') + '</span><strong>' + trNum(prev) + '</strong><small>distributed</small></div>'
-    + '<div class="tr-card"><span>' + (n ? n + '-month average' : 'Average') + '</span><strong>' + trNum(avg) + '</strong><small>distributed per month</small></div>'
-    + '<div class="tr-card"><span>Requested</span><strong>' + trNum(sum('requested')) + '</strong><small>' + esc(d.month) + '</small></div></div>';
+    + '<div class="tr-card lead"><span>Items distributed</span><strong>' + trNum(shown) + '</strong><small>' + trMoney(sum('value')) + ' value</small></div>'
+    + '<div class="tr-card"><span>' + (annual ? (d.prevYear ? esc(d.prevYear) : 'Last year') : (d.prevMonth ? esc(d.prevMonth) : 'Last month')) + '</span><strong>' + trNum(prev) + '</strong><small>items distributed</small></div>'
+    + '<div class="tr-card"><span>' + (annual ? 'Monthly average' : (n ? n + '-month average' : 'Average')) + '</span><strong>' + trNum(avg) + '</strong><small>items distributed per month</small></div>'
+    + '<div class="tr-card"><span>Items requested</span><strong>' + trNum(sum('requested')) + '</strong><small>' + esc(annual ? d.year : d.month) + '</small></div></div>';
   html += trChartHTML(series, d.months) + trTableHTML(rows);
   box.innerHTML = html;
 }
 
+function trSetPeriod(value) {
+  trends.period = value === 'annual' ? 'annual' : 'monthly';
+  trends.data = null;
+  trLoad('');
+}
 function trSetScope(value) { trends.scope = value; trRender(); }
 </script>
