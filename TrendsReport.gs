@@ -1,10 +1,23 @@
 // Distribution trends for the Inventory tab. Calculated from Orders and Order Items on every request;
 // nothing is saved, so corrected orders and old months always agree with the order records.
 // Requested = every order for the meeting month. Distributed = Completed orders only (Ready means packed, not received).
-// Quantities are in order units (packs for pack items), the same as the order form and the Reports tab.
+// Quantities are individual items: an order line's quantity (in packs) times the pack size saved on that line. Dollar values
+// stay at the pack price. Lines with no saved pack size count as 1 and are listed in unknownPackLines for the screen to warn about.
 const TRENDS_START_MONTH_ = 'October 2026'; // first month of real order tracking; earlier months never count toward averages
 const TRENDS_SERIES_MONTHS_ = 6;
 const TRENDS_AVERAGE_MONTHS_ = 3;
+
+// Item order inside a category, the same as the order form and Inventory: by the number in the name when it has one (IP #6
+// before IP #11), otherwise by item number (keytags run Welcome, 30 Days, 60 Days, 90 Days, 6 Months...; medallions run by years).
+function itemSortScore_(name, itemId) {
+  const m = String(name).match(/#\s*(\d+)/);
+  if (m) return parseInt(m[1], 10);
+  if (/Eternity/i.test(name)) return 999999;
+  return 100000 + (parseFloat(String(itemId).replace(/\D/g, '')) || 0);
+}
+function compareItems_(a, b) {
+  return String(a.category).localeCompare(String(b.category)) || itemSortScore_(a.name, a.itemId) - itemSortScore_(b.name, b.itemId) || String(a.name).localeCompare(String(b.name));
+}
 
 function roundTo_(n, places) { const f = Math.pow(10, places); return Math.round(n * f) / f; }
 
@@ -39,7 +52,7 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
 
   const items = {};
   const blank = function() { return { requested: 0, distributed: 0, value: 0 }; };
-  const monthTotals = {};
+  const monthTotals = {}, unknownPack = {};
   Object.keys(wanted).forEach(function(ym) {
     const completed = [];
     (byYm[ym] || []).forEach(function(o) {
@@ -47,16 +60,18 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
       orderItemRowIndicesForOrder_(lines, String(o.orderId).trim()).forEach(function(i) {
         const r = lines[i], itemId = String(r[2]);
         if (!itemId) return;
-        const requested = Number(r[5]) || 0, distributed = done ? Number(r[6]) || 0 : 0;
+        const pack = linePackSize_(r);
+        if (!pack.known) unknownPack[String(r[0]).trim()] = true;
+        const packs = Number(r[6]) || 0, requested = (Number(r[5]) || 0) * pack.size, distributed = done ? packs * pack.size : 0;
         const known = catalog[itemId];
         const item = items[itemId] || (items[itemId] = { itemId: itemId, name: known ? known.name : String(r[3]),
           category: known ? known.category : 'Other', months: {} });
         const cell = item.months[ym] || (item.months[ym] = blank());
         cell.requested += requested; cell.distributed += distributed;
-        cell.value = roundTo_(cell.value + roundTo_(distributed * (Number(r[4]) || 0), 2), 2);
+        cell.value = roundTo_(cell.value + roundTo_((done ? packs : 0) * (Number(r[4]) || 0), 2), 2);
         const total = monthTotals[ym] || (monthTotals[ym] = blank());
         total.requested += requested; total.distributed += distributed;
-        total.value = roundTo_(total.value + roundTo_(distributed * (Number(r[4]) || 0), 2), 2);
+        total.value = roundTo_(total.value + roundTo_((done ? packs : 0) * (Number(r[4]) || 0), 2), 2);
       });
     });
   });
@@ -75,7 +90,7 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
       avg: average(function(ym) { return get(it.months, ym).distributed; }),
       series: seriesYms.map(function(ym) { return get(it.months, ym).distributed; }) };
   }).filter(function(r) { return r.requested || r.distributed || r.prev || r.series.some(Boolean); })
-    .sort(function(a, b) { return a.category.localeCompare(b.category) || a.name.localeCompare(b.name); });
+    .sort(compareItems_);
 
   const sel = get(monthTotals, selYm);
   return {
@@ -89,6 +104,7 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
     series: seriesYms.map(function(ym) { return { month: monthLabel_(ym), requested: get(monthTotals, ym).requested,
       distributed: get(monthTotals, ym).distributed, value: get(monthTotals, ym).value }; }),
     categories: Array.from(new Set(rows.map(function(r) { return r.category; }))),
+    unknownPackLines: Object.keys(unknownPack).sort(),
     items: rows };
 }
 

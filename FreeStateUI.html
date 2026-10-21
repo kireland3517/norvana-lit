@@ -9,8 +9,9 @@ body.dark #fs-order .fs-back{color:var(--lime)}
 #fs-order .fs-table th{background:var(--snow);font-size:11px;text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);color:var(--muted)}
 #fs-order .fs-table td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:top;color:var(--onyx)}
 #fs-order .fs-table td.fs-id{width:64px;white-space:nowrap}
-#fs-order .fs-table td.fs-q,#fs-order .fs-table th.fs-q{width:112px;text-align:right}
-#fs-order .fs-qty{width:64px;text-align:right;font:inherit;font-size:15px;padding:7px 8px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
+#fs-order .fs-table td.fs-q,#fs-order .fs-table th.fs-q{width:1%;white-space:nowrap;text-align:right}
+#fs-order .fs-table td.fs-q .qty-wrap{justify-content:flex-end}
+#fs-order .fs-qty{width:46px;height:32px;text-align:center;font:inherit;font-size:15px;font-weight:600;padding:0 2px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
 #fs-order .fs-x{background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:4px 6px}
 #fs-order .fs-req{width:100%;margin-top:6px;font:inherit;font-size:12px;padding:6px 8px;border:1px dashed var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
 #fs-order .fs-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
@@ -62,11 +63,22 @@ function fsReset() {
 }
 
 function fsSuggestedLines() {
-  // Same calculation as the inventory report: stocked, active products below their Target (Low At) level, across every category.
+  // Every stocked, active product that is low (yellow) or out (red), across every category. The quantity brings it to Target
+  // Stock: one above Low At, or one whole pack above for pack items (same calculation as the inventory report).
   var stocked = liveInventoryItems().filter(function(i) { return fsActive(i) && i.inventoryType !== 'Order on Request'; });
   var model = inventoryReportModel(stocked, { categories: null, include: 'reorder' }), lines = [];
   model.groups.forEach(function(g) { g.rows.forEach(function(r) { if (r.suggested > 0) lines.push({ itemId: r.itemId, qty: String(r.suggested), requestedFor: '', manual: false }); }); });
   return lines;
+}
+
+var FS_NOTHING_LOW_ = 'No stocked product is low or out of stock right now. Use Add Item to order anything else.';
+// Throws away the quantities and added products on screen and rebuilds the list from the current counts.
+function fsResetToSuggested() {
+  showConfirm('Replace this order with the suggested items from the current stock counts? Quantity changes and added products on this screen will be lost.', 'Reset', function() {
+    fs.lines = fsSuggestedLines(); fs.pickerOpen = false; fs.pickerText = ''; fs.message = ''; fs.error = false;
+    fs.note = fs.lines.length ? 'Order reset to the suggested items from the current stock counts.' : FS_NOTHING_LOW_;
+    fsSaveDraft(); fsRender();
+  }, null, true);
 }
 
 function fsSortedLines() {
@@ -94,12 +106,13 @@ function openFreeStateOrder() {
 
 function fsStartEdit() {
   var draft = fsLoadDraft(), dropped = 0;
-  if (draft) {
+  fs.lines = [];
+  // An empty saved order is not worth keeping: start again from the suggestions so a stale blank never hides low stock.
+  if (draft && draft.length) {
     fs.lines = draft.filter(function(l) { var it = fsItem(l.itemId); if (!it || !fsActive(it)) { dropped++; return false; } return true; });
     if (dropped) fs.note = dropped + ' product' + (dropped === 1 ? ' is' : 's are') + ' no longer available and was removed from your saved order.';
-  } else {
-    fs.lines = fsSuggestedLines();
   }
+  if (!fs.lines.length) { fs.lines = fsSuggestedLines(); if (!fs.lines.length) fs.note = FS_NOTHING_LOW_; }
   fsSaveDraft();
   fs.screen = 'edit';
   fsLoadSettings(function() { fsRender(); });
@@ -159,13 +172,16 @@ function fsEditHTML() {
     var it = fsItem(l.itemId), name = it ? it.name : l.itemId;
     var req = l.manual && fsOnRequest(l.itemId) ? '<input class="fs-req" type="text" maxlength="100" placeholder="Requested for (optional, not sent to Free State)" aria-label="Requested for ' + esc(name) + '" value="' + esc(l.requestedFor || '') + '" oninput="fsSetRequested(\'' + esc(l.itemId) + '\',this.value)">' : '';
     return '<tr><td class="fs-id">' + esc(l.itemId) + '</td><td>' + esc(name) + req + '</td><td class="fs-q">'
-      + '<input class="fs-qty" type="text" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Quantity for ' + esc(name) + '" value="' + esc(l.qty) + '" oninput="fsSetQty(\'' + esc(l.itemId) + '\',this)">'
-      + '<button type="button" class="fs-x" aria-label="Remove ' + esc(name) + '" onclick="fsRemove(\'' + esc(l.itemId) + '\')">&times;</button></td></tr>';
+      + '<div class="qty-wrap compact">'
+      + '<button type="button" class="qty-btn" aria-label="Subtract one from ' + esc(name) + '" onclick="fsStep(\'' + esc(l.itemId) + '\',-1)">&minus;</button>'
+      + '<input class="fs-qty" id="fs-qty-' + esc(l.itemId) + '" type="text" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Quantity for ' + esc(name) + '" value="' + esc(l.qty) + '" oninput="fsSetQty(\'' + esc(l.itemId) + '\',this)">'
+      + '<button type="button" class="qty-btn qty-plus" aria-label="Add one to ' + esc(name) + '" onclick="fsStep(\'' + esc(l.itemId) + '\',1)">+</button>'
+      + '<button type="button" class="fs-x" aria-label="Remove ' + esc(name) + '" onclick="fsRemove(\'' + esc(l.itemId) + '\')">&times;</button></div></td></tr>';
   }).join('');
   if (!rows) rows = '<tr><td colspan="3" style="color:var(--muted)">No products yet. Use Add Item.</td></tr>';
   return '<table class="fs-table"><thead><tr><th>Item #</th><th>Description</th><th class="fs-q">Quantity</th></tr></thead><tbody>' + rows + '</tbody></table>'
     + (fs.pickerOpen ? fsPickerHTML() : '')
-    + '<div class="fs-actions"><button type="button" onclick="fsTogglePicker()">Add Item</button><button type="button" class="primary" id="fs-review-btn" onclick="fsReview()"' + (fs.busy ? ' disabled' : '') + '>Review &amp; Send</button></div>';
+    + '<div class="fs-actions"><button type="button" onclick="fsTogglePicker()">Add Item</button><button type="button" onclick="fsResetToSuggested()">Reset to Suggested</button><button type="button" class="primary" id="fs-review-btn" onclick="fsReview()"' + (fs.busy ? ' disabled' : '') + '>Review &amp; Send</button></div>';
 }
 
 function fsLine(id) { return fs.lines.find(function(l) { return l.itemId === id; }); }
@@ -173,6 +189,14 @@ function fsSetQty(id, input) {
   var clean = input.value.replace(/\D/g, '').slice(0, 4);
   if (clean !== input.value) input.value = clean;
   var l = fsLine(id); if (l) { l.qty = clean; fsSaveDraft(); }
+  fs.message = ''; var m = document.getElementById('fs-msg'); if (m) m.textContent = '';
+}
+// Plus and minus beside a quantity; blank counts as 0, and 0 leaves the product out of the order.
+function fsStep(id, delta) {
+  var l = fsLine(id); if (!l) return;
+  l.qty = String(Math.max(0, Math.min(9999, (parseInt(l.qty, 10) || 0) + delta)));
+  fsSaveDraft();
+  var input = document.getElementById('fs-qty-' + id); if (input) input.value = l.qty;
   fs.message = ''; var m = document.getElementById('fs-msg'); if (m) m.textContent = '';
 }
 function fsSetRequested(id, value) { var l = fsLine(id); if (l) { l.requestedFor = value.slice(0, 100); fsSaveDraft(); } }

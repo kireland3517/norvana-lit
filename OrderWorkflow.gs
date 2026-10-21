@@ -197,7 +197,7 @@ function getOrdersReport(period, selection, group, token) {
     const groups = Array.from(groupNames.values()).sort((a,b) => a.localeCompare(b));
     const selected = inPeriod.filter(o => !group || groupKey(o.groupName) === groupKey(group));
     const lines = getSheet('Order Items').getDataRange().getValues();
-    const catalog = getCatalogMap_(), itemMap = new Map(), groupMap = new Map();
+    const catalog = getCatalogMap_(), itemMap = new Map(), groupMap = new Map(), unknownPack = new Set();
     const empty = () => ({ orderCount: 0, requested: 0, fulfilled: 0, estimated: 0, collected: 0, charged: 0, pending: 0 });
     const totals = empty(), months = Array.from({length:12}, (_,i) => ({ month: monthLabel_(year * 12 + i), ...empty() }));
     const add = (target, row) => {
@@ -217,13 +217,15 @@ function getOrdersReport(period, selection, group, token) {
         const r = lines[i], lineId = String(r[0]).trim();
         if (seenLines.has(lineId)) return;
         seenLines.add(lineId);
-        const id = String(r[2]), requested = Number(r[5]) || 0;
+        const id = String(r[2]), requested = Number(r[5]) || 0, pack = linePackSize_(r);
+        if (!pack.known) unknownPack.add(lineId);
         const fulfilled = o.status === 'Ready' || o.status === 'Completed' ? Number(r[6]) || 0 : 0;
-        const item = itemMap.get(id) || { itemId: id, name: catalog[id] ? catalog[id].name : String(r[3]), requested: 0, fulfilled: 0, estimated: 0, fulfilledValue: 0 };
-        item.requested += requested; item.fulfilled += fulfilled;
+        const item = itemMap.get(id) || { itemId: id, name: catalog[id] ? catalog[id].name : String(r[3]), category: catalog[id] ? catalog[id].category : 'Other', requested: 0, fulfilled: 0, estimated: 0, fulfilledValue: 0 };
+        // Counts are individual items (quantity x the pack size saved on the line); values stay at the pack price.
+        item.requested += requested * pack.size; item.fulfilled += fulfilled * pack.size;
         item.estimated = Math.round((item.estimated + Math.round(requested * Number(r[4]) * 100) / 100) * 100) / 100;
         item.fulfilledValue = Math.round((item.fulfilledValue + Math.round(fulfilled * Number(r[4]) * 100) / 100) * 100) / 100;
-        itemMap.set(id,item); result.requested += requested; result.fulfilled += fulfilled;
+        itemMap.set(id,item); result.requested += requested * pack.size; result.fulfilled += fulfilled * pack.size;
       });
       const key = groupKey(o.groupName), summary = groupMap.get(key) || { groupName: result.groupName, ...empty() };
       add(summary,result); groupMap.set(key,summary); add(totals,result);
@@ -232,6 +234,7 @@ function getOrdersReport(period, selection, group, token) {
     });
     return { period: period, selection: annual ? String(year) : monthLabel_(ym), group: group || '', groups: groups,
       totals: totals, orders: orders, byGroup: Array.from(groupMap.values()).sort((a,b) => a.groupName.localeCompare(b.groupName)),
-      items: Array.from(itemMap.values()).sort((a,b) => a.name.localeCompare(b.name)), months: annual ? months : [] };
+      items: Array.from(itemMap.values()).sort(compareItems_), months: annual ? months : [],
+      unknownPackLines: Array.from(unknownPack).sort() };
   });
 }

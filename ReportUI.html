@@ -49,11 +49,11 @@ function loadReports(){
 }
 function renderReportsShell(){
   document.getElementById('reports-content').innerHTML='<div style="padding-top:16px"><div class="report-mode-tabs">'+
-    [['orders','Orders'],['chair','Chair Report']].map(([key,label])=>'<button class="report-mode-tab'+(reportMode===key?' active':'')+'" onclick="setReportMode(\''+key+'\')">'+label+'</button>').join('')+
+    [['orders','Orders'],['trends','Trends'],['chair','Chair Report']].map(([key,label])=>'<button class="report-mode-tab'+(reportMode===key?' active':'')+'" onclick="setReportMode(\''+key+'\')">'+label+'</button>').join('')+
     '</div><div id="report-controls"></div><div id="report-panel"></div><div id="footer-reports"></div></div>';
 }
 function setReportMode(mode){
-  if(!['orders','chair'].includes(mode))return;
+  if(!['orders','trends','chair'].includes(mode))return;
   reportCanLeave(()=>{reportMode=mode;chairDirty=false;renderReportsShell();fetchReport();});
 }
 function onReportMonthChange(value){
@@ -78,6 +78,7 @@ function fetchReport(){
   const request=++reportRequest,mode=reportMode;chairPreview=null;chairPreviewSequence++;
   ordersReportData=null;chairData=null;
   if(mode==='orders')renderOrdersControls();else document.getElementById('report-controls').innerHTML='';
+  if(mode==='trends'){document.getElementById('report-panel').innerHTML='<div id="trends-view"></div>';openTrends();return;}
   document.getElementById('report-panel').innerHTML='<div class="spinner"><div class="spin"></div>Loading...</div>';
   const runner=google.script.run.withSuccessHandler(data=>{
     if(request!==reportRequest||mode!==reportMode||dashboardSignedOut)return;
@@ -90,6 +91,8 @@ function fetchReport(){
   else runner.getChairReport(reportMonth,sessionToken);
 }
 function fetchSpecialReport(){fetchReport();}
+// The Trends button on the Inventory tab is a shortcut: Trends itself lives in the Reports tab.
+function openTrendsShortcut(){requestedReportMode='trends';switchView('reports');}
 // On-screen tables use short column names on narrow phones so the whole table fits; print and CSV keep the full names.
 const SHORT_HEADERS={'Requested':'Req.','Fulfilled':'Filled','Estimated Value':'Est.','Fulfilled Value':'Filled Val.','Amount':'Amt.','Orders':'Ord.','Pending':'Pend.','Collected':'Coll.','Charged to H&I':'H&I'};
 function shortHeader(h){return (typeof window!=='undefined'&&window.innerWidth<=640&&SHORT_HEADERS[h])||h;}
@@ -104,7 +107,8 @@ function ordersMonthData(){return {headers:['Month','Orders','Requested','Fulfil
 // H&I Subcommittee orders are charged to its budget, so that figure only appears once there is something to show.
 function hasCharged(){return !!(ordersReportData&&ordersReportData.totals&&ordersReportData.totals.charged>0);}
 function ordersTotalsHTML(){const t=ordersReportData.totals;return '<div class="report-totals">'+[['Collected',t.collected],...(hasCharged()?[['Charged to H&I',t.charged]]:[]),['Pending',t.pending],['Estimated Value',t.estimated]].map(([label,n])=>'<div class="report-total"><span>'+label+'</span><strong>'+reportMoney(n)+'</strong></div>').join('')+'</div>';}
-function ordersHelp(){return reportView==='item'?'Fulfilled Value includes Ready and Completed.':'Pending: New estimates + Ready amounts. Collected: Completed.'+(hasCharged()?' Charged to H&I: Completed H&I Subcommittee orders, paid from its budget (not collected).':'');}
+function packWarning(d){return d&&d.unknownPackLines&&d.unknownPackLines.length?' WARNING: '+d.unknownPackLines.length+' order line(s) have no saved pack size (Order Items column I) and are counted as single items.':'';}
+function ordersHelp(){return (reportView==='item'?'Fulfilled Value includes Ready and Completed.':'Pending: New estimates + Ready amounts. Collected: Completed.')+(hasCharged()?' Charged to H&I: Completed H&I Subcommittee orders, paid from its budget (not collected).':'')+' Quantities represent individual items, except readings, which are counted as sets. Orders and totals include the H&I Subcommittee, which is not a group.'+packWarning(ordersReportData);}
 function renderOrdersResults(){
   if(!ordersReportData)return;
   const table=ordersTableData(),months=ordersMonthData();
@@ -118,8 +122,9 @@ function ordersCSVRows(){const d=ordersReportData,t=ordersTableData(),m=ordersMo
 function exportOrdersCSV(){if(ordersReportData)downloadReportCSV('NORVANA '+ordersTitle()+' '+ordersReportData.selection,ordersCSVRows());}
 // -- Inventory Print / Export (opened from the Inventory tab) --
 // Counts, targets and suggested orders are all in singles, the unit Catalog stock is kept in.
-// Incoming (already ordered) stock is not tracked, so Suggested Order = max(0, Target Stock - On Hand).
-// Order on Request items (H&I, Spanish and any product switched to it) have no counts or targets, so they are never
+// Target Stock is Low At plus one order multiple (the Pack Size, or the Catalog's optional Order Multiple, or 1). Only low (yellow) or out (red) items get a
+// Suggested Order = Target Stock - On Hand, rounded up to whole packs. Incoming (already ordered) stock is not tracked.
+// Order on Request items (a product switched to it in the Catalog sheet) have no counts or targets, so they are never
 // reported as low, out or missing stock; they sort after the stocked items in their category.
 function isOnRequestItem(i){return i.inventoryType==='Order on Request';}
 function inventoryStatusLabel(onHand,lowAt){const low=isNaN(parseFloat(lowAt))?5:Number(lowAt);return onHand<=0?'Out of stock':onHand<=low?'Low stock':'In stock';}
@@ -134,10 +139,13 @@ function inventoryReportModel(items,options){
   const sorted=base.filter(i=>!isOnRequestItem(i)).concat(base.filter(isOnRequestItem));
   const cats=inventoryCategoryOrder([...new Set(items.map(i=>i.category||'Other'))]).filter(c=>!wanted||wanted.includes(c));
   const groups=cats.map(cat=>({category:cat,rows:sorted.filter(i=>(i.category||'Other')===cat).map(i=>{
-    const onRequest=isOnRequestItem(i),onHand=Number(i.stock)||0,pack=Number(i.packSize)||1;
+    const onRequest=isOnRequestItem(i),onHand=Number(i.stock)||0,pack=Number(i.orderMultiple)>0?Number(i.orderMultiple):Number(i.packSize)||1;
     if(onRequest)return {itemId:i.itemId,name:i.name,pack:pack,onHand:null,target:null,suggested:null,packs:null,status:'On request',needsTarget:false,onRequest:true};
     const target=i.targetStock===null||i.targetStock===undefined||i.targetStock===''?null:Number(i.targetStock);
-    const suggested=target===null?null:Math.max(0,target-onHand),status=inventoryStatusLabel(onHand,i.lowAt);
+    const status=inventoryStatusLabel(onHand,i.lowAt);
+    let suggested=target===null?null:Math.max(0,target-onHand);
+    if(suggested>0&&pack>1)suggested=Math.ceil(suggested/pack)*pack;
+    if(suggested!==null&&status==='In stock')suggested=0;
     return {itemId:i.itemId,name:i.name,pack:pack,onHand:onHand,target:target,suggested:suggested,
       packs:suggested>0&&pack>1?Math.ceil(suggested/pack):null,status:status,needsTarget:target===null&&status!=='In stock',onRequest:false};
   }).filter(r=>options.include!=='reorder'||(!r.onRequest&&(r.suggested>0||r.needsTarget)))})).filter(g=>g.rows.length);
@@ -161,10 +169,10 @@ function inventoryPrintHTML(model,meta){
   const tables=model.groups.map(g=>'<h3 style="margin:18px 0 6px;font-size:14px">'+esc(g.category)+'</h3><table class="report-table" style="table-layout:fixed"><colgroup><col style="width:11%"><col style="width:31%"><col style="width:11%"><col style="width:12%"><col style="width:20%"><col style="width:15%"></colgroup><thead>'+head+'</thead><tbody>'+
     g.rows.map(r=>'<tr><td '+left+'>'+esc(r.itemId)+'</td><td '+left+'>'+esc(r.name)+(r.pack>1?'<br><small>Pack of '+r.pack+' - counts are in singles</small>':'')+'</td><td>'+(r.onRequest?'-':r.onHand)+'</td><td>'+(r.onRequest?'-':r.target===null?'':r.target)+'</td><td>'+esc(inventorySuggestedText(r))+'</td><td>'+(r.status==='In stock'||r.onRequest?esc(r.status):'<strong>'+esc(r.status.toUpperCase())+'</strong>')+'</td></tr>').join('')+'</tbody></table>').join('')||'<p>No items match this selection.</p>';
   return '<h2>NORVANA Literature Inventory</h2><p>Generated: '+esc(meta.generated)+'<br>'+esc(meta.scope)+'</p>'+
-    '<p style="font-size:12px">All counts are in singles (individual items). Target Stock is the item\'s Low At level from the Catalog sheet. Suggested Order = Target Stock - On Hand.'+(model.needTarget?' "Set target" marks '+model.needTarget+' low or out item'+(model.needTarget===1?'':'s')+' with no target.':'')+(model.onRequestCount?' Order on request items are ordered only when someone asks for them, so On Hand, Target Stock and Suggested Order do not apply to them.':'')+'</p>'+tables;
+    '<p style="font-size:12px">All counts are in singles (individual items). Target Stock is one above the item\'s Low At level (one whole pack above for pack items). Suggested Order = Target Stock - On Hand, rounded up to whole packs, for low and out of stock items only.'+(model.needTarget?' "Set target" marks '+model.needTarget+' low or out item'+(model.needTarget===1?'':'s')+' with no target.':'')+(model.onRequestCount?' Order on request items are ordered only when someone asks for them, so On Hand, Target Stock and Suggested Order do not apply to them.':'')+'</p>'+tables;
 }
 function inventoryCSVRows(model,meta){
-  return [['NORVANA Literature Inventory'],['Generated',meta.generated],['Scope',meta.scope],['All counts are in singles. Suggested Order = Target Stock - On Hand.'],[],
+  return [['NORVANA Literature Inventory'],['Generated',meta.generated],['Scope',meta.scope],['All counts are in singles. Target Stock is one above Low At (one pack above for pack items). Suggested Order = Target Stock - On Hand, in whole packs, for low and out of stock items.'],[],
     ['Category','Item #','Item Name','On Hand','Target Stock','Suggested Order','Stock Status','Order Unit','Suggested Packs','Inventory Type'],
     ...model.groups.flatMap(g=>g.rows.map(r=>[g.category,r.itemId,r.name,r.onRequest?'':r.onHand,r.onRequest||r.target===null?'':r.target,r.onRequest?'':r.target===null?'Set target':r.suggested,r.status,r.pack>1?'Pack of '+r.pack+' (counts are singles)':'Single items',r.packs===null?'':r.packs,r.onRequest?'Order on Request':'Stocked']))];
 }

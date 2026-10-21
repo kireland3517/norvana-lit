@@ -46,16 +46,13 @@ function trEl() { return document.getElementById('trends-view'); }
 
 function trReset() {
   trends.data = null; trends.scope = 'all'; trends.loading = false; trends.error = ''; trends.request++;
-  var box = trEl(), inv = document.getElementById('inventory-content');
-  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
-  if (inv) inv.style.display = '';
+  var box = trEl();
+  if (box) box.innerHTML = '';
 }
 
+// Trends is a Reports tab screen; the Reports tab creates the trends-view box and then calls this.
 function openTrends() {
-  var box = trEl(), inv = document.getElementById('inventory-content');
-  if (!box) return;
-  if (inv) inv.style.display = 'none';
-  box.style.display = '';
+  if (!trEl()) return;
   trends.data = null; trends.scope = 'all';
   trLoad('');
 }
@@ -140,8 +137,7 @@ function trTableHTML(rows) {
 function trRender() {
   var box = trEl(), d = trends.data;
   if (!box || dashboardSignedOut) return;
-  var html = '<button type="button" class="tr-back" onclick="closeTrends()">&larr; Inventory</button><div class="tr-title">Trends</div>'
-    + '<div class="tr-sub">What groups picked up each month, and how it compares with earlier months.</div>';
+  var html = '<div class="tr-sub">What groups picked up each month, and how it compares with earlier months.</div>';
   if (trends.error) html += '<div class="tr-msg error" role="alert">' + esc(trends.error) + '</div>';
   if (!d) { box.innerHTML = html + (trends.loading ? '<div class="spinner"><div class="spin"></div>Loading trends...</div>' : ''); return; }
   var rows = trRows(), series = trSeriesTotals(rows), last = series.length - 1, n = d.avgMonths;
@@ -153,7 +149,8 @@ function trRender() {
     + '</select></label><label>Show<select onchange="trSetScope(this.value)">' + trScopeOptions() + '</select></label></div>';
   html += '<div class="tr-notice"><strong>' + esc(d.month) + '</strong>' + (d.monthToDate ? '<span class="tr-badge">Month to date</span>' : '')
     + '<br>' + (d.monthToDate ? 'Orders waiting for pickup are not counted yet, so Distributed looks low until they are picked up. ' : '')
-    + 'Distributed counts picked-up orders only. '
+    + 'Distributed counts picked-up orders only. Quantities represent individual items, except readings, which are counted as sets. Totals include the H&amp;I Subcommittee. '
+    + (d.unknownPackLines && d.unknownPackLines.length ? '<br><strong>Warning:</strong> ' + d.unknownPackLines.length + ' order line(s) have no saved pack size (Order Items column I) and are counted as single items. '  : '')
     + (n ? 'Average of the ' + n + ' earlier month' + (n === 1 ? '' : 's') + ' since tracking began (' + esc(d.startMonth) + ').' : 'No earlier months since tracking began (' + esc(d.startMonth) + ').') + '</div>';
   html += '<div class="tr-cards">'
     + '<div class="tr-card lead"><span>Distributed</span><strong>' + trNum(series[last]) + '</strong><small>' + trMoney(sum('value')) + ' value</small></div>'
@@ -165,5 +162,4 @@ function trRender() {
 }
 
 function trSetScope(value) { trends.scope = value; trRender(); }
-function closeTrends() { trReset(); }
 </script>

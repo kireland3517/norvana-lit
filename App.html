@@ -383,6 +383,8 @@
   .item-row.has-qty .item-name { color: var(--blue); font-weight: 600; }
   .item-row.has-qty .qty-wrap { border-color: var(--lime-dark); }
 
+  .completed-month { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .completed-month select { flex: 1; font: inherit; font-size: 14px; padding: 9px 10px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--white); color: var(--onyx); }
   .qty-wrap { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
   .qty-btn {
     width: 34px; height: 34px; border-radius: 50%;
@@ -412,6 +414,10 @@
     -moz-appearance: textfield;
   }
   .qty-val:focus { outline: none; }
+  /* Compact stepper for dense screens (Inventory counts, Free State quantities): smaller buttons, typeable field. */
+  .qty-wrap.compact { gap: 5px; margin-left: 0; }
+  .qty-wrap.compact .qty-btn { width: 30px; height: 30px; font-size: 17px; position: relative; }
+  .qty-wrap.compact .qty-btn::after { content: ''; position: absolute; top: -5px; right: -3px; bottom: -5px; left: -3px; }
   .qty-val::-webkit-outer-spin-button,
   .qty-val::-webkit-inner-spin-button { -webkit-appearance: none; }
   .item-row.has-qty .qty-wrap .qty-btn:not(.qty-plus) { border-color: var(--blue); }
@@ -736,7 +742,7 @@
   .inv-price-label { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
   .inv-stock-input {
-    width: 44px; padding: 5px 0;
+    width: 46px; padding: 5px 0;
     text-align: center;
     border: 1px solid var(--border);
     border-radius: 7px;
@@ -746,6 +752,8 @@
     flex-shrink: 0;
     -webkit-appearance: none; appearance: none;
   }
+  .inv-stock-input::-webkit-outer-spin-button, .inv-stock-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .inv-stock-input { -moz-appearance: textfield; }
   .inv-stock-input:focus { outline: none; border-color: var(--blue); background: var(--white); }
   .inv-stock-input.ok { border-color: var(--success); color: var(--success); background: var(--success-pale); }
   .inv-stock-input.low { border-color: var(--warn); color: var(--warn); background: var(--warn-pale); }
@@ -1180,7 +1188,6 @@
         <div class="spinner"><div class="spin"></div>Loading inventory...</div>
       </div>
       <div id="fs-order" style="display:none"></div>
-      <div id="trends-view" style="display:none"></div>
     </div>
 
     <!-- SETTINGS VIEW -->
@@ -1300,6 +1307,7 @@ let meetingMonth   = '';
 let allOrders      = [];
 let currentFilter  = 'New';
 let currentOrderId = null;
+let completedMonth = null;
 let currentItems   = [];
 let viewsLoaded    = { orders: false, reports: false, inventory: false, settings: false };
 let dashboardSignedOut = false; // set on sign-out so a slow reply that arrives afterwards is ignored
@@ -1908,7 +1916,7 @@ var TILE_ACTIVE_CLASS = { New: 'active-new', Ready: 'active-ready', Completed: '
 function updateStats() {
   const newCount       = allOrders.filter(function(o) { return o.status === 'New'; }).length;
   const ready          = allOrders.filter(function(o) { return o.status === 'Ready'; }).length;
-  const completed      = allOrders.filter(function(o) { return o.status === 'Completed'; }).length;
+  const completed      = completedInView().length;
   document.getElementById('stat-new').textContent       = newCount;
   document.getElementById('stat-ready').textContent     = ready;
   document.getElementById('stat-completed').textContent = completed;
@@ -1934,21 +1942,53 @@ function filterOrders(status) {
   renderOrderList();
 }
 
+// Completed tab: one meeting month at a time. It opens on the current ordering/meeting month, and the dropdown looks back.
+var MONTH_NAMES_ = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function monthSortKey(label) {
+  var m = /^([A-Za-z]+) (\d{4})$/.exec(String(label || '')), i = m ? MONTH_NAMES_.indexOf(m[1]) : -1;
+  return i < 0 ? -1 : Number(m[2]) * 12 + i;
+}
+function completedMonthOptions() {
+  var seen = {}, list = [];
+  allOrders.forEach(function(o) { if (o.status === 'Completed' && o.meetingMonth && !seen[o.meetingMonth]) { seen[o.meetingMonth] = true; list.push(o.meetingMonth); } });
+  if (monthSortKey(meetingMonth) >= 0 && !seen[meetingMonth]) list.push(meetingMonth);
+  return list.sort(function(a, b) { return monthSortKey(b) - monthSortKey(a); });
+}
+function completedMonthNow() {
+  var opts = completedMonthOptions();
+  if (completedMonth && opts.indexOf(completedMonth) >= 0) return completedMonth;
+  return opts.indexOf(meetingMonth) >= 0 ? meetingMonth : (opts[0] || '');
+}
+function completedInView() {
+  var cur = completedMonthNow();
+  return allOrders.filter(function(o) { return o.status === 'Completed' && o.meetingMonth === cur; });
+}
+function completedMonthPickerHTML() {
+  var opts = completedMonthOptions(), cur = completedMonthNow();
+  if (!opts.length) return '';
+  return '<div class="completed-month"><label for="completed-month-select">Meeting month</label><select id="completed-month-select" onchange="setCompletedMonth(this.value)">'
+    + opts.map(function(o) { return '<option value="' + esc(o) + '"' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select></div>';
+}
+function setCompletedMonth(value) { completedMonth = value; updateStats(); renderOrderList(); }
+
 function renderOrderList() {
   const list = document.getElementById('orders-list');
+  const inCompleted = currentFilter === 'Completed';
+  const monthPicker = inCompleted ? completedMonthPickerHTML() : '';
   const filtered = currentFilter === 'All'
     ? allOrders.filter(function(o) { return o.status !== 'Completed'; })
+    : inCompleted ? completedInView()
     : allOrders.filter(function(o) { return o.status === currentFilter; });
 
   if (filtered.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.2 0 4 1.8 4 4v8Z"/><polyline points="15,9 18,9 18,11"/><path d="M6.5 5C9 5 11 7 11 9.5V17a2 2 0 0 1-2 2"/><line x1="6" x2="7" y1="10" y2="10"/></svg></div><div class="empty-title">No orders</div><div class="empty-sub">No ' +
-      (currentFilter === 'All' ? 'matching ' : currentFilter.toLowerCase() + ' ') + 'submitted orders</div></div>';
+    list.innerHTML = monthPicker + '<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.2 0 4 1.8 4 4v8Z"/><polyline points="15,9 18,9 18,11"/><path d="M6.5 5C9 5 11 7 11 9.5V17a2 2 0 0 1-2 2"/><line x1="6" x2="7" y1="10" y2="10"/></svg></div><div class="empty-title">No orders</div><div class="empty-sub">No ' +
+      (inCompleted ? 'completed orders for ' + esc(completedMonthNow()) : (currentFilter === 'All' ? 'matching ' : currentFilter.toLowerCase() + ' ') + 'submitted orders') + '</div></div>';
     return;
   }
 
   var trashSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
   var checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-  list.innerHTML = filtered.map(function(o) {
+  list.innerHTML = monthPicker + filtered.map(function(o) {
     var checkBtn = o.status === 'Ready'
       ? '<button type="button" class="card-check-icon" title="Picked Up" aria-label="Picked Up" onclick="event.stopPropagation();markPickedUp(\'' + esc(o.orderId) + '\')">' + checkSvg + '</button>'
       : '';
@@ -2440,7 +2480,7 @@ function renderInventory(items) {
   let html = '<div style="padding-top:16px">'
     + '<div style="height:12px"></div>'
     + '<div style="display:flex;gap:8px;margin-bottom:12px"><button class="save-inv-btn" style="margin:0;flex:1" onclick="openInventoryExport()">Print / Export</button>'
-    + '<button class="save-inv-btn" style="margin:0;flex:1" onclick="openTrends()">Trends</button>'
+    + '<button class="save-inv-btn" style="margin:0;flex:1" onclick="openTrendsShortcut()">Trends</button>'
     + '<button class="save-inv-btn" style="margin:0;flex:1" onclick="openFreeStateOrder()">Create Free State Order</button></div>'
     + '<div id="inv-status" role="status"></div>'
     + '<div class="inv-summary">'
@@ -2501,10 +2541,13 @@ function renderInventory(items) {
           ? '<div class="inv-stock-wrap"><div class="inv-field-label">Count</div><div class="report-help" style="margin:0">On request</div></div>'
           : '<div class="inv-stock-wrap">'
           + '<div class="inv-field-label">Count</div>'
+          + '<div class="qty-wrap compact">'
+          + '<button type="button" class="qty-btn" aria-label="Subtract one from ' + esc(item.name) + '" onclick="changeStock(\'' + esc(item.itemId) + '\',-1)">&minus;</button>'
           + '<input class="inv-stock-input ' + inpCls + '" id="inv-' + esc(item.itemId) + '"'
-          + ' type="number" step="1" value="' + stock + '"'
+          + ' type="number" inputmode="numeric" step="1" value="' + stock + '" aria-label="Count for ' + esc(item.name) + '"'
           + ' data-item-id="' + esc(item.itemId) + '" data-original="' + stock + '" data-low-at="' + lowAt + '" oninput="updateInvStyle(this);scheduleStockSave()" onblur="saveStockNow()">'
-          + '</div>')
+          + '<button type="button" class="qty-btn qty-plus" aria-label="Add one to ' + esc(item.name) + '" onclick="changeStock(\'' + esc(item.itemId) + '\',1)">+</button>'
+          + '</div></div>')
         + '</div>';
     });
     html += '</div>';
@@ -2552,6 +2595,15 @@ function filterInventory(filter, el) {
   });
 }
 
+// Plus and minus beside a count: the same path as typing (restyle, then autosave). Counts may go below zero.
+function changeStock(id, delta) {
+  var input = document.getElementById('inv-' + id);
+  if (!input) return;
+  var value = parseInt(input.value, 10);
+  input.value = (isNaN(value) ? 0 : value) + delta;
+  updateInvStyle(input);
+  scheduleStockSave();
+}
 function updateInvStyle(input) {
   const v = parseInt(input.value) || 0;
   const lowAt = isNaN(parseInt(input.dataset.lowAt)) ? 5 : parseInt(input.dataset.lowAt);

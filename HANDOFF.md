@@ -70,8 +70,9 @@ still sent. The Secretary report email is deliberately plain: the Lit Chair revi
 
 **Inventory > Create Free State Order** builds the monthly order to Free State and emails it from the committee account.
 
-- The list starts with every **Stocked**, active product below its Target Stock (Low At), across all categories, with the
-  Suggested Order quantity in singles. Quantities are editable; blank or 0 leaves a product out. **Add Item** lists every
+- The list starts with every **Stocked**, active product that is low (yellow) or out (red), across all categories, with a
+  Suggested Order quantity in singles that brings it to its Target Stock: Low At plus one order multiple (Pack Size,
+  or the optional Order Multiple for bulk items) (rounded up to whole packs). Quantities are editable; blank or 0 leaves a product out. **Add Item** lists every
   active product by category, including Order on Request ones. An optional **Requested For** note on a manually added Order on
   Request product is kept for the chair (in Order History) and is never in the email or printout.
 - **Review & Send** shows the exact email (From, To, Subject and the Bill To, Ship To and items tables). **Send Order**
@@ -96,9 +97,9 @@ still sent. The Secretary report email is deliberately plain: the Lit Chair revi
 - In the demo project, leave the Free State Order Email blank or set it to your own address so test orders never reach Free State.
 
 **Inventory Type.** Each Catalog product is **Stocked** or **Order on Request** (Catalog column I, edited in the sheet like
-Low At; there is no control for it in the app). H&I and Spanish Lit default to Order on Request when column I is blank;
-typing `Stocked` (or `Order on Request`) there overrides the category for that one product. To start keeping a count of an
-H&I or Spanish product, type `Stocked` in its column I cell, then enter its current count and Low At. Order on Request products have no count, Low At or Target, never show as low or out, are never suggested
+Low At; there is no control for it in the app). Every product, H&I and Spanish Lit included, is Stocked when column I is
+blank, so it has a count, Low At and low/out warnings like everything else; typing `Order on Request` there switches one
+product to on-request. Order on Request products have no count, Low At or Target, never show as low or out, are never suggested
 automatically, and appear last (marked "On request") in the Inventory Print / Export report. Marking an order Ready still
 deducts their stored count as before, so switching one to Stocked later needs a fresh count.
 
@@ -140,7 +141,8 @@ Admins can practice in a separate demo Apps Script project that points at its ow
   "Order changed. Reload it," reload and try again.
 - Chair Report: the report month is the area meeting where it is presented (for example November), but the Groups
   Served, Collected and H&I charged figures are the **previous month's** Completed orders (October's, picked up at the
-  October meeting). The screen and the email say "Orders recap: October 2026" so this is never ambiguous. Pick the
+  October meeting). Groups Served counts each group once and never counts the H&I Subcommittee (it is not a group; its
+  literature still counts in the H&I charged and literature totals). The screen and the email say "Orders recap: October 2026" so this is never ambiguous. Pick the
   reporting month and enter Spent and Notes. They save automatically (the line under the fields says
   Saved, or NOT SAVED in red if something went wrong). Review Email shows the recipient and the full message; Send emails it
   and saves that exact version, with its sent date, in the Chair Reports tab (column C, Finalized JSON). Later orders or
@@ -171,8 +173,8 @@ advanced service turned on (Services > Sheets API) and the script time zone set 
 | Tab | Columns (A onward) |
 |---|---|
 | Orders | Order ID, Timestamp, Area Meeting Month, Group Name, Contact Name, Email, Phone, Estimated Total, Fulfilled Total, Status, Fulfilled At, **Revision** (column L must be exactly "Revision") |
-| Order Items | Row ID, Order ID, Item ID, Item Name, Unit Price, Qty Ordered, Qty Fulfilled, Line Total |
-| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size, Inventory Type (optional: Stocked or Order on Request) |
+| Order Items | Row ID, Order ID, Item ID, Item Name, Unit Price, Qty Ordered, Qty Fulfilled, Line Total, Pack Size (saved when the order is placed) |
+| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size, Inventory Type (optional: Stocked or Order on Request), Order Multiple (optional, see Inventory) |
 | Config | Two columns, Setting and Value, with rows: Lit Chair Email, Dashboard Access Code, Secretary Email |
 | Schedule | Meeting Month (e.g. "October 2026"), Window Open, Window Close |
 | Groups | Group Name (one group per row) |
@@ -180,9 +182,13 @@ advanced service turned on (Services > Sheets API) and the script time zone set 
 | Order History | Order ID, Sent At, Item #, Description, Quantity, Inventory Type, Requested For, Status, Recipient, Bill To, Ship To, Recorded At (one row per product, created by the app on the first sent order) |
 | Free State Order Log | Request ID, Order ID, Status, Created, Updated, Attempt JSON, Snapshot JSON (technical send record, created by the app; leave it alone) |
 
-The Inventory tab's Print / Export button builds one report (Print / PDF or CSV). Its Target Stock is each item's Low At (Catalog column G), so Suggested Order = Low At - On Hand, in singles (never below 0). Low At also decides when an item turns orange (low) or red (out). There is no separate target column. Incoming (already ordered) stock is not tracked.
+The Inventory tab's Print / Export button builds one report (Print / PDF or CSV). Its Target Stock is one above each item's Low At (Catalog column G), or one order multiple above. The order multiple is the Pack Size for pack items, 1 for single items, or the optional **Order Multiple** (Catalog column J) for bulk items: the H&I booklets use Low At 20 and Order Multiple 10, so at 0 the suggestion is 30. Pack Size itself is not changed for them because it also scales prices and stock deductions on orders. So Suggested Order = Target Stock - On Hand, rounded up to whole packs, and only for low or out items. Low At also decides when an item turns orange (low, at or below Low At) or red (out). There is no separate target column. Incoming (already ordered) stock is not tracked.
 
-**Trends and Monthly Summary:** the Inventory tab's Trends button and the sheet's **Monthly Summary** tab both calculate from Orders and Order Items on every view; nothing is saved, so corrected orders and old months always agree. Requested counts every order for the meeting month; Distributed counts Completed orders only (Ready means packed); value uses the price saved on each order line; the average is the up-to-3 earlier months since tracking began (`TRENDS_START_MONTH_` in `TrendsReport.gs`, October 2026), zero months included. Monthly Summary is written by the script (`MonthlySummary.gs`) from the same calculation as Trends, so the two always match. Run `setupMonthlySummary()` once from the Apps Script editor: it rebuilds the Monthly Summary tab in place (keeping the month in B1; the old layout is replaced), and installs an edit trigger (approve the permission prompt). The tab refreshes when B1, Orders or Order Items is edited by hand and when the app submits, packs, completes, reopens or deletes an order. Spreadsheet formulas were tried and dropped because they break when Order Items has fewer rows than the formula ranges.
+**Lit Chair Completed tab:** the Completed tile and list show one meeting month at a time. It opens on the current ordering/meeting month from the Schedule tab, and the Meeting month dropdown above the list looks back at earlier months; the Completed count is that month's. The All view still hides Completed orders. Nothing is archived or deleted.
+
+**Individual items vs packs.** Order quantities (the order form, Lit Chair screens, Order Items columns F and G) are in packs for pack items. The reports (Reports tab Orders report, Trends and the Monthly Summary tab) count individual items: quantity x the **Pack Size saved on that order line** (Order Items column I, written when the order is placed, so a later Catalog change never rewrites old reports). Dollar values stay at the pack price. Readings (Set of 7) have Pack Size 1, so they count as sets. Order Multiple (Catalog column J) only affects Free State ordering and is ignored here. A line with no value in column I cannot be converted: it counts as 1 and the reports show a WARNING with the count, so fix it by typing its pack size into column I. The one-time backfill of the October 2026 lines copied each item's Catalog pack size. The H&I Subcommittee's literature is in the totals, but it is not counted as a group in Groups Served, and the reports say so.
+
+**Trends and Monthly Summary:** Trends is the third tab in the **Reports** tab (Orders, Trends, Chair Report); the Inventory tab's Trends button is a shortcut that opens it. Trends and the sheet's **Monthly Summary** tab both calculate from Orders and Order Items on every view; nothing is saved, so corrected orders and old months always agree. Requested counts every order for the meeting month; Distributed counts Completed orders only (Ready means packed); value uses the price saved on each order line; the average is the up-to-3 earlier months since tracking began (`TRENDS_START_MONTH_` in `TrendsReport.gs`, October 2026), zero months included. Monthly Summary is written by the script (`MonthlySummary.gs`) from the same calculation as Trends, so the two always match. Run `setupMonthlySummary()` once from the Apps Script editor: it rebuilds the Monthly Summary tab in place (keeping the month in B1; the old layout is replaced), and installs an edit trigger (approve the permission prompt). The tab refreshes when B1, Orders or Order Items is edited by hand and when the app submits, packs, completes, reopens or deletes an order. Spreadsheet formulas were tried and dropped because they break when Order Items has fewer rows than the formula ranges.
 
 Catalog column E counts single items, and Pack Size (column H) is how many singles one ordered unit contains (for
 example 5 for a five-pack), so orders count packs while stock counts singles. Leave the Revision,

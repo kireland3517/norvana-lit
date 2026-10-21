@@ -12,7 +12,9 @@ function monthlySummaryTable_(report, updatedText) {
     top: [['Month Filter', report.month, 'Last updated', updatedText],
       ['Compare with', report.prevMonth || 'n/a (before tracking began)', '', ''],
       ['Tracking began', report.startMonth, '', ''],
-      ['Status', report.monthToDate ? 'Month to date - orders still waiting for pickup are not counted as distributed yet' : 'Distributed counts picked-up (Completed) orders only', '', '']],
+      ['Status', (report.monthToDate ? 'Month to date - orders still waiting for pickup are not counted as distributed yet. ' : 'Distributed counts picked-up (Completed) orders only. ')
+        + 'Quantities represent individual items, except readings, which are counted as sets. Totals include the H&I Subcommittee.'
+        + (report.unknownPackLines && report.unknownPackLines.length ? ' WARNING: ' + report.unknownPackLines.length + ' order line(s) have no pack size in Order Items column I and were counted as single items.' : ''), '', '']],
     totals: ['All items', '', t.requested, t.distributed, t.value, blank(t.prev), blank(t.avg), report.avgMonths],
     headers: ['Category', 'Item', 'Requested', 'Distributed (picked up)', 'Actual value', 'Previous month', 'Average of earlier months', 'Months in average'],
     rows: report.items.map(i => [i.category, i.name, i.requested, i.distributed, i.value, blank(i.prev), blank(i.avg), report.avgMonths]) };

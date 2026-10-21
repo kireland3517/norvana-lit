@@ -135,6 +135,14 @@ function getCatalogMap_() {
   return map;
 }
 
+// Reports count individual items, but an order line stores quantities in packs (as the order form and Lit Chair screens show them).
+// The pack size is saved on each line (Order Items column I) when the order is placed. A line with no saved pack size cannot be
+// converted: it counts as 1 and the report lists it in a warning so it can be fixed, instead of being guessed from today's Catalog.
+function linePackSize_(row) {
+  const saved = Number(row[8]);
+  return saved >= 1 ? { size: Math.floor(saved), known: true } : { size: 1, known: false };
+}
+
 // -- Form data (single call for order form init) --
 
 function getFormData() {
@@ -240,7 +248,8 @@ function saveNewOrder_(orderId, now, meetingMonth, group, contact, email, phone,
     ordersSheet.appendRow([orderId, now, meetingMonth, '', '', '', '', estimatedTotal, '', 'New', '', 0]);
     orderRow = ordersSheet.getLastRow();
     items.forEach(function(item, idx) {
-      itemsSheet.appendRow([orderId + '-' + String(idx + 1).padStart(2, '0'), orderId, item.itemId, item.name, item.price, item.qty, '', '']);
+      // Column I saves the pack size as it was when the order was placed, so reports count individual items correctly even if the Catalog changes later.
+      itemsSheet.appendRow([orderId + '-' + String(idx + 1).padStart(2, '0'), orderId, item.itemId, item.name, item.price, item.qty, '', '', item.packSize || 1]);
       itemRows++;
     });
     commitCells_([cellsRequest_(ordersSheet, orderRow, 4, [group, contact, email, phone])]);
@@ -307,7 +316,7 @@ function submitOrder(payload) {
     const catalog = new Map();
     getSheet('Catalog').getDataRange().getValues().slice(1).forEach(function(row) {
       if (row[0] && String(row[5]).trim().toUpperCase() === 'YES') {
-        catalog.set(String(row[0]), { name: String(row[2]), price: Number(row[3]) || 0, category: String(row[1]).trim() });
+        catalog.set(String(row[0]), { name: String(row[2]), price: Number(row[3]) || 0, category: String(row[1]).trim(), packSize: Number(row[7]) >= 1 ? Math.floor(Number(row[7])) : 1 });
       }
     });
 
@@ -328,7 +337,7 @@ function submitOrder(payload) {
       return { success: false, error: 'Some items in this order are not available to the selected group. Please reload the form and try again.' };
     }
     items = Array.from(quantities.keys()).map(function(id) {
-      return { itemId: id, name: catalog.get(id).name, price: catalog.get(id).price, qty: quantities.get(id) };
+      return { itemId: id, name: catalog.get(id).name, price: catalog.get(id).price, packSize: catalog.get(id).packSize, qty: quantities.get(id) };
     });
     if (items.length === 0) {
       return { success: false, error: 'No valid items in order.' };
@@ -789,15 +798,20 @@ function getMonthlyReport(meetingMonth, token) {
   // A selected month with no orders must stay empty.
 
   const itemsData = getSheet('Order Items').getDataRange().getValues();
-  const fulfilledCounts = buildFulfilledQtyByOrder_(itemsData);
+  const orderedSingles = {}, fulfilledSingles = {};
+  for (let i = 1; i < itemsData.length; i++) {
+    const id = String(itemsData[i][1]).trim(), size = linePackSize_(itemsData[i]).size;
+    orderedSingles[id] = (orderedSingles[id] || 0) + (Number(itemsData[i][5]) || 0) * size;
+    fulfilledSingles[id] = (fulfilledSingles[id] || 0) + (Number(itemsData[i][6]) || 0) * size;
+  }
 
   return {
     meetingMonth: meetingMonth,
     rows: orders.map(o => ({
       groupName:      o.groupName,
       orderId:        o.orderId,
-      itemsOrdered:   o.itemCount,
-      itemsFulfilled: (o.status === 'Ready' || o.status === 'Completed') ? (fulfilledCounts[String(o.orderId).trim()] || 0) : '',
+      itemsOrdered:   orderedSingles[String(o.orderId).trim()] || 0,
+      itemsFulfilled: (o.status === 'Ready' || o.status === 'Completed') ? (fulfilledSingles[String(o.orderId).trim()] || 0) : '',
       estimatedTotal: o.estimatedTotal,
       fulfilledTotal: o.fulfilledTotal,
       status:         o.status,
@@ -913,10 +927,10 @@ function saveSchedule(schedule, token) {
 
 // Inventory Type (Catalog column I): "Stocked" items have counts, a Low At / Target level and low-stock warnings.
 // "Order on Request" items are ordered from Free State only when someone asks for them, so On Hand does not apply.
-// A blank cell uses the category default (H&I and Spanish Lit are On Request); any value typed there wins.
+// A blank cell means Stocked; type "Order on Request" there to switch a single product to on-request.
 const INVENTORY_STOCKED_ = 'Stocked';
 const INVENTORY_ON_REQUEST_ = 'Order on Request';
-const ON_REQUEST_DEFAULT_CATEGORIES_ = ['H&I', 'Spanish Lit'];
+const ON_REQUEST_DEFAULT_CATEGORIES_ = []; // no category is on-request by default: H&I and Spanish Lit are counted like everything else
 
 function inventoryTypeOf_(category, raw) {
   const value = String(raw == null ? '' : raw).trim().toLowerCase();
@@ -933,6 +947,7 @@ function getCatalogAll(token) {
     const row = data[i];
     if (!row[0]) continue;
     const lowAt = row[6] !== '' && row[6] !== undefined ? Number(row[6]) : 5;
+    const packSize = Number(row[7]) || 1, orderMultiple = Number(row[9]) > 0 ? Math.floor(Number(row[9])) : packSize;
     items.push({
       itemId:   String(row[0]),
       category: String(row[1]),
@@ -941,10 +956,12 @@ function getCatalogAll(token) {
       stock:    Number(row[4]) || 0,
       active:   String(row[5]).trim().toUpperCase() === 'YES',
       lowAt:    lowAt,
-      packSize: Number(row[7]) || 1,
+      packSize: packSize,
       inventoryType: inventoryTypeOf_(row[1], row[8]),
-      // The Inventory report's Target Stock is the item's Low At level (Catalog column G); there is no separate column.
-      targetStock: lowAt,
+      // Target Stock has no column: it is Low At (Catalog column G) plus one order multiple. The multiple is the optional
+      // Order Multiple (column J, for bulk items such as the H&I booklets) or else the Pack Size, or 1 for single items.
+      orderMultiple: orderMultiple,
+      targetStock: lowAt + orderMultiple,
       rowIndex: i + 1,
     });
   }

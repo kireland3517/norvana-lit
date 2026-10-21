@@ -22,7 +22,8 @@ function chairFigures_(reportingMonth, token) {
   const total = list => Math.round(list.reduce((sum,o) => sum + o.fulfilledTotal, 0) * 100) / 100;
   // Subcommittee orders are charged to its budget, so they are reported apart from cash collected.
   return { reportingMonth: month, ordersMonth: ordersMonth,
-    groupsServed: new Set(completed.map(o => o.groupName.trim().toLowerCase())).size,
+    // The H&I Subcommittee is not a group, so it never counts toward Groups Served (its literature still counts in the totals).
+    groupsServed: new Set(completed.filter(o => !isSubcommitteeGroup_(o.groupName)).map(o => o.groupName.trim().toLowerCase())).size,
     moneyCollected: total(completed.filter(o => !isSubcommitteeGroup_(o.groupName))),
     hiCharged: total(completed.filter(o => isSubcommitteeGroup_(o.groupName))) };
 }
