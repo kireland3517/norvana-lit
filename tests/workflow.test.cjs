@@ -101,10 +101,11 @@ function fixture() {
   }
   const context = vm.createContext({console,Date,Set,Map,JSON,Math,Number,Object,String,Array,RegExp,Error,
     SpreadsheetApp:{openById:()=>({getSheetByName:sheet,insertSheet:name=>{tables[name]=[];names.push(name);return sheet(name);}})}, Session:{getScriptTimeZone:()=> 'America/New_York'},
-    Utilities:{formatDate,getUuid:()=>require('node:crypto').randomUUID(),base64Decode:b=>Array.from(Buffer.from(b,'base64')),newBlob:(bytes,type,name)=>({bytes,type,name,size:bytes.length})},
+    Utilities:{formatDate,Charset:{UTF_8:'UTF-8'},base64Encode:(s,cs)=>Buffer.from(s,'utf8').toString('base64'),base64EncodeWebSafe:(s,cs)=>Buffer.from(s,'utf8').toString('base64url'),getUuid:()=>require('node:crypto').randomUUID(),base64Decode:b=>Array.from(Buffer.from(b,'base64')),newBlob:(bytes,type,name)=>({bytes,type,name,size:bytes.length})},
     CacheService:{getScriptCache:()=>({get:k=>cache.get(k),put:(k,v)=>cache.set(k,v),remove:k=>cache.delete(k)})},
     PropertiesService:{getScriptProperties:()=>({getProperty:k=>props.get(k),setProperty:(k,v)=>props.set(k,v)})},
     MailApp:{getRemainingDailyQuota:()=>quota,sendEmail:e=>{mailCalls++;if(failMail)throw Error('Mail failed');emails.push(e);if(mailHook)mailHook();if(acceptThenThrow)throw Error('Mail response lost');}},
+    ContentService:{createTextOutput:t=>({getContent:()=>t})},
     LockService:{getScriptLock:()=>({tryLock:()=>{if(locked)return false;locked=true;return true;},releaseLock:()=>locked=false})},
     Sheets:{Spreadsheets:{batchUpdate:({requests})=>{
       if(hook){const h=hook;hook=null;h();}
@@ -702,6 +703,29 @@ test('confirmation emails are sent after the order lock is released',()=>{
   assert.equal(f.c.submitOrder(order()).success,true);assert.equal(freeDuringMail,true);
 });
 
+test('Lit Chair alert goes straight into the inbox (no Sent copy) when the chair is this account; group confirmation is still sent',()=>{
+  const f=fixture();openWindow(f);const inserted=[];
+  f.c.Session=Object.assign({},f.c.Session,{getEffectiveUser:()=>({getEmail:()=>'Chair@Example.invalid'})});
+  f.c.Gmail={Users:{Messages:{insert:(res,user)=>{inserted.push({res,user});}}}};
+  assert.equal(f.c.submitOrder(order()).success,true);
+  assert.equal(inserted.length,1);assert.equal(inserted[0].user,'me');assert.equal(inserted[0].res.labelIds.join(),'INBOX,UNREAD');
+  const mime=Buffer.from(inserted[0].res.raw,'base64url').toString('utf8');
+  assert.match(mime,/^From: "NORVANA Literature Orders" <Chair@Example\.invalid>\r\nTo: Chair@Example\.invalid\r\n/);
+  assert.match(mime,/Content-ID: <norvanalogo>/);assert.match(mime,/Content-Type: text\/html; charset=UTF-8/);
+  assert.equal(f.emails.length,1);assert.equal(f.emails[0].to,'pat@example.invalid'); // only the group's confirmation used MailApp
+});
+
+test('Lit Chair alert falls back to a normal email when the chair is another address or the inbox insert fails',()=>{
+  for(const mode of ['other-address','insert-fails','service-missing']){
+    const f=fixture();openWindow(f);
+    f.c.Session=Object.assign({},f.c.Session,{getEffectiveUser:()=>({getEmail:()=>mode==='other-address'?'someone.else@example.invalid':'chair@example.invalid'})});
+    if(mode!=='service-missing')f.c.Gmail={Users:{Messages:{insert:()=>{throw Error('Gmail down');}}}};
+    if(mode==='other-address')f.c.Gmail={Users:{Messages:{insert:()=>{throw Error('must not be called');}}}};
+    assert.equal(f.c.submitOrder(order()).success,true);
+    assert.deepEqual(f.emails.map(e=>e.to).sort(),['chair@example.invalid','pat@example.invalid'],mode);
+  }
+});
+
 test('dashboard login: right code signs in, token works, short code is flagged, session lifetime respects the 6 hour cache limit',()=>{
   const f=fixture();
   const ok=f.c.checkAccessCode('test');
@@ -1083,9 +1107,9 @@ test('Free State preview: validates every line on the server and never exposes s
   const p = f.preview();assert.equal(p.success,true);assert.equal(p.to,'freestate@example.invalid');assert.equal(p.from,'norvanalit12@gmail.com');assert.equal(p.subject,'NORVANA Literature Order');
   assert.deepEqual(JSON.parse(JSON.stringify(p.lines)),[{itemId:'B1',name:'Book',qty:20,price:99,total:1980},{itemId:'P1',name:'IP #1 <Who>',qty:40,price:1,total:4},{itemId:'S1',name:'Spanish Basic Text',qty:3,price:9,total:27}]);
   // Price is per pack for pack items (P1: 40 singles = 4 packs of 10 at $1), each otherwise; the grand total is the sum of the line totals.
-  assert.equal(p.orderTotal,2011);assert.match(p.html,/Order Total[\s\S]*\$2011\.00/);assert.match(p.text,/ORDER TOTAL: \$2011\.00/);assert.match(p.text,/P1 \| IP #1 <Who> \| 40 \| \$1\.00 \| \$4\.00/);
+  assert.equal(p.orderTotal,2011);assert.match(p.html,/Order Total[\s\S]*\$2011\.00/);assert.match(p.text,/ORDER TOTAL: \$2011\.00/);assert.match(p.text,/P1 \| IP #1 <Who> \| \$1\.00 \| 40 \| \$4\.00/);
   assert.match(p.html,/Bill To[\s\S]*Ship To[\s\S]*Order Items/);assert.match(p.html,/IP #1 &lt;Who&gt;/);assert.match(p.html,/Northern Virginia Area of NA/);assert.match(p.html,/chair@example\.invalid/);
-  assert.match(p.text,/BILL TO\nGroup Name: Northern Virginia Area of NA/);assert.match(p.text,/P1 \| IP #1 <Who> \| 40/);
+  assert.match(p.text,/BILL TO\nGroup Name: Northern Virginia Area of NA/);
   assert.doesNotMatch(p.html+p.text+JSON.stringify(p.lines),/Spanish group|Stocked|Order on Request|On Hand|Low At|stock/i);
 });
 test('Free State send: logs the pending record before emailing, emails once, records history, never touches stock',()=>{
@@ -1103,6 +1127,31 @@ test('Free State send: logs the pending record before emailing, emails once, rec
   const again = f.c.sendFreeStateOrder(p.previewId,'test');assert.equal(again.success,true);assert.equal(again.alreadySent,true);assert.equal(f.emails.length,1);assert.equal(f.history().length,4);
   const q = f.preview([{itemId:'B1',qty:5}]);assert.match(f.c.sendFreeStateOrder(q.previewId,'test').order.orderId,/-002$/);assert.equal(f.emails.length,2);
 });
+test('Free State open tracking: the sent email carries a per-order image, an open is recorded once per load, and the preview has none',()=>{
+  const f = fsFixture(), BASE = 'https://script.example.invalid/exec';
+  f.c.ScriptApp = {getService:()=>({getUrl:()=>BASE})};
+  const p = f.preview();assert.doesNotMatch(p.html,/fso=/);
+  assert.equal(f.c.sendFreeStateOrder(p.previewId,'test').success,true);
+  const token = JSON.parse(f.log()[1][5]).openToken;assert.match(token,/^[0-9a-f-]{36}$/i);
+  assert.ok(f.emails[0].htmlBody.includes('<img src="' + BASE + '?fso=' + token + '" width="1" height="1"'));assert.doesNotMatch(f.emails[0].body,/fso=/);
+  let recent = f.c.getFreeStateRecentOrders('test');assert.equal(recent.orders.length,1);assert.equal(recent.orders[0].opens,0);assert.equal(recent.orders[0].openedAt,'');
+  assert.equal(f.c.getFreeStateRecentOrders('bad').success,false);
+  const legacy = JSON.parse(f.log()[1][5]);delete legacy.openToken;f.log().push(['old-req','FS-2026-000','Recorded','2026-01-01','2026-01-01',JSON.stringify(legacy),f.log()[1][6]]);
+  assert.equal(f.c.getFreeStateRecentOrders('test').orders.length,1);f.log().pop(); // an order sent before tracking is not listed
+  assert.equal(f.c.doGet({parameter:{fso:token}}).getContent(),'');
+  f.c.doGet({parameter:{fso:token}});
+  const attempt = JSON.parse(f.log()[1][5]);assert.equal(attempt.opens,2);assert.ok(attempt.openedAt);assert.equal(f.log()[1][2],'Recorded');assert.equal(attempt.openToken,token);
+  recent = f.c.getFreeStateRecentOrders('test');assert.equal(recent.orders[0].opens,2);assert.ok(recent.orders[0].openedAt);
+  const before = JSON.stringify(f.log());
+  for (const bad of ['not-a-token', '00000000-0000-0000-0000-000000000000', "x' OR 1=1"]) assert.equal(f.c.doGet({parameter:{fso:bad}}).getContent(),'');
+  assert.equal(JSON.stringify(f.log()),before); // unknown or malformed tokens change nothing and never error
+});
+
+test('Free State open tracking: with no web app address the email is sent without an image',()=>{
+  const f = fsFixture(), p = f.preview();
+  assert.equal(f.c.sendFreeStateOrder(p.previewId,'test').success,true);assert.doesNotMatch(f.emails[0].htmlBody,/<img/);
+});
+
 test('Free State send: concurrent requests, a lost claim write, expired and changed previews send nothing',()=>{
   const f = fsFixture(), p = f.preview();let inner;
   f.hook(()=>inner = f.c.sendFreeStateOrder(p.previewId,'test'));f.c.sendFreeStateOrder(p.previewId,'test');
@@ -1195,7 +1244,7 @@ test('Free State screens: suggestions, quantity limits, picker, draft kept acros
   assert.equal(elements['inventory-content'].style.display,'none');
   assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(fs.lines.map(l=>[l.itemId,l.qty]))",c)),[['B1','7']]);
   const screen=elements['fs-order'].innerHTML;
-  assert.match(screen,/Free State Order/);assert.match(screen,/Item #<\/th><th>Description<\/th><th class="fs-m">Price<\/th><th class="fs-m">Total<\/th><th class="fs-q">Quantity/);assert.doesNotMatch(screen,/On Hand|Target|In stock|Low stock/i);
+  assert.match(screen,/Free State Order/);assert.match(screen,/Item #<\/th><th>Description<\/th><th class="fs-m">Price<\/th><th class="fs-q">Quantity<\/th><th class="fs-m">Total<\/th>/);assert.doesNotMatch(screen,/On Hand|Target|In stock|Low stock/i);
   assert.match(screen,/id="fs-total-B1">\$70\.00/);assert.match(screen,/id="fs-grand">\$70\.00/);
   assert.match(screen,/Add Item/);assert.match(screen,/Review &amp; Send/);assert.doesNotMatch(screen,/Spanish|SP3101/);
   // Quantity box only keeps digits; blank or zero is left out of the order.

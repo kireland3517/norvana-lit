@@ -1,8 +1,8 @@
 // Shared look for the order emails (confirmation, Lit Chair alert, pickup notice, receipt): the app's blue header bar,
 // a blue headline section, a white order section, a lime total band and a pale footer.
 // Every email still carries its plain-text version; this adds a styled HTML version on top.
-// The logo is a small PNG stored right here and attached inline, so nothing is hosted elsewhere and no
-// extra Google permission is needed. All helpers end with an underscore so visitors cannot call them.
+// The logo is a small PNG stored right here and attached inline, so nothing is hosted elsewhere.
+// (Only the Lit Chair alert uses the Gmail advanced service, to land in the inbox without a Sent copy.) All helpers end with an underscore so visitors cannot call them.
 // (The Secretary report email stays plain on purpose: the reviewed preview must match what is sent.)
 
 const EMAIL_BLUE_ = '#2e3192';
@@ -116,4 +116,59 @@ function sendStyledMail_(opts) {
     delete message.htmlBody; delete message.inlineImages;
   }
   MailApp.sendEmail(message);
+}
+
+function mimeBase64_(base64) { return String(base64).replace(/(.{76})/g, '$1\r\n'); }
+function mimeText_(text) { return mimeBase64_(Utilities.base64Encode(String(text), Utilities.Charset.UTF_8)); }
+
+// Raw MIME for the same styled email sendStyledMail_ builds: plain text + HTML, logo attached inline.
+function styledMime_(opts, address) {
+  const subject = demoPrefix_() + opts.subject;
+  return [
+    'From: "NORVANA Literature Orders" <' + address + '>',
+    'To: ' + address,
+    'Subject: =?UTF-8?B?' + Utilities.base64Encode(subject, Utilities.Charset.UTF_8) + '?=',
+    'Date: ' + new Date().toUTCString(),
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/related; boundary="nv_rel"',
+    '',
+    '--nv_rel',
+    'Content-Type: multipart/alternative; boundary="nv_alt"',
+    '',
+    '--nv_alt',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    mimeText_(opts.body),
+    '--nv_alt',
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    mimeText_(emailHtml_(opts)),
+    '--nv_alt--',
+    '--nv_rel',
+    'Content-Type: image/png; name="norvana-logo.png"',
+    'Content-Transfer-Encoding: base64',
+    'Content-ID: <norvanalogo>',
+    'Content-Disposition: inline; filename="norvana-logo.png"',
+    '',
+    mimeBase64_(EMAIL_LOGO_B64_),
+    '--nv_rel--',
+    ''
+  ].join('\r\n');
+}
+
+// For mail addressed to the account this script runs as (the Lit Chair alert). Sending it would file it under both
+// Inbox and Sent, so it is inserted straight into the inbox instead (Gmail advanced service). If the recipient is
+// any other address, or anything about the insert fails, it is sent normally so the alert is never lost.
+function deliverStyledMailToOwnInbox_(opts) {
+  try {
+    const me = String(Session.getEffectiveUser().getEmail() || '').trim();
+    if (!me || String(opts.to).trim().toLowerCase() !== me.toLowerCase()) throw new Error('Not this account\'s own inbox.');
+    Gmail.Users.Messages.insert({ raw: Utilities.base64EncodeWebSafe(styledMime_(opts, me), Utilities.Charset.UTF_8), labelIds: ['INBOX', 'UNREAD'] }, 'me');
+    return;
+  } catch (e) {
+    // fall through to a normal send
+  }
+  sendStyledMail_(opts);
 }

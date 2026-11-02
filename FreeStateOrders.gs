@@ -158,24 +158,25 @@ function fsFingerprint_(snap) {
 function fsText_(snap) {
   const pairs = function(rows) { return rows.map(function(r) { return r[0] + ': ' + r[1]; }).join('\n'); };
   return 'NORVANA Literature Order\n\nBILL TO\n' + pairs(snap.billTo) + '\n\nSHIP TO\n' + pairs(snap.shipTo) +
-    '\n\nORDER ITEMS\nItem # | Description | Quantity | Price | Total\n' + snap.lines.map(function(l) { return l.itemId + ' | ' + l.name + ' | ' + l.qty + ' | ' + fsMoney_(l.price) + ' | ' + fsMoney_(l.total); }).join('\n') +
+    '\n\nORDER ITEMS\nItem # | Description | Price | Quantity | Total\n' + snap.lines.map(function(l) { return l.itemId + ' | ' + l.name + ' | ' + fsMoney_(l.price) + ' | ' + l.qty + ' | ' + fsMoney_(l.total); }).join('\n') +
     '\nORDER TOTAL: ' + fsMoney_(fsGrandTotal_(snap.lines));
 }
 
-function fsHtml_(snap) {
+function fsHtml_(snap, pixelUrl) {
   const F = 'Arial,Helvetica,sans-serif', cell = 'padding:7px 10px;font:14px/1.4 ' + F + ';color:#202020;vertical-align:top;';
   const bar = function(title, cols) { return '<tr><td colspan="' + cols + '" style="background:#e6e8eb;font:bold 15px/1.4 ' + F + ';color:#202020;padding:8px 10px">' + emailEsc_(title) + '</td></tr>'; };
   const band = function(i) { return i % 2 ? 'background:#f5f6f7;' : 'background:#ffffff;'; };
   const pairRows = function(rows) { return rows.map(function(r, i) { return '<tr><td width="34%" style="' + cell + band(i) + '">' + emailEsc_(r[0]) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(r[1]) + '</td></tr>'; }).join(''); };
   const itemRows = snap.lines.map(function(l, i) {
-    return '<tr><td width="18%" style="' + cell + band(i) + '">' + emailEsc_(l.itemId) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(l.name) + '</td><td width="12%" align="right" style="' + cell + band(i) + 'text-align:right">' + l.qty + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.price) + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.total) + '</td></tr>';
+    return '<tr><td width="18%" style="' + cell + band(i) + '">' + emailEsc_(l.itemId) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(l.name) + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.price) + '</td><td width="12%" align="right" style="' + cell + band(i) + 'text-align:right">' + l.qty + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.total) + '</td></tr>';
   }).join('') + '<tr><td colspan="4" align="right" style="' + cell + 'font-weight:bold;text-align:right">Order Total</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">' + fsMoney_(fsGrandTotal_(snap.lines)) + '</td></tr>';
   const table = function(inner) { return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 16px 0">' + inner + '</table>'; };
   return '<!DOCTYPE html><html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body style="margin:0;padding:16px;background:#ffffff">' +
     '<div style="max-width:640px;margin:0 auto">' +
     '<div style="font:bold 18px/1.4 ' + F + ';color:#202020;margin:0 0 12px 0">NORVANA Literature Order</div>' +
     table(bar('Bill To', 2) + pairRows(snap.billTo)) + table(bar('Ship To', 2) + pairRows(snap.shipTo)) +
-    table(bar('Order Items', 5) + '<tr><td style="' + cell + 'font-weight:bold">Item #</td><td style="' + cell + 'font-weight:bold">Description</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Quantity</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Price</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Total</td></tr>' + itemRows) +
+    table(bar('Order Items', 5) + '<tr><td style="' + cell + 'font-weight:bold">Item #</td><td style="' + cell + 'font-weight:bold">Description</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Price</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Quantity</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">Total</td></tr>' + itemRows) +
+    (pixelUrl ? '<img src="' + emailEsc_(pixelUrl) + '" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px">' : '') +
     '</div></body></html>';
 }
 
@@ -294,7 +295,7 @@ function fsDeliver_(rec) {
   try {
     if (MailApp.getRemainingDailyQuota() < 1) throw new Error('No daily email quota remains.');
     called = true;
-    MailApp.sendEmail({ to: rec.snapshot.recipient, subject: rec.snapshot.subject, body: fsText_(rec.snapshot), htmlBody: fsHtml_(rec.snapshot) });
+    MailApp.sendEmail({ to: rec.snapshot.recipient, subject: rec.snapshot.subject, body: fsText_(rec.snapshot), htmlBody: fsHtml_(rec.snapshot, fsPixelUrl_(rec)) });
   } catch (e) {
     try { fsSetLog_(rec, called ? 'Uncertain' : 'Failed', { message: e.message }); } catch (writeError) { /* a stale "Sending" record is shown as uncertain */ }
     return called ? fsAttention_(Object.assign({}, rec, { status: 'Uncertain' }), true) :
@@ -323,15 +324,15 @@ function sendFreeStateOrder(previewId, token) {
     const blocker = fsPending_(store, true);
     if (blocker) return Object.assign(fsAttention_(blocker, true), { blocked: true, error: 'An earlier Free State order needs attention before another can be sent.' });
     if (MailApp.getRemainingDailyQuota() < 1) return { success: false, error: 'No email quota remains today. Try again tomorrow.' };
-    const next = fsNextOrderId_(store), now = new Date().toISOString();
+    const next = fsNextOrderId_(store), now = new Date().toISOString(), openToken = Utilities.getUuid();
     const snapshot = JSON.stringify(snap);
     if (snapshot.length > 45000) throw new Error('This order is too large to send. Remove some products.');
     // The claim is written (and must succeed) before anything is emailed.
-    try { fsAppend_(store.sheet, [[previewId, next.id, 'Sending', now, now, JSON.stringify({ attempts: 1 }), snapshot]]); }
+    try { fsAppend_(store.sheet, [[previewId, next.id, 'Sending', now, now, JSON.stringify({ attempts: 1, openToken: openToken }), snapshot]]); }
     catch (e) { return { success: false, error: 'Could not record the send attempt, so nothing was emailed. Try again.' }; }
     PropertiesService.getScriptProperties().setProperty(next.key, String(next.number));
     // Built from what was just written, not read back: a read right after a Sheets API write can be stale.
-    return fsDeliver_({ number: store.data.length + 1, requestId: previewId, orderId: next.id, status: 'Sending', created: now, updated: now, attempt: { attempts: 1 }, snapshot: snap });
+    return fsDeliver_({ number: store.data.length + 1, requestId: previewId, orderId: next.id, status: 'Sending', created: now, updated: now, attempt: { attempts: 1, openToken: openToken }, snapshot: snap });
   });
 }
 
@@ -362,5 +363,54 @@ function resolveFreeStateOrder(requestId, decision, token) {
       return fsDeliver_(rec);
     }
     throw new Error('That choice is not available for this order. Reload and review its status.');
+  });
+}
+
+// -- Open tracking --
+// The sent email carries a 1x1 image whose address holds a random per-order token. When the recipient's email program
+// loads it, the web app records the first and latest open on that order's log record. It is a hint, not proof: programs
+// that block images never report, and opening the Sent copy in the committee Gmail also loads it.
+
+function fsPixelUrl_(rec) {
+  try {
+    const base = String(ScriptApp.getService().getUrl() || '');
+    return base && rec.attempt && rec.attempt.openToken ? base + '?fso=' + rec.attempt.openToken : '';
+  } catch (e) { return ''; }
+}
+
+// Called from doGet for the image address. Always answers with an empty page; never throws.
+function fsOpenPixel_(openToken) {
+  try { fsRecordOpen_(String(openToken || '')); } catch (e) { /* the recipient must never see an error */ }
+  return ContentService.createTextOutput('');
+}
+
+function fsRecordOpen_(openToken) {
+  if (!/^[0-9a-f-]{36}$/i.test(openToken)) return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return;
+  try {
+    const store = fsSheet_(FS_LOG_TAB_, FS_LOG_HEADERS_);
+    for (let i = 1; i < store.data.length; i++) {
+      if (String(store.data[i][5]).indexOf(openToken) < 0) continue;
+      const rec = fsLogRow_(i + 1, store.data), opens = Number(rec.attempt.opens) || 0;
+      if (rec.attempt.openToken !== openToken || opens >= 999) return;
+      const now = new Date().toISOString();
+      fsSetLog_(rec, rec.status, { openedAt: rec.attempt.openedAt || now, lastOpenedAt: now, opens: opens + 1 });
+      return;
+    }
+  } finally { lock.releaseLock(); }
+}
+
+// Newest first. Times are ISO text; the browser formats them.
+function getFreeStateRecentOrders(token) {
+  return fsGuard_(token, function() {
+    const store = fsSheet_(FS_LOG_TAB_, FS_LOG_HEADERS_), orders = [];
+    for (let i = store.data.length - 1; i >= 1 && orders.length < 8; i--) {
+      const rec = fsLogRow_(i + 1, store.data);
+      if (rec.status !== 'Recorded' || !rec.attempt.openToken) continue; // orders sent before tracking existed have nothing to report
+      orders.push({ orderId: rec.orderId, sentAt: rec.attempt.acceptedAt || rec.updated, openedAt: rec.attempt.openedAt || '', opens: Number(rec.attempt.opens) || 0,
+        orderTotal: fsGrandTotal_(rec.snapshot.lines) });
+    }
+    return { success: true, orders: orders };
   });
 }

@@ -9,9 +9,9 @@ body.dark #fs-order .fs-back{color:var(--lime)}
 #fs-order .fs-table th{background:var(--snow);font-size:11px;text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);color:var(--muted)}
 #fs-order .fs-table td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:top;color:var(--onyx)}
 #fs-order .fs-table td.fs-id{width:64px;white-space:nowrap}
-#fs-order .fs-table td.fs-q,#fs-order .fs-table th.fs-q{width:1%;white-space:nowrap;text-align:right}
-#fs-order .fs-table td.fs-m,#fs-order .fs-table th.fs-m{text-align:right;white-space:nowrap;width:1%}
-#fs-order .fs-table td.fs-q .qty-wrap{justify-content:flex-end}
+#fs-order .fs-table td.fs-q,#fs-order .fs-table th.fs-q{width:1%;white-space:nowrap;text-align:center}
+#fs-order .fs-table td.fs-m,#fs-order .fs-table th.fs-m{text-align:center;white-space:nowrap;width:1%}
+#fs-order .fs-table td.fs-q .qty-wrap{justify-content:center}
 #fs-order .fs-qty{width:46px;height:32px;text-align:center;font:inherit;font-size:15px;font-weight:600;padding:0 2px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
 #fs-order .fs-x{background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:4px 6px}
 #fs-order .fs-req{width:100%;margin-top:6px;font:inherit;font-size:12px;padding:6px 8px;border:1px dashed var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
@@ -31,13 +31,18 @@ body.dark #fs-order .fs-pick-cat{color:var(--lime-dark)}
 #fs-order .fs-pick .fs-pid{min-width:60px;color:var(--muted)}
 #fs-order .fs-meta{font-size:13px;line-height:1.6;margin:0 0 10px;color:var(--onyx)}
 #fs-order .fs-frame{width:100%;min-height:420px;border:1px solid var(--border);border-radius:10px;background:#fff}
+#fs-order .fs-recent{margin:22px 0 6px}
+#fs-order .fs-recent h3{font-size:14px;font-weight:600;margin:0 0 8px;color:var(--onyx)}
+#fs-order .fs-recent-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-bottom:1px solid var(--border);color:var(--onyx)}
+#fs-order .fs-recent-row .warn{font-weight:600;color:var(--danger)}
+#fs-order .fs-recent-note{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.5}
 #fs-order .fs-lines{font-size:13px;margin:8px 0;padding-left:18px;color:var(--onyx)}
 </style>
 <script>
 // -- Free State order: edit, review, send, recover --
 // Unfinished edits live only in this browser tab (sessionStorage). Nothing reaches Order History until an order is sent.
 var FS_DRAFT_KEY = 'norvana_fs_draft';
-var fs = { screen: '', lines: [], preview: null, order: null, attention: null, missing: [], message: '', error: false, busy: false, pickerOpen: false, pickerText: '', note: '' };
+var fs = { screen: '', lines: [], preview: null, order: null, attention: null, missing: [], message: '', error: false, busy: false, pickerOpen: false, pickerText: '', note: '', recent: [] };
 
 function fsEl() { return document.getElementById('fs-order'); }
 function fsItem(id) { return (typeof inventoryItems !== 'undefined' ? inventoryItems : []).find(function(i) { return i.itemId === id; }); }
@@ -103,6 +108,26 @@ function openFreeStateOrder() {
     })
     .withFailureHandler(function() { fsStartEdit(); })
     .getFreeStateOrderState(sessionToken);
+  fsLoadRecent();
+}
+
+// Recent sent orders with whether the recipient's email program has loaded the tracking image (a hint, not proof of delivery).
+function fsLoadRecent() {
+  google.script.run
+    .withSuccessHandler(function(r) { fs.recent = r && r.success ? r.orders : []; var el = document.getElementById('fs-recent'); if (el) el.innerHTML = fsRecentHTML(); })
+    .withFailureHandler(function() {})
+    .getFreeStateRecentOrders(sessionToken);
+}
+function fsWhen(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+function fsRecentHTML() {
+  if (!fs.recent.length) return '';
+  var rows = fs.recent.map(function(o) {
+    var status = o.openedAt ? 'Opened ' + esc(fsWhen(o.openedAt)) + (o.opens > 1 ? ' (' + o.opens + ' times)' : '')
+      : (Date.now() - Date.parse(o.sentAt) > 86400000 ? '<span class="warn">No open detected yet</span>' : 'No open detected yet');
+    return '<div class="fs-recent-row"><span>' + esc(o.orderId) + ' &middot; ' + esc(fsWhen(o.sentAt)) + '</span><span>' + status + '</span></div>';
+  }).join('');
+  return '<div class="fs-recent"><h3>Recent orders</h3>' + rows
+    + '<div class="fs-recent-note">"Opened" means their email program loaded the order email. "No open detected" can also mean it blocks images, so it does not prove the order was not received.</div></div>';
 }
 
 function fsStartEdit() {
@@ -157,7 +182,7 @@ function fsRender() {
   var box = fsEl(); if (!box) return;
   var back = '<button type="button" class="fs-back" onclick="fsExit()">&larr; Back to Inventory</button>';
   var msg = '<div class="fs-msg' + (fs.error ? ' error' : '') + '" id="fs-msg" role="status">' + esc(fs.message) + '</div>';
-  if (fs.screen === 'edit') box.innerHTML = back + '<div class="fs-title">Free State Order</div><div id="fs-notice">' + fsNoticeHTML() + '</div>' + fsEditHTML() + msg;
+  if (fs.screen === 'edit') box.innerHTML = back + '<div class="fs-title">Free State Order</div><div id="fs-notice">' + fsNoticeHTML() + '</div>' + fsEditHTML() + msg + '<div id="fs-recent">' + fsRecentHTML() + '</div>';
   else if (fs.screen === 'review') box.innerHTML = fsReviewHTML() + msg;
   else if (fs.screen === 'sent') box.innerHTML = fsSentHTML();
   else if (fs.screen === 'attention') box.innerHTML = back + fsAttentionHTML() + msg;
@@ -172,16 +197,17 @@ function fsEditHTML() {
   var rows = fsDisplayLines().map(function(l) {
     var it = fsItem(l.itemId), name = it ? it.name : l.itemId;
     var req = l.manual && fsOnRequest(l.itemId) ? '<input class="fs-req" type="text" maxlength="100" placeholder="Requested for (optional, not sent to Free State)" aria-label="Requested for ' + esc(name) + '" value="' + esc(l.requestedFor || '') + '" oninput="fsSetRequested(\'' + esc(l.itemId) + '\',this.value)">' : '';
-    return '<tr><td class="fs-id">' + esc(l.itemId) + '</td><td>' + esc(name) + req + '</td><td class="fs-m">' + fsMoney(it ? it.price : 0) + '</td><td class="fs-m" id="fs-total-' + esc(l.itemId) + '">' + fsMoney(fsLineTotal(l)) + '</td><td class="fs-q">'
+    return '<tr><td class="fs-id">' + esc(l.itemId) + '</td><td>' + esc(name) + req + '</td><td class="fs-m">' + fsMoney(it ? it.price : 0) + '</td><td class="fs-q">'
       + '<div class="qty-wrap compact">'
       + '<button type="button" class="qty-btn" aria-label="Subtract one from ' + esc(name) + '" onclick="fsStep(\'' + esc(l.itemId) + '\',-1)">&minus;</button>'
       + '<input class="fs-qty" id="fs-qty-' + esc(l.itemId) + '" type="text" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Quantity for ' + esc(name) + '" value="' + esc(l.qty) + '" oninput="fsSetQty(\'' + esc(l.itemId) + '\',this)">'
-      + '<button type="button" class="qty-btn qty-plus" aria-label="Add one to ' + esc(name) + '" onclick="fsStep(\'' + esc(l.itemId) + '\',1)">+</button>'
-      + '<button type="button" class="fs-x" aria-label="Remove ' + esc(name) + '" onclick="fsRemove(\'' + esc(l.itemId) + '\')">&times;</button></div></td></tr>';
+      + '<button type="button" class="qty-btn qty-plus" aria-label="Add one to ' + esc(name) + '" onclick="fsStep(\'' + esc(l.itemId) + '\',1)">+</button></div></td>'
+      + '<td class="fs-m" id="fs-total-' + esc(l.itemId) + '">' + fsMoney(fsLineTotal(l)) + '</td>'
+      + '<td class="fs-m"><button type="button" class="fs-x" aria-label="Remove ' + esc(name) + '" onclick="fsRemove(\'' + esc(l.itemId) + '\')">&times;</button></td></tr>';
   }).join('');
-  if (!rows) rows = '<tr><td colspan="5" style="color:var(--muted)">No products yet. Use Add Item.</td></tr>';
-  return '<table class="fs-table"><thead><tr><th>Item #</th><th>Description</th><th class="fs-m">Price</th><th class="fs-m">Total</th><th class="fs-q">Quantity</th></tr></thead><tbody>' + rows + '</tbody>'
-    + '<tfoot><tr><td colspan="3" style="text-align:right;font-weight:600">Order Total</td><td class="fs-m" style="font-weight:700" id="fs-grand">' + fsMoney(fsGrandTotal()) + '</td><td></td></tr></tfoot></table>'
+  if (!rows) rows = '<tr><td colspan="6" style="color:var(--muted)">No products yet. Use Add Item.</td></tr>';
+  return '<table class="fs-table"><thead><tr><th>Item #</th><th>Description</th><th class="fs-m">Price</th><th class="fs-q">Quantity</th><th class="fs-m">Total</th><th class="fs-m" aria-label="Remove"></th></tr></thead><tbody>' + rows + '</tbody>'
+    + '<tfoot><tr><td colspan="4" style="text-align:right;font-weight:600">Order Total</td><td class="fs-m" style="font-weight:700" id="fs-grand">' + fsMoney(fsGrandTotal()) + '</td><td></td></tr></tfoot></table>'
     + (fs.pickerOpen ? fsPickerHTML() : '')
     + '<div class="fs-actions"><button type="button" onclick="fsTogglePicker()">Add Item</button><button type="button" onclick="fsResetToSuggested()">Reset to Suggested</button><button type="button" class="primary" id="fs-review-btn" onclick="fsReview()"' + (fs.busy ? ' disabled' : '') + '>Review &amp; Send</button></div>';
 }
@@ -355,8 +381,8 @@ function fsPairsTable(rows) {
 }
 function fsPrintOrder() {
   var o = fs.order; if (!o) return;
-  var items = '<table><thead><tr><th style="text-align:left">Item #</th><th style="text-align:left">Description</th><th>Quantity</th><th>Price</th><th>Total</th></tr></thead><tbody>'
-    + o.lines.map(function(l) { return '<tr><td style="text-align:left">' + esc(l.itemId) + '</td><td style="text-align:left">' + esc(l.name) + '</td><td>' + esc(l.qty) + '</td><td>' + fsMoney(l.price) + '</td><td>' + fsMoney(l.total) + '</td></tr>'; }).join('')
+  var items = '<table><thead><tr><th style="text-align:left">Item #</th><th style="text-align:left">Description</th><th>Price</th><th>Quantity</th><th>Total</th></tr></thead><tbody>'
+    + o.lines.map(function(l) { return '<tr><td style="text-align:left">' + esc(l.itemId) + '</td><td style="text-align:left">' + esc(l.name) + '</td><td>' + fsMoney(l.price) + '</td><td>' + esc(l.qty) + '</td><td>' + fsMoney(l.total) + '</td></tr>'; }).join('')
     + '<tr><td colspan="4" style="text-align:right;font-weight:bold">Order Total</td><td style="font-weight:bold">' + fsMoney(o.orderTotal) + '</td></tr></tbody></table>';
   printReportPage('Free State Literature Order', '<h1>NORVANA</h1><h2>Free State Literature Order</h2><p>Order ' + esc(o.orderId) + ' | Sent ' + esc(o.sentDate) + '</p>'
     + '<h3>Bill To</h3>' + fsPairsTable(o.billTo) + '<h3>Ship To</h3>' + fsPairsTable(o.shipTo) + '<h3>Order Items</h3>' + items);

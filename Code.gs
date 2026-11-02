@@ -28,6 +28,8 @@ function isSubcommitteeGroup_(groupName) {
 // No ?dashboard=1 parameter needed anymore.
 
 function doGet(e) {
+  // The tracking image in the Free State email: record the open and answer with an empty page.
+  if (e && e.parameter && e.parameter.fso) return fsOpenPixel_(e.parameter.fso);
   const template = HtmlService.createTemplateFromFile('App');
   return template.evaluate()
     .setTitle((DEMO_MODE ? 'DEMO - ' : '') + 'NORVANA Literature')
@@ -434,7 +436,8 @@ function sendConfirmationToGroup_(payload, orderId, estimatedTotal) {
 function sendAlertToLitChair_(payload, orderId, estimatedTotal) {
   const lines = payload.items.map(i =>
     '  ' + i.itemId + '  ' + i.name + ' (x' + i.qty + ') - $' + (i.price * i.qty).toFixed(2)).join('\n');
-  sendStyledMail_({
+  // Goes straight into the inbox (not Sent) when the chair address is the account running the script.
+  deliverStyledMailToOwnInbox_({
     to: getLitChairEmail(),
     subject: 'New Order - ' + payload.groupName,
     eyebrow: payload.meetingMonth + EMAIL_DOT_ + 'Chair notification',
