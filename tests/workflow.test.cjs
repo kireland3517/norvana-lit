@@ -259,10 +259,10 @@ test('Chair Reports view shows only sent reports, hides drafts, and leaves the s
   const before=plain(f.tables['Chair Reports'].map(r=>r.slice(0,5)));
   f.c.refreshChairReportView_();
   const t=f.tables['Chair Reports'];
-  assert.deepEqual(plain(t[0].slice(5,14)),['Orders recap','Groups served','Collected','H&I charged','Spent','Notes','Version','Sent on','Sent to']);
-  assert.deepEqual(plain(t[1].slice(5,14)),['','','','','','','','','']);
-  assert.deepEqual(plain(t[2].slice(5,12)),['October 2026',1,18.25,0,5,'Notes here',2]);
-  assert.match(t[2][12],/^Nov(ember)? 12, 2026/);assert.equal(t[2][13],'secretary@example.invalid');
+  assert.deepEqual(plain(t[0].slice(5,15)),['Orders recap','Groups served','Collected','H&I charged','Total literature sales','Spent','Notes','Version','Sent on','Sent to']);
+  assert.deepEqual(plain(t[1].slice(5,15)),['','','','','','','','','','']);
+  assert.deepEqual(plain(t[2].slice(5,13)),['October 2026',1,18.25,0,18.25,5,'Notes here',2]);
+  assert.match(t[2][13],/^Nov(ember)? 12, 2026/);assert.equal(t[2][14],'secretary@example.invalid');
   assert.deepEqual(plain(t.map(r=>r.slice(0,5))),before);
   assert.deepEqual([...f.hidden],[2]);
   assert.doesNotThrow(()=>f.c.refreshChairReportViewSafe_());
@@ -881,7 +881,7 @@ test('Chair Report keeps cash collected apart from H&I charged; old snapshots ar
   const more=f.c.getChairReport('November 2026','test').live;assert.equal(more.groupsServed,1,'the same group twice, or one with only an unfinished order, adds nothing');assert.equal(more.hiCharged,21,'H&I literature still counts toward its own total');assert.equal(more.moneyCollected,35);
   f.tables.Orders.length-=3;
   assert.equal(f.c.saveChairDraft('November 2026',5,'',0,'test').success,true);
-  assert.match(f.c.previewChairEmail('November 2026','test').body,/Collected: \$30\.00\nH&I charged to subcommittee budget: \$12\.00\nSpent: \$5\.00/);
+  assert.match(f.c.previewChairEmail('November 2026','test').body,/Collected: \$30\.00\nH&I charged to subcommittee budget: \$12\.00\nTotal literature sales: \$42\.00\nSpent: \$5\.00/);
   // A version sent before this feature has no hiCharged and is left exactly as saved.
   const g=fixture();const legacy={reportingMonth:'October 2026',groupsServed:7,moneyCollected:123.45,moneySpent:90,other:'',version:9};
   g.tables['Chair Reports'].push(['October 2026',JSON.stringify(legacy),JSON.stringify(legacy),9,'']);

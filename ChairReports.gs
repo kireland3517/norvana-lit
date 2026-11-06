@@ -78,6 +78,7 @@ function chairReportText_(report) {
     (report.version > 1 ? '\nRevised report (version ' + report.version + ')' : '') + '\n\nGroups Served: ' + report.groupsServed +
     '\nCollected: $' + report.moneyCollected.toFixed(2) +
     (typeof report.hiCharged === 'number' ? '\nH&I charged to subcommittee budget: $' + report.hiCharged.toFixed(2) : '') +
+    '\nTotal literature sales: $' + (Math.round((report.moneyCollected + (report.hiCharged || 0)) * 100) / 100).toFixed(2) +
     '\nSpent: $' + report.moneySpent.toFixed(2) +
     '\nNotes: ' + (report.other || 'None');
 }
