@@ -5,9 +5,11 @@ body.dark #fs-order .fs-back{color:var(--lime)}
 #fs-order .fs-msg{font-size:13px;margin:10px 0;line-height:1.5;color:var(--onyx)}
 #fs-order .fs-msg.error{color:var(--danger);font-weight:600}
 #fs-order .fs-notice{background:var(--snow);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 12px;line-height:1.5}
+#fs-order .fs-qp{font-size:13px;color:var(--muted);margin:8px 0 0;line-height:1.5}
+#fs-order .fs-qp:empty{display:none}
 #fs-order .fs-table{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--border);border-radius:10px}
 #fs-order .fs-table th{background:var(--snow);font-size:11px;text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);color:var(--muted)}
-#fs-order .fs-table td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:top;color:var(--onyx)}
+#fs-order .fs-table td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:middle;color:var(--onyx)}
 #fs-order .fs-table td.fs-id{width:64px;white-space:nowrap}
 #fs-order .fs-table td.fs-q,#fs-order .fs-table th.fs-q{width:1%;white-space:nowrap;text-align:center}
 #fs-order .fs-table td.fs-m,#fs-order .fs-table th.fs-m{text-align:center;white-space:nowrap;width:1%}
@@ -197,7 +199,7 @@ function fsEditHTML() {
   var rows = fsDisplayLines().map(function(l) {
     var it = fsItem(l.itemId), name = it ? it.name : l.itemId;
     var req = l.manual && fsOnRequest(l.itemId) ? '<input class="fs-req" type="text" maxlength="100" placeholder="Requested for (optional, not sent to Free State)" aria-label="Requested for ' + esc(name) + '" value="' + esc(l.requestedFor || '') + '" oninput="fsSetRequested(\'' + esc(l.itemId) + '\',this.value)">' : '';
-    return '<tr><td class="fs-id">' + esc(l.itemId) + '</td><td>' + esc(name) + req + '</td><td class="fs-m">' + fsMoney(it ? it.price : 0) + '</td><td class="fs-q">'
+    return '<tr><td class="fs-id">' + esc(l.itemId) + '</td><td>' + esc(name) + req + '</td><td class="fs-m" id="fs-price-' + esc(l.itemId) + '">' + fsUnitMoney(fsLinePrice(l)) + '</td><td class="fs-q">'
       + '<div class="qty-wrap compact">'
       + '<button type="button" class="qty-btn" aria-label="Subtract one from ' + esc(name) + '" onclick="fsStep(\'' + esc(l.itemId) + '\',-1)">&minus;</button>'
       + '<input class="fs-qty" id="fs-qty-' + esc(l.itemId) + '" type="text" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="Quantity for ' + esc(name) + '" value="' + esc(l.qty) + '" oninput="fsSetQty(\'' + esc(l.itemId) + '\',this)">'
@@ -208,21 +210,47 @@ function fsEditHTML() {
   if (!rows) rows = '<tr><td colspan="6" style="color:var(--muted)">No products yet. Use Add Item.</td></tr>';
   return '<table class="fs-table"><thead><tr><th>Item #</th><th>Description</th><th class="fs-m">Price</th><th class="fs-q">Quantity</th><th class="fs-m">Total</th><th class="fs-m" aria-label="Remove"></th></tr></thead><tbody>' + rows + '</tbody>'
     + '<tfoot><tr><td colspan="4" style="text-align:right;font-weight:600">Order Total</td><td class="fs-m" style="font-weight:700" id="fs-grand">' + fsMoney(fsGrandTotal()) + '</td><td></td></tr></tfoot></table>'
+    + '<div class="fs-qp" id="fs-qp">' + fsQuantityNoteHTML() + '</div>'
     + (fs.pickerOpen ? fsPickerHTML() : '')
     + '<div class="fs-actions"><button type="button" onclick="fsTogglePicker()">Add Item</button><button type="button" onclick="fsResetToSuggested()">Reset to Suggested</button><button type="button" class="primary" id="fs-review-btn" onclick="fsReview()"' + (fs.busy ? ' disabled' : '') + '>Review &amp; Send</button></div>';
 }
 
 // Catalog price is per pack for pack items and each otherwise; quantities are in singles (same as the server's total).
 function fsMoney(n) { return '$' + Number(n || 0).toFixed(2); }
+// Price of ONE item: a pack item's catalog price is per pack, but quantities here are singles (as on Free State's own form),
+// so the screen shows price / pack size and Price x Quantity = Total. Same rule as the server.
+function fsUnitPrice(it) { return it ? Math.round(Number(it.price) / (Number(it.packSize) > 1 ? Number(it.packSize) : 1) * 10000) / 10000 : 0; }
+function fsUnitMoney(n) { return '$' + Number(n || 0).toFixed(4).replace(/0{1,2}$/, ''); }
+// Quantity price (Catalog column K, the price of ONE item): once the order holds 100 or more of the items that have one, counted
+// together, every one of them is priced at it. Same rule and same threshold as the server (FS_QUANTITY_MIN_).
+var FS_QUANTITY_MIN = 100;
+function fsQP(it) { return it && Number(it.quantityPrice) > 0 ? Number(it.quantityPrice) : 0; }
+function fsPooledQty() { return fs.lines.reduce(function(sum, l) { return sum + (fsQP(fsItem(l.itemId)) ? parseInt(l.qty, 10) || 0 : 0); }, 0); }
+function fsReduced() { return fsPooledQty() >= FS_QUANTITY_MIN; }
+function fsLinePrice(l) { var it = fsItem(l.itemId), qp = fsQP(it); return qp && fsReduced() ? Math.round(qp * 10000) / 10000 : fsUnitPrice(it); }
+function fsQuantityNoteHTML() {
+  if (!fs.lines.some(function(l) { return fsQP(fsItem(l.itemId)); })) return '';
+  var n = fsPooledQty();
+  return fsReduced() ? 'Reduced pamphlet prices apply: ' + n + ' pamphlets in this order (100 or more).'
+    : n + ' of 100 pamphlets in this order. At 100 or more in total, the reduced pamphlet price applies.';
+}
 function fsLineTotal(l) {
-  var it = fsItem(l.itemId), pack = it && Number(it.packSize) > 1 ? Number(it.packSize) : 1;
-  return Math.round(((parseInt(l.qty, 10) || 0) / pack) * (it ? Number(it.price) || 0 : 0) * 100) / 100;
+  var it = fsItem(l.itemId), qty = parseInt(l.qty, 10) || 0, qp = fsQP(it);
+  if (qp && fsReduced()) return Math.round(qty * qp * 100) / 100;
+  var pack = it && Number(it.packSize) > 1 ? Number(it.packSize) : 1;
+  return Math.round((qty / pack) * (it ? Number(it.price) || 0 : 0) * 100) / 100;
 }
 function fsGrandTotal() { return Math.round(fs.lines.reduce(function(sum, l) { return sum + fsLineTotal(l); }, 0) * 100) / 100; }
-function fsUpdateTotals(id) {
-  var l = fsLine(id), t = document.getElementById('fs-total-' + id), g = document.getElementById('fs-grand');
-  if (l && t) t.textContent = fsMoney(fsLineTotal(l));
+// One quantity can move every pamphlet to (or off) the reduced price, so every row's price and total is refreshed.
+function fsUpdateTotals() {
+  fs.lines.forEach(function(l) {
+    var p = document.getElementById('fs-price-' + l.itemId), t = document.getElementById('fs-total-' + l.itemId);
+    if (p) p.textContent = fsUnitMoney(fsLinePrice(l));
+    if (t) t.textContent = fsMoney(fsLineTotal(l));
+  });
+  var g = document.getElementById('fs-grand'), q = document.getElementById('fs-qp');
   if (g) g.textContent = fsMoney(fsGrandTotal());
+  if (q) q.textContent = fsQuantityNoteHTML();
 }
 function fsLine(id) { return fs.lines.find(function(l) { return l.itemId === id; }); }
 function fsSetQty(id, input) {
@@ -382,7 +410,7 @@ function fsPairsTable(rows) {
 function fsPrintOrder() {
   var o = fs.order; if (!o) return;
   var items = '<table><thead><tr><th style="text-align:left">Item #</th><th style="text-align:left">Description</th><th>Price</th><th>Quantity</th><th>Total</th></tr></thead><tbody>'
-    + o.lines.map(function(l) { return '<tr><td style="text-align:left">' + esc(l.itemId) + '</td><td style="text-align:left">' + esc(l.name) + '</td><td>' + fsMoney(l.price) + '</td><td>' + esc(l.qty) + '</td><td>' + fsMoney(l.total) + '</td></tr>'; }).join('')
+    + o.lines.map(function(l) { return '<tr><td style="text-align:left">' + esc(l.itemId) + '</td><td style="text-align:left">' + esc(l.name) + '</td><td>' + fsUnitMoney(l.price) + '</td><td>' + esc(l.qty) + '</td><td>' + fsMoney(l.total) + '</td></tr>'; }).join('')
     + '<tr><td colspan="4" style="text-align:right;font-weight:bold">Order Total</td><td style="font-weight:bold">' + fsMoney(o.orderTotal) + '</td></tr></tbody></table>';
   printReportPage('Free State Literature Order', '<h1>NORVANA</h1><h2>Free State Literature Order</h2><p>Order ' + esc(o.orderId) + ' | Sent ' + esc(o.sentDate) + '</p>'
     + '<h3>Bill To</h3>' + fsPairsTable(o.billTo) + '<h3>Ship To</h3>' + fsPairsTable(o.shipTo) + '<h3>Order Items</h3>' + items);

@@ -2871,12 +2871,12 @@ function renderSettings(data, groups) {
     return;
   }
 
-  // Rolling schedule: only show months from 2 months ago onward
+  // Rolling schedule: windows that have already closed are hidden, so the list starts at the current ordering window.
+  // (They stay in the sheet; this only keeps the list free of outdated rows.)
   const now = new Date();
-  const cutoff = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
   const futureSchedule = (data.schedule || []).filter(function(row) {
-    const d = new Date(row.month + ' 1');
-    return !isNaN(d) && d >= cutoff;
+    return !row.close || row.close >= todayStr;
   });
 
   const scheduleRows = futureSchedule.map(function(row) {

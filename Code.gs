@@ -964,6 +964,8 @@ function getCatalogAll(token) {
       // Target Stock has no column: it is Low At (Catalog column G) plus one order multiple. The multiple is the optional
       // Order Multiple (column J, for bulk items such as the H&I booklets) or else the Pack Size, or 1 for single items.
       orderMultiple: orderMultiple,
+      // Optional Quantity Price (column K): price of ONE item once a Free State order has 100 or more such items in total.
+      quantityPrice: Number(row[10]) > 0 ? Number(row[10]) : 0,
       targetStock: lowAt + orderMultiple,
       rowIndex: i + 1,
     });

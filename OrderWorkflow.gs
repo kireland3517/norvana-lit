@@ -106,25 +106,21 @@ function sendReadyNotice_(order, items, total, updated) {
   // Subcommittee orders are paid by an internal budget transfer, so there is nothing to collect at pickup.
   const payment = isSubcommitteeGroup_(order[3])
     ? '\n\nFINAL AMOUNT CHARGED TO THE H&I SUBCOMMITTEE BUDGET: $' + total.toFixed(2) + '\n\nNo payment is needed at pickup.'
-    : '\n\nFINAL AMOUNT DUE AT PICKUP: $' + total.toFixed(2) + '\n\nPlease bring cash/check payment to the Lit Chair table at the area meeting. Exact change appreciated.';
+    : '\n\nFINAL AMOUNT DUE AT PICKUP: $' + total.toFixed(2) + '\n\nCash or check. Exact change is appreciated.';
   const subcommittee = isSubcommitteeGroup_(order[3]), month = meetingMonthFromOrdersCell_(order[2]);
   sendStyledMail_({ to: String(order[5]), subject: (updated ? 'Updated Literature Order Ready - ' : 'Your Literature Order is Ready - ') + String(order[3]),
     eyebrow: month + EMAIL_DOT_ + (updated ? 'Updated pickup' : 'Literature pickup'),
     headline: updated ? ['Your order', 'was updated.'] : ['We did the thing.', "It's ready."],
-    lead: 'Your literature is packed and ready to go. The message is ready to carry.',
-    pill: updated ? 'Updated and ready' : 'Ready for pickup',
+    lead: ['Your literature is packed and ready to go.', 'The message is ready to carry.'],
+    pill: 'Pickup at halftime', pillIcon: true,
     heading: String(order[3]), subheading: 'Order ' + String(order[0]), statusLabel: 'Packed for your group',
     itemsLabel: 'Fulfilled items',
     items: items.filter(i => i.qty > 0).map(i => ({ name: i.name, qty: i.qty, amount: i.price * i.qty })),
     band: subcommittee
       ? { label: 'Charged to H&I budget', sub: 'No payment needed at pickup', amount: total }
-      : { label: 'Final amount due at pickup', sub: 'Cash or check', amount: total },
-    info: { title: month + ' area meeting', text: 'Your order is at the Lit Chair table.' },
-    notes: [subcommittee
-      ? 'This order is charged to the H&I subcommittee budget, so no payment is needed at pickup.'
-      : 'Please bring cash or check to the Lit Chair table. Exact change is appreciated.'],
+      : { label: 'Final amount due at pickup', sub: 'Cash or check', note: 'Exact change is appreciated.', amount: total },
     footer: ['Questions? Contact ' + getLitChairEmail() + '.', 'NORVANA Literature Committee'],
-    body: 'Your literature order for the ' + meetingMonthFromOrdersCell_(order[2]) + ' area meeting is ready for pickup.\n\nGROUP: ' + String(order[3]) +
+    body: 'Your literature order for the ' + meetingMonthFromOrdersCell_(order[2]) + ' area meeting is ready for pickup.\n\nPlease wait until halftime of the area meeting to pick up your order at the Literature Chair table.\n\nGROUP: ' + String(order[3]) +
       '\n\nITEMS FULFILLED:\n' + (lines.join('\n') || 'No items fulfilled.') + payment +
       '\n\nQuestions? Contact ' + getLitChairEmail() + '\n\nNORVANA Literature Committee' });
 }

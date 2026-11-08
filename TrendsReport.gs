@@ -27,7 +27,7 @@ function trendsMonthRange_(fromYm, toYm) {
   return list;
 }
 
-const trendsBlank_ = function() { return { requested: 0, distributed: 0, value: 0 }; };
+const trendsBlank_ = function() { return { requested: 0, distributed: 0, value: 0, requestedValue: 0 }; };
 
 // Groups the tracked orders by meeting month (the first copy of an order ID wins; months before tracking began are ignored).
 function trendsGroup_(orders, startYm) {
@@ -61,9 +61,12 @@ function trendsAggregate_(byYm, lines, catalog, yms) {
         const cell = item.months[ym] || (item.months[ym] = trendsBlank_());
         cell.requested += requested; cell.distributed += distributed;
         cell.value = roundTo_(cell.value + roundTo_((done ? packs : 0) * (Number(r[4]) || 0), 2), 2);
+        const orderedValue = roundTo_((Number(r[5]) || 0) * (Number(r[4]) || 0), 2); // every requested pack at its price, picked up or not
+        cell.requestedValue = roundTo_(cell.requestedValue + orderedValue, 2);
         const total = monthTotals[ym] || (monthTotals[ym] = trendsBlank_());
         total.requested += requested; total.distributed += distributed;
         total.value = roundTo_(total.value + roundTo_((done ? packs : 0) * (Number(r[4]) || 0), 2), 2);
+        total.requestedValue = roundTo_(total.requestedValue + orderedValue, 2);
       });
     });
   });
@@ -105,21 +108,23 @@ function trendsReport_(orders, lines, catalog, month, currentMonth) {
   const rows = Object.keys(items).map(function(id) {
     const it = items[id], sel = get(it.months, selYm);
     return { itemId: it.itemId, name: it.name, category: it.category,
-      requested: sel.requested, distributed: sel.distributed, value: sel.value,
+      requested: sel.requested, distributed: sel.distributed, value: sel.value, requestedValue: sel.requestedValue,
       prev: prevYm == null ? null : get(it.months, prevYm).distributed,
+      prevRequested: prevYm == null ? null : get(it.months, prevYm).requested, // for the Change column: requested vs requested
       avg: average(function(ym) { return get(it.months, ym).distributed; }),
       series: seriesYms.map(function(ym) { return get(it.months, ym).distributed; }) };
-  }).filter(function(r) { return r.requested || r.distributed || r.prev || r.series.some(Boolean); })
+  }).filter(function(r) { return r.requested || r.distributed || r.prev || r.prevRequested || r.series.some(Boolean); })
     .sort(compareItems_);
 
   const sel = get(monthTotals, selYm);
   return {
     period: 'monthly', availableYears: trendsYears_(startYm, Math.max(lastYm, selYm)),
     month: monthLabel_(selYm), startMonth: TRENDS_START_MONTH_, monthToDate: selYm === currentYm,
+    inProgressMonth: selYm === currentYm ? monthLabel_(selYm) : '', // the chart draws this month as in progress
     avgMonths: avgYms.length, prevMonth: prevYm == null ? '' : monthLabel_(prevYm),
     months: seriesYms.map(monthLabel_),
     availableMonths: trendsMonthRange_(startYm, Math.max(lastYm, selYm)).reverse().map(monthLabel_),
-    totals: { requested: sel.requested, distributed: sel.distributed, value: sel.value,
+    totals: { requested: sel.requested, distributed: sel.distributed, value: sel.value, requestedValue: sel.requestedValue,
       prev: prevYm == null ? null : get(monthTotals, prevYm).distributed,
       avg: average(function(ym) { return get(monthTotals, ym).distributed; }) },
     series: seriesYms.map(function(ym) { return { month: monthLabel_(ym), requested: get(monthTotals, ym).requested,
@@ -148,13 +153,13 @@ function trendsAnnualReport_(orders, lines, catalog, yearText, currentMonth) {
   const sumOf = function(cells, yms) {
     return yms.reduce(function(t, ym) {
       const c = (cells && cells[ym]) || blank();
-      return { requested: t.requested + c.requested, distributed: t.distributed + c.distributed, value: roundTo_(t.value + c.value, 2) };
+      return { requested: t.requested + c.requested, distributed: t.distributed + c.distributed, value: roundTo_(t.value + c.value, 2), requestedValue: roundTo_(t.requestedValue + c.requestedValue, 2) };
     }, blank());
   };
   const perMonth = function(n) { return yearYms.length ? roundTo_(n / yearYms.length, 1) : null; };
   const rows = Object.keys(agg.items).map(function(id) {
     const it = agg.items[id], sel = sumOf(it.months, yearYms), prev = prevYms.length ? sumOf(it.months, prevYms).distributed : null;
-    return { itemId: it.itemId, name: it.name, category: it.category, requested: sel.requested, distributed: sel.distributed, value: sel.value,
+    return { itemId: it.itemId, name: it.name, category: it.category, requested: sel.requested, distributed: sel.distributed, value: sel.value, requestedValue: sel.requestedValue,
       prev: prev, avg: perMonth(sel.distributed),
       series: yearYms.map(function(ym) { return ((it.months[ym]) || blank()).distributed; }) };
   }).filter(function(r) { return r.requested || r.distributed || r.prev || r.series.some(Boolean); })
@@ -163,8 +168,9 @@ function trendsAnnualReport_(orders, lines, catalog, yearText, currentMonth) {
   return {
     period: 'annual', year: String(year), availableYears: trendsYears_(startYm, lastYm), startMonth: TRENDS_START_MONTH_,
     yearToDate: year === lastYear && lastYm < year * 12 + 11, monthsCounted: yearYms.length,
+    inProgressMonth: currentYm != null && yearYms.indexOf(currentYm) >= 0 ? monthLabel_(currentYm) : '',
     prevYear: prevYms.length ? String(year - 1) : '', months: yearYms.map(monthLabel_),
-    totals: { requested: sel.requested, distributed: sel.distributed, value: sel.value,
+    totals: { requested: sel.requested, distributed: sel.distributed, value: sel.value, requestedValue: sel.requestedValue,
       prev: prevYms.length ? sumOf(agg.monthTotals, prevYms).distributed : null, avg: perMonth(sel.distributed) },
     series: yearYms.map(function(ym) { const c = agg.monthTotals[ym] || blank(); return { month: monthLabel_(ym), requested: c.requested, distributed: c.distributed, value: c.value }; }),
     categories: Array.from(new Set(rows.map(function(r) { return r.category; }))),

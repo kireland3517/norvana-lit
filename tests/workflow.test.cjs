@@ -27,14 +27,86 @@ test('assembled local preview loads Reports (Orders, Trends and Chair Report; in
   // Trends lives in the Reports tab; the Inventory tab's Trends button is a shortcut into it.
   vm.runInContext("setReportMode('trends');",c);flush();
   assert.match(elements['report-panel'].innerHTML,/id="trends-view"/);assert.doesNotMatch(elements['trends-view'].innerHTML,/Inventory/);
-  assert.match(elements['trends-view'].innerHTML,/Quantities represent individual items, except readings, which are counted as sets\./);assert.match(elements['trends-view'].innerHTML,/include the H&amp;I Subcommittee/);
+  assert.doesNotMatch(elements['trends-view'].innerHTML,/tr-notice|tr-badge|Quantities represent|Warning:|Orders waiting for pickup/,'the explanatory notice box is gone');
   assert.match(elements['trends-view'].innerHTML,/<span>Items distributed<\/span>/);assert.match(elements['trends-view'].innerHTML,/<small>items distributed<\/small>/);assert.match(elements['trends-view'].innerHTML,/<option value="monthly" selected>/);
   vm.runInContext("trSetPeriod('annual');",c);flush();
   const annual=elements['trends-view'].innerHTML;
-  assert.match(annual,/<option value="annual" selected>/);assert.match(annual,/<label>Year<select/);assert.match(annual,/<option value="2027">/);assert.match(annual,/Year to date/);
-  assert.match(annual,/<span>Monthly average<\/span>/);assert.match(annual,/Avg\/month/);assert.match(annual,/Counts only the 3 months of 2026 since tracking began/);
+  assert.match(annual,/<option value="annual" selected>/);assert.match(annual,/<label>Year<select/);assert.match(annual,/<option value="2027">/);
+  assert.match(annual,/<span>Monthly average<\/span>/);assert.match(annual,/Avg \/ <span class="tr-nw">Month<button/);
   assert.match(annual,/<span>Items distributed<\/span><strong>140<\/strong>/,'annual total is the sum of the tracked months across items (15 + 125)');
   vm.runInContext("trSetPeriod('monthly');",c);flush();assert.match(elements['trends-view'].innerHTML,/<label>Month<select/);
+  // Change column: requested this month vs last month, arrow + "was -> now (+/-change)", blank while the month is in progress, sortable once it is complete.
+  vm.runInContext("trLoad('November 2026');",c);flush();
+  const nov=elements['trends-view'].innerHTML;
+  assert.match(nov,/<th class="chg-h"><span class="tr-nw">Change<button[^>]*>i<\/button><\/span><\/th>/);
+  // November is still in progress: no change data, no "preliminary" wording, and nothing to sort by.
+  assert.doesNotMatch(nov,/preliminary/i);assert.doesNotMatch(nov,/class="chg (up|down|flat)"/);assert.match(nov,/<td class="chg none">-<\/td>/);
+  assert.match(nov,/<select onchange="trSetSort\(this.value\)" disabled>/);
+  // Final columns, in order, with the previous month's abbreviation as the second header and an info icon on every header except Item.
+  const heads=[...nov.matchAll(/<th(?: [^>]*)?>(.*?)<\/th>/g)].map(m=>m[1].replace(/<button.*?<\/button>/,'').replace(/<[^>]+>/g,''));
+  assert.deepEqual(heads,['Item','Oct','Avg / Month','Requested','Change','Distributed','Total']);
+  assert.equal((nov.match(/<button type="button" class="tr-info"/g)||[]).length,6);assert.doesNotMatch(nov,/<th>Item<button/);
+  assert.match(nov,/data-tip="Quantity distributed last month\."/);assert.match(nov,/data-tip="Average monthly distribution over the last 3 completed months, or fewer if unavailable\."/);
+  assert.match(nov,/data-tip="Total quantity ordered for the selected month\."/);assert.match(nov,/data-tip="Difference between this month’s requests and last month’s requests\. Shown once the month is complete\."/);
+  assert.match(nov,/data-tip="Total quantity picked up by groups during the selected month\."/);assert.match(nov,/data-tip="Total dollar value of requested items\."/);
+  assert.match(nov,/<td>\$[\d.]+<\/td><\/tr>/,'Total is the value of the requested items');
+  assert.match(nov,/id="tr-tip"/);
+  // December is complete (November is its earlier month), so Change has data and can be sorted.
+  vm.runInContext("trLoad('December 2026');",c);flush();
+  const dec=elements['trends-view'].innerHTML;
+  assert.match(dec,/last month’s requests\."/);assert.doesNotMatch(dec,/Shown once the month is complete/);assert.doesNotMatch(dec,/<select onchange="trSetSort\(this.value\)" disabled>/);
+  const cells=()=>[...elements['trends-view'].innerHTML.matchAll(/<td class="chg (up|down|flat)"><span class="arr">(.)<\/span> ([\d.]+) → ([\d.]+) \(([+−]?)([\d.]+)\)<\/td>/g)];
+  assert.ok(cells().length>=2);
+  for(const m of cells()){const was=Number(m[3]),now=Number(m[4]),diff=now-was;assert.equal(m[1],diff>0?'up':diff<0?'down':'flat');assert.equal(m[2],diff>0?'↑':diff<0?'↓':'→');assert.equal(Number(m[6]),Math.abs(diff));}
+  assert.match(dec,/<tr class="cat">/);
+  vm.runInContext("trSetSort('increase');",c);flush();
+  assert.doesNotMatch(elements['trends-view'].innerHTML,/<tr class="cat">/,'sorting by change lists the items without category headings');
+  const diffs=m=>m.map(x=>(x[5]==='−'?-1:1)*Number(x[6]));
+  const up=diffs(cells());assert.deepEqual(up,[...up].sort((a,b)=>b-a));
+  vm.runInContext("trSetSort('decrease');",c);flush();
+  const dn=diffs(cells());assert.deepEqual(dn,[...dn].sort((a,b)=>a-b));
+  // A sort picked on a finished month does not carry into a month in progress.
+  vm.runInContext("trLoad('November 2026');",c);flush();assert.match(elements['trends-view'].innerHTML,/<tr class="cat">/);assert.match(elements['trends-view'].innerHTML,/<option value="catalog" selected>/);
+  vm.runInContext("trSetSort('catalog');",c);flush();assert.match(elements['trends-view'].innerHTML,/<tr class="cat">/);
+  vm.runInContext("trLoad('October 2026');",c);flush();
+  assert.doesNotMatch(elements['trends-view'].innerHTML,/class="chg (up|down|flat)"/,'the first tracked month has no earlier month to compare with');
+  assert.match(elements['trends-view'].innerHTML,/<select onchange="trSetSort\(this.value\)" disabled>/);
+  vm.runInContext("trSetPeriod('annual');",c);flush();assert.doesNotMatch(elements['trends-view'].innerHTML,/Change in requested|trSetSort/,'annual view is unchanged');
+  vm.runInContext("trSetPeriod('monthly');",c);flush();
+  // Line chart: one line per category; the month in progress is dashed with an open dot; categories toggle; overall total view.
+  vm.runInContext("trLoad('November 2026');",c);flush();
+  let chart=elements['trends-view'].innerHTML;
+  assert.doesNotMatch(chart,/tr-bars/);assert.match(chart,/<h3>Monthly distribution by category \(picked up\)<\/h3>/);
+  assert.equal((chart.match(/<path class="tr-line dash"/g)||[]).length,3,'one dashed in-progress segment per category');
+  assert.equal((chart.match(/class="tr-dot open"/g)||[]).length,3);assert.match(chart,/>in progress<\/text>/);
+  assert.match(chart,/data-tip="November 2026 \(in progress\)&#10;|data-tip="November 2026 \(in progress\)\n/);
+  assert.equal((chart.match(/class="tr-chip"/g)||[]).length,3);assert.match(chart,/<button type="button" class="tr-chip"[^>]*aria-pressed="true"[^>]*>.*?Books/);
+  vm.runInContext("trToggleCat(0);",c);flush();chart=elements['trends-view'].innerHTML;
+  assert.equal((chart.match(/<circle class="tr-dot/g)||[]).length,4,'hiding Books leaves two categories with two points each');assert.match(chart,/aria-pressed="false"[^>]*><span class="tr-sw"><\/span>Books/);
+  vm.runInContext("trToggleCat(0);trSetChartMode('total');",c);flush();chart=elements['trends-view'].innerHTML;
+  assert.match(chart,/<h3>Total monthly distribution \(picked up\)<\/h3>/);assert.match(chart,/<path class="tr-line total dash"/);assert.equal((chart.match(/<circle class="tr-dot total/g)||[]).length,2);
+  assert.match(chart,/class="tr-chip static"[^>]*><span class="tr-sw"><\/span>All literature/);assert.doesNotMatch(chart,/trToggleCat/);
+  vm.runInContext("trSetChartMode('category');trLoad('December 2026');",c);flush();chart=elements['trends-view'].innerHTML;
+  assert.doesNotMatch(chart,/tr-line dash/,'a finished month is solid');assert.doesNotMatch(chart,/>in progress</);assert.equal((chart.match(/<circle class="tr-dot/g)||[]).length,9);
+  vm.runInContext("trLoad('October 2026');",c);flush();chart=elements['trends-view'].innerHTML;
+  assert.equal((chart.match(/<circle class="tr-dot/g)||[]).length,3,'a single month is just one point per category');assert.doesNotMatch(chart,/<path class="tr-line/);
+  // The chart is drawn at the width of the screen with a fixed height, so it fills a wide screen without growing taller.
+  vm.runInContext("trLoad('November 2026');",c);flush();
+  elements['trends-view'].clientWidth=1200;vm.runInContext("trRender();",c);
+  assert.match(elements['trends-view'].innerHTML,/<svg class="tr-svg" viewBox="0 0 1172 200"/);
+  elements['trends-view'].clientWidth=380;vm.runInContext("trRender();",c);
+  assert.match(elements['trends-view'].innerHTML,/<svg class="tr-svg" viewBox="0 0 352 200"/);
+  elements['trends-view'].clientWidth=undefined;
+  // A month with nothing picked up is left out of the chart, and so is its "in progress" marking.
+  vm.runInContext("trLoad('December 2026');",c);flush();
+  vm.runInContext("var _d=JSON.parse(JSON.stringify(trends.data));_d.items.forEach(function(it){it.series[it.series.length-1]=0;});_d.inProgressMonth=_d.months[_d.months.length-1];trends.data=_d;trRender();",c);
+  chart=elements['trends-view'].innerHTML;
+  assert.doesNotMatch(chart,/<text[^>]*>Dec/);assert.doesNotMatch(chart,/in progress/);assert.doesNotMatch(chart,/tr-line dash/);
+  assert.equal((chart.match(/<circle class="tr-dot/g)||[]).length,6,'two months left, three categories');
+  vm.runInContext("var _e=JSON.parse(JSON.stringify(trends.data));_e.items.forEach(function(it){it.series=it.series.map(function(){return 0;});});trends.data=_e;trRender();",c);
+  assert.match(elements['trends-view'].innerHTML,/No distribution yet\./);assert.doesNotMatch(elements['trends-view'].innerHTML,/class="tr-svg"/);
+  vm.runInContext("trSetPeriod('annual');",c);flush();assert.match(elements['trends-view'].innerHTML,/class="tr-svg"/,'the annual view uses the same chart');
+  vm.runInContext("trSetPeriod('monthly');",c);flush();
   vm.runInContext("setReportMode('orders');",c);flush();
   assert.match(elements['report-panel'].innerHTML,/individual items, except readings, which are counted as sets\. Orders and totals include the H&I Subcommittee, which is not a group\./);
   vm.runInContext("requestedReportMode=null;reportMode='orders';openTrendsShortcut();",c);flush();
@@ -184,6 +256,10 @@ test('Trends count requested from every order, distributed from Completed only, 
   const dec=f.c.trendsReport_(f.c.getOrders('','test'),f.tables['Order Items'],f.c.getCatalogMap_(),'December 2026','December 2026');
   const row=dec.items[0];
   assert.deepEqual([row.requested,row.distributed,row.value,row.prev,row.avg],[8,4,48,10,5.5]);
+  assert.deepEqual([row.requestedValue,row.value,dec.totals.requestedValue,dec.totals.value],[96,48,96,48],'Total (requested value) counts every requested pack at its price; value counts picked-up packs only');
+  assert.equal(dec.inProgressMonth,'December 2026','the current ordering month is the one in progress');
+  assert.equal(f.c.trendsReport_(f.c.getOrders('','test'),f.tables['Order Items'],f.c.getCatalogMap_(),'November 2026','December 2026').inProgressMonth,'','a finished month has none');
+  assert.equal(row.prevRequested,13,'November requested (10 + 3), compared with December requested (8) in the Change column');
   assert.deepEqual(plain([dec.avgMonths,dec.prevMonth,dec.monthToDate,dec.months]),[2,'November 2026',true,['October 2026','November 2026','December 2026']]);
   assert.deepEqual(plain(row.series),[1,10,4]);assert.deepEqual(plain(dec.series.map(m=>m.requested)),[7,13,8]);
   assert.deepEqual(plain(dec.availableMonths),['December 2026','November 2026','October 2026']);
@@ -208,7 +284,9 @@ test('Trends annual view: adds up the tracked months of a year, compares with th
   assert.deepEqual(plain([y26.period, y26.year, y26.yearToDate, y26.monthsCounted, y26.prevYear, y26.months]), ['annual', '2026', false, 3, '', ['October 2026', 'November 2026', 'December 2026']]);
   assert.deepEqual([row26.requested, row26.distributed, row26.value, row26.prev, row26.avg], [28, 15, 158, null, 5], 'Oct + Nov + Dec only; September is before tracking; a Ready order is not distributed');
   assert.deepEqual(plain(row26.series), [1, 10, 4]); assert.deepEqual(plain(plain(y26.availableYears)), ['2027', '2026']);
+  assert.equal(y26.inProgressMonth, '', 'the current month (January 2027) is not in the 2026 view');
   const y27 = run('2027', 'January 2027'), row27 = y27.items[0];
+  assert.equal(y27.inProgressMonth, 'January 2027');
   assert.deepEqual(plain([y27.year, y27.yearToDate, y27.monthsCounted, y27.prevYear]), ['2027', true, 1, '2026']);
   assert.deepEqual([row27.requested, row27.distributed, row27.prev, row27.avg, y27.totals.prev, y27.totals.avg], [6, 6, 15, 6, 15, 6], 'compared with the whole of 2026');
   assert.equal(run('2031', 'January 2027').year, '2027', 'a year after the latest tracked month falls back to the latest year');
@@ -857,7 +935,7 @@ test('H&I emails say it is charged to the budget; other groups keep the cash/che
   assert.equal(f.c.fulfillOrder(hi.orderId,[{rowId:rowId(hi.orderId),qtyFulfilled:1}],10,'test',0).success,true);
   const ready=f.emails.pop();assert.match(ready.body,/CHARGED TO THE H&I SUBCOMMITTEE BUDGET: \$99\.00/);assert.match(ready.body,/No payment is needed at pickup/);assert.doesNotMatch(ready.body,/cash\/check|DUE AT PICKUP/);
   assert.equal(f.c.fulfillOrder(normal.orderId,[{rowId:rowId(normal.orderId),qtyFulfilled:1}],10,'test',0).success,true);
-  const cash=f.emails.pop();assert.match(cash.body,/FINAL AMOUNT DUE AT PICKUP: \$99\.00/);assert.match(cash.body,/bring cash\/check payment/);assert.doesNotMatch(cash.body,/H&I/);
+  const cash=f.emails.pop();assert.match(cash.body,/FINAL AMOUNT DUE AT PICKUP: \$99\.00/);assert.match(cash.body,/Cash or check\. Exact change is appreciated\./);assert.doesNotMatch(cash.body,/H&I/);
 });
 
 test('H&I Completed orders are reported as charged to the budget, not collected',()=>{
@@ -930,6 +1008,11 @@ test('emails carry a styled HTML version with the inline logo; plain text stays,
     assert.ok(e.body.length>50);assert.match(e.htmlBody,/^<!DOCTYPE html>/);assert.match(e.htmlBody,/src="cid:norvanalogo"/);
     const png=e.inlineImages.norvanalogo;assert.equal(png.type,'image/png');assert.deepEqual(png.bytes.slice(0,4),[0x89,0x50,0x4e,0x47]);
   }
+  for(const e of [confirm,alert])assert.deepEqual(Object.keys(e.inlineImages),['norvanalogo'],'other emails carry only the logo');assert.doesNotMatch(confirm.htmlBody+alert.htmlBody,/pillicon/);
+  // The raw MIME builder (own-inbox delivery) attaches exactly the images the HTML uses.
+  const mime=o=>f.c.styledMime_(Object.assign({subject:'s',body:'b',eyebrow:'e',headline:['h'],lead:'l',heading:'g',footer:['f']},o),'me@example.invalid');
+  assert.match(mime({pill:'Pickup at halftime',pillIcon:true}),/Content-ID: <norvanalogo>[\s\S]*Content-ID: <pillicon>[\s\S]*--nv_rel--/);
+  assert.doesNotMatch(mime({pill:'Plain pill'}),/pillicon/);assert.doesNotMatch(mime({}),/pillicon/);
   assert.doesNotMatch(alert.htmlBody,/<b>Pat/);assert.match(alert.htmlBody,/&lt;b&gt;Pat&lt;\/b&gt; &amp; &quot;Q&quot;/);
   assert.match(confirm.htmlBody,/You asked/);assert.match(confirm.htmlBody,/NL-2610-002/);assert.match(confirm.htmlBody,/charged to the H&amp;I subcommittee budget/);
   assert.match(alert.htmlBody,/Someone needs/);assert.match(alert.htmlBody,/NL-2610-002/);assert.match(alert.htmlBody,/1500H&amp;I/);assert.match(alert.htmlBody,/pat@example\.invalid/);
@@ -937,9 +1020,32 @@ test('emails carry a styled HTML version with the inline logo; plain text stays,
   const normal=f.c.submitOrder(order({requestId:'req-style-2',items:[{itemId:'B1',qty:1}]}));
   f.emails.length=0;
   f.c.fulfillOrder(normal.orderId,[{rowId:normal.orderId+'-01',qtyFulfilled:1}],10,'test',0);
-  const pay=f.emails.pop();assert.match(pay.htmlBody,/It's ready/);assert.match(pay.htmlBody,/Final amount due at pickup/);assert.match(pay.htmlBody,/cash or check/);assert.doesNotMatch(pay.htmlBody,/Unfilled|carry forward/);
+  const pay=f.emails.pop();assert.match(pay.htmlBody,/It's ready/);assert.match(pay.htmlBody,/Final amount due at pickup/);assert.match(pay.htmlBody,/Cash or check/);assert.doesNotMatch(pay.htmlBody,/Unfilled|carry forward/);
+  // Pickup timing: the blue top section ends with a lime pill with a book icon saying PICKUP AT HALFTIME (capitals come from the styling),
+  // for every group including H&I. The long notice is gone from the HTML; the plain-text version keeps the full sentence (it has no pill).
+  const pill=/<td bgcolor="#E2EF70"[^>]*border-radius:30px[^>]*><table[\s\S]*?<img src="cid:pillicon" width="26" height="26"[^>]*>[\s\S]*?text-transform:uppercase[^>]*>Pickup at halftime<\/td>/;
+  assert.match(pay.htmlBody,pill);assert.ok(pay.htmlBody.indexOf('cid:pillicon')<pay.htmlBody.indexOf('Final amount due at pickup'),'in the top section, above the total');
+  assert.ok(pay.htmlBody.indexOf('ready to carry')<pay.htmlBody.indexOf('cid:pillicon'),'under the lead sentence');
+  assert.doesNotMatch(pay.htmlBody,/Please wait until|Pickup begins|Ready for pickup|Updated and ready/,'the long notice and the old pill are gone');
+  assert.deepEqual(Object.keys(pay.inlineImages||{}).sort(),['norvanalogo','pillicon'],'the logo and the book icon are attached');
+  const icon=pay.inlineImages.pillicon;assert.equal(icon.type,'image/png');assert.deepEqual(icon.bytes.slice(0,4),[0x89,0x50,0x4e,0x47]);
+  // The total banner carries the payment wording; the area-meeting block and the note under the banner are gone.
+  assert.doesNotMatch(pay.htmlBody,/area meeting<\/div>|Your order is at the Lit Chair table|Please bring cash/);
+  assert.match(pay.htmlBody,/Cash or check<\/div><div style="margin-top:2px;font:italic 13px[^"]*">Exact change is appreciated\.<\/div>/,'italic line under Cash or check in the banner');
+  assert.ok(pay.htmlBody.indexOf('Exact change is appreciated.')<pay.htmlBody.indexOf('Questions? Contact'));
+  assert.match(pay.htmlBody,/ready to go\.<br>The message is ready to carry\./,'each sentence of the lead is on its own line');
+  assert.match(pay.body,/FINAL AMOUNT DUE AT PICKUP: \$[\d.]+\n\nCash or check\. Exact change is appreciated\./);
+  assert.match(pay.body,/ready for pickup\.\n\nPlease wait until halftime of the area meeting to pick up your order at the Literature Chair table\.\n\nGROUP:/);assert.doesNotMatch(pay.body,/\*\*/);
   f.c.fulfillOrder(r.orderId,[{rowId:r.orderId+'-01',qtyFulfilled:2},{rowId:r.orderId+'-02',qtyFulfilled:1}],10,'test',0);
   const hi=f.emails.pop();assert.match(hi.htmlBody,/Charged to H&amp;I budget/);assert.doesNotMatch(hi.htmlBody,/cash or check|amount due at pickup/i);
+  assert.match(hi.htmlBody,pill);assert.deepEqual(Object.keys(hi.inlineImages||{}).sort(),['norvanalogo','pillicon'],'H&I orders get the same pickup pill');assert.doesNotMatch(hi.htmlBody,/Exact change|subcommittee budget|area meeting<\/div>/);
+  // The bold markers only bold text; anything else in a note stays escaped.
+  assert.equal(f.c.emailRich_('a <b>x</b> **bold** & "q"'),'a &lt;b&gt;x&lt;/b&gt; <strong style="color:#1a1a3e">bold</strong> &amp; &quot;q&quot;');
+  assert.equal(f.c.emailRich_('two ** stars'),'two ** stars');
+  assert.equal(f.c.emailRich_('**x**','#ffffff'),'<strong style="color:#ffffff">x</strong>');
+  // Other emails keep their pill; a template call without one simply has no pill row.
+  assert.match(confirm.htmlBody,/border-radius:20px/);
+  assert.doesNotMatch(f.c.emailHtml_({eyebrow:'e',headline:['h'],lead:'l',heading:'g',footer:['f']}),/border-radius:20px/);
   // If building the styled version fails, the plain email still goes out.
   const g=hiFixture();g.c.Utilities.newBlob=()=>{throw new Error('no blob');};
   assert.equal(g.c.submitOrder(order({requestId:'req-style-3'})).success,true);
@@ -1105,12 +1211,42 @@ test('Free State preview: validates every line on the server and never exposes s
   const g = fsFixture(true);assert.match(g.preview().error,/Fill in these Free State settings/);assert.equal(g.preview().missing.length,14);
   assert.equal(f.c.previewFreeStateOrder([{itemId:'B1',qty:1}],'bad-token').success,false);
   const p = f.preview();assert.equal(p.success,true);assert.equal(p.to,'freestate@example.invalid');assert.equal(p.from,'norvanalit12@gmail.com');assert.equal(p.subject,'NORVANA Literature Order');
-  assert.deepEqual(JSON.parse(JSON.stringify(p.lines)),[{itemId:'B1',name:'Book',qty:20,price:99,total:1980},{itemId:'P1',name:'IP #1 <Who>',qty:40,price:1,total:4},{itemId:'S1',name:'Spanish Basic Text',qty:3,price:9,total:27}]);
-  // Price is per pack for pack items (P1: 40 singles = 4 packs of 10 at $1), each otherwise; the grand total is the sum of the line totals.
-  assert.equal(p.orderTotal,2011);assert.match(p.html,/Order Total[\s\S]*\$2011\.00/);assert.match(p.text,/ORDER TOTAL: \$2011\.00/);assert.match(p.text,/P1 \| IP #1 <Who> \| \$1\.00 \| 40 \| \$4\.00/);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.lines)),[{itemId:'B1',name:'Book',qty:20,price:99,total:1980},{itemId:'P1',name:'IP #1 <Who>',qty:40,price:0.1,total:4},{itemId:'S1',name:'Spanish Basic Text',qty:3,price:9,total:27}]);
+  // The catalog price of a pack item is per pack (P1: $1 per pack of 10), but the order shows the price of ONE item ($0.10), because quantities
+  // are singles and Free State's form prices every item singly. So Price x Quantity = Total on every line; the grand total is the sum of the line totals.
+  p.lines.forEach(l=>assert.equal(Math.round(l.price*l.qty*100)/100,l.total,l.itemId+': price x quantity equals total'));
+  assert.equal(p.orderTotal,2011);assert.match(p.html,/Order Total[\s\S]*\$2011\.00/);assert.match(p.text,/ORDER TOTAL: \$2011\.00/);assert.match(p.text,/P1 \| IP #1 <Who> \| \$0\.10 \| 40 \| \$4\.00/);assert.match(p.html,/\$0\.10<\/td>[\s\S]*?>40<\/td>[\s\S]*?\$4\.00/);assert.doesNotMatch(p.text,/\$1\.00 \| 40/);
+  // Price of one item: shown to the cent, or up to four decimals when it is a fraction of a cent; older saved lines (pack price only) still display.
+  assert.equal(f.c.fsUnitPrice_(1.45,5),0.29);assert.equal(f.c.fsUnitPrice_(3.4,25),0.136);assert.equal(f.c.fsUnitPrice_(5,1),5);assert.equal(f.c.fsUnitPrice_(5,0),5);
+  assert.equal(f.c.fsUnitMoney_(0.29),'$0.29');assert.equal(f.c.fsUnitMoney_(0.136),'$0.136');assert.equal(f.c.fsUnitMoney_(1),'$1.00');assert.equal(f.c.fsUnitMoney_(11.75),'$11.75');assert.equal(f.c.fsUnitMoney_(0.5),'$0.50');
+  assert.equal(f.c.fsShownPrice_({price:1.45}),1.45);assert.equal(f.c.fsShownPrice_({price:1.45,unitPrice:0.29}),0.29);
   assert.match(p.html,/Bill To[\s\S]*Ship To[\s\S]*Order Items/);assert.match(p.html,/IP #1 &lt;Who&gt;/);assert.match(p.html,/Northern Virginia Area of NA/);assert.match(p.html,/chair@example\.invalid/);
   assert.match(p.text,/BILL TO\nGroup Name: Northern Virginia Area of NA/);
   assert.doesNotMatch(p.html+p.text+JSON.stringify(p.lines),/Spanish group|Stocked|Order on Request|On Hand|Low At|stock/i);
+});
+test('Free State quantity price: items with a Quantity Price (Catalog column K) share one pool; at 100 or more together they are all priced at it',()=>{
+  const f = fsFixture(), line = (p,id)=>p.lines.find(l=>l.itemId===id);
+  // Q1/Q2: pamphlets in packs of 5 ($1.45 = $0.29 each, $1.90 = $0.38 each) with reduced prices $0.26 and $0.31 each. P1 has no Quantity Price.
+  f.tables.Catalog.push(['Q1','IPs','IP #5',1.45,0,'YES',5,5,'','',0.26],['Q2','IPs','IP #2',1.9,0,'YES',5,5,'','',0.31],['Q3','Spanish Lit','SP IP #5',1.45,0,'YES',5,5,'','',0.26]);
+  const go = lines => f.preview(lines.map(([itemId,qty])=>({itemId,qty})));
+  const under = go([['Q1',60],['Q2',39],['B1',20]]);   // 99 together
+  assert.deepEqual([line(under,'Q1').price,line(under,'Q1').total,line(under,'Q2').price,line(under,'Q2').total],[0.29,17.4,0.38,14.82],'99 pamphlets: regular price');
+  const at = go([['Q1',60],['Q2',40],['B1',20]]);      // 100 together
+  assert.deepEqual([line(at,'Q1').price,line(at,'Q1').total,line(at,'Q2').price,line(at,'Q2').total],[0.26,15.6,0.31,12.4],'100 pamphlets: reduced price on every pamphlet');
+  assert.deepEqual([line(at,'B1').price,line(at,'B1').total],[99,1980],'items with no Quantity Price are never discounted');
+  assert.equal(at.orderTotal,Math.round((15.6+12.4+1980)*100)/100);assert.match(at.text,/Q1 \| IP #5 \| \$0\.26 \| 60 \| \$15\.60/);assert.match(at.text,/Q2 \| IP #2 \| \$0\.31 \| 40 \| \$12\.40/);
+  at.lines.forEach(l=>assert.equal(Math.round(l.price*l.qty*100)/100,l.total,l.itemId+': price x quantity equals total'));
+  // The pool includes Spanish pamphlets, counts only items that have a Quantity Price, and one item can reach 100 alone.
+  assert.equal(line(go([['Q1',50],['Q3',50]]),'Q1').price,0.26,'Spanish literature counts toward the 100');
+  assert.equal(line(go([['Q1',60],['P1',100]]),'Q1').price,0.29,'items with no Quantity Price do not count toward the 100');
+  assert.deepEqual([line(go([['Q2',100]]),'Q2').price,line(go([['Q2',100]]),'Q2').total],[0.31,31]);
+  assert.equal(line(go([['Q2',99]]),'Q2').price,0.38);
+  // A blank column K (every item before it is filled in) behaves exactly as before.
+  const g = fsFixture();g.tables.Catalog.push(['Q1','IPs','IP #5',1.45,0,'YES',5,5]);
+  assert.deepEqual([line(g.preview([{itemId:'Q1',qty:500}]),'Q1').price,line(g.preview([{itemId:'Q1',qty:500}]),'Q1').total],[0.29,145]);
+  // What is reviewed is what is sent, at the reduced price.
+  f.c.sendFreeStateOrder(at.previewId,'test');
+  assert.match(f.emails[0].body,/Q1 \| IP #5 \| \$0\.26 \| 60 \| \$15\.60/);assert.match(f.emails[0].htmlBody,/\$0\.26<\/td>[\s\S]*?>60<\/td>[\s\S]*?\$15\.60/);
 });
 test('Free State send: logs the pending record before emailing, emails once, records history, never touches stock',()=>{
   const f = fsFixture(), p = f.preview(), stockBefore = JSON.stringify(f.tables.Catalog.map(r=>r[4]));let claimSeen = null;
@@ -1247,6 +1383,28 @@ test('Free State screens: suggestions, quantity limits, picker, draft kept acros
   assert.match(screen,/Free State Order/);assert.match(screen,/Item #<\/th><th>Description<\/th><th class="fs-m">Price<\/th><th class="fs-q">Quantity<\/th><th class="fs-m">Total<\/th>/);assert.doesNotMatch(screen,/On Hand|Target|In stock|Low stock/i);
   assert.match(screen,/id="fs-total-B1">\$70\.00/);assert.match(screen,/id="fs-grand">\$70\.00/);
   assert.match(screen,/Add Item/);assert.match(screen,/Review &amp; Send/);assert.doesNotMatch(screen,/Spanish|SP3101/);
+  // Pack items (IP #7 and IP #1 Spanish: $1.45 per pack of 5) show the price of ONE item, so Price x Quantity = Total on every row.
+  vm.runInContext("fs.lines=[{itemId:'B1',qty:'7',requestedFor:'',manual:false},{itemId:'P1',qty:'10',requestedFor:'',manual:false},{itemId:'SP3101',qty:'7',requestedFor:'',manual:true}];fsRender();",c);
+  const rows=[...elements['fs-order'].innerHTML.matchAll(/<tr><td class="fs-id">([^<]+)<\/td><td>.*?<td class="fs-m"[^>]*>\$([\d.]+)<\/td><td class="fs-q">.*?value="(\d+)".*?id="fs-total-[^"]+">\$([\d.]+)<\/td>/g)].map(m=>[m[1],Number(m[2]),Number(m[3]),Number(m[4])]);
+  assert.deepEqual(rows,[['B1',10,7,70],['P1',0.29,10,2.9],['SP3101',0.29,7,2.03]]);
+  rows.forEach(r=>assert.equal(Math.round(r[1]*r[2]*100)/100,r[3],r[0]+': price x quantity equals total'));
+  assert.match(elements['fs-order'].innerHTML,/id="fs-grand">\$74\.93/);
+  // Quantity price: P1 and SP3101 (Catalog column K = $0.26 each) share one pool. 99 together is still the regular $0.29; 100 together
+  // moves both to $0.26, and Basic Text (no Quantity Price) never moves.
+  const priced=()=>[...elements['fs-order'].innerHTML.matchAll(/id="fs-price-([^"]+)">\$([\d.]+)<\/td>.*?id="fs-total-[^"]+">\$([\d.]+)<\/td>/g)].map(m=>[m[1],Number(m[2]),Number(m[3])]);
+  vm.runInContext("fs.lines=[{itemId:'B1',qty:'7',requestedFor:'',manual:false},{itemId:'P1',qty:'60',requestedFor:'',manual:false},{itemId:'SP3101',qty:'39',requestedFor:'',manual:true}];fsRender();",c);
+  assert.deepEqual(priced(),[['B1',10,70],['P1',0.29,17.4],['SP3101',0.29,11.31]]);
+  assert.match(elements['fs-order'].innerHTML,/id="fs-qp">99 of 100 pamphlets in this order\. At 100 or more in total, the reduced pamphlet price applies\./);
+  vm.runInContext("fsSetQty('SP3101',INPUT)",Object.assign(c,{INPUT:{value:'40'}}));vm.runInContext("fsRender();",c);
+  assert.deepEqual(priced(),[['B1',10,70],['P1',0.26,15.6],['SP3101',0.26,10.4]]);
+  assert.match(elements['fs-order'].innerHTML,/id="fs-qp">Reduced pamphlet prices apply: 100 pamphlets in this order \(100 or more\)\./);
+  assert.match(elements['fs-order'].innerHTML,/id="fs-grand">\$96\.00/);
+  vm.runInContext("fsStep('P1',-1);fsRender();",c);assert.deepEqual(priced(),[['B1',10,70],['P1',0.29,17.11],['SP3101',0.29,11.6]],'one fewer drops the whole order back to the regular price');
+  vm.runInContext("fs.lines=[{itemId:'B1',qty:'7',requestedFor:'',manual:false},{itemId:'P1',qty:'100',requestedFor:'',manual:false}];fsRender();",c);
+  assert.deepEqual(priced(),[['B1',10,70],['P1',0.26,26]],'100 of one pamphlet is enough on its own');
+  vm.runInContext("fs.lines=[{itemId:'B1',qty:'200',requestedFor:'',manual:false}];fsRender();",c);
+  assert.doesNotMatch(elements['fs-order'].innerHTML,/class="fs-qp" id="fs-qp">[^<]/,'no note when nothing in the order has a quantity price');
+  vm.runInContext("fs.lines=[{itemId:'B1',qty:'7',requestedFor:'',manual:false}];fsRender();",c);
   // Quantity box only keeps digits; blank or zero is left out of the order.
   const input={value:'-4.5x'};vm.runInContext("fsSetQty('B1',INPUT)",Object.assign(c,{INPUT:input}));
   assert.equal(input.value,'45');assert.equal(vm.runInContext("fsLine('B1').qty",c),'45');

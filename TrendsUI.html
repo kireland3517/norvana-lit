@@ -6,11 +6,8 @@ body.dark #trends-view .tr-back{color:var(--lime)}
 #trends-view .tr-controls{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 #trends-view .tr-controls label{display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 #trends-view .tr-controls select{font:inherit;font-size:14px;font-weight:400;letter-spacing:0;text-transform:none;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:var(--white);color:var(--onyx);width:100%;box-sizing:border-box}
-#trends-view .tr-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--lime);color:#1a1a3e;border-radius:999px;padding:3px 9px;margin-left:8px;vertical-align:middle}
-#trends-view .tr-notice{background:var(--snow);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 12px;line-height:1.5;color:var(--onyx)}
 #trends-view .tr-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:0 0 14px}
 @media(min-width:700px){#trends-view .tr-cards{grid-template-columns:repeat(4,1fr)}}
-body.dark #trends-view .tr-bar{background:var(--lime)}
 #trends-view .tr-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
 #trends-view .tr-card.lead{border-color:var(--blue)}
 #trends-view .tr-card span{display:block;font-size:11px;color:var(--muted)}
@@ -18,20 +15,56 @@ body.dark #trends-view .tr-bar{background:var(--lime)}
 #trends-view .tr-card small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 #trends-view .tr-chart{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:14px 12px 10px;margin:0 0 14px}
 #trends-view .tr-chart h3{font-size:13px;font-weight:700;margin:0 0 10px;color:var(--onyx)}
-#trends-view .tr-bars{display:flex;align-items:flex-end;gap:8px;height:150px}
-#trends-view .tr-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
-#trends-view .tr-bar{width:100%;max-width:56px;background:var(--blue);opacity:.45;border-radius:6px 6px 0 0;min-height:2px}
-#trends-view .tr-col.sel .tr-bar{opacity:1}
-#trends-view .tr-val{font-size:12px;font-weight:600;color:var(--onyx);margin-bottom:3px;font-variant-numeric:tabular-nums}
-#trends-view .tr-labels{display:flex;gap:8px;margin-top:6px}
-#trends-view .tr-labels div{flex:1;text-align:center;font-size:11px;color:var(--muted)}
-#trends-view .tr-labels div.sel{color:var(--onyx);font-weight:700}
+#trends-view .tr-chartbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+#trends-view .tr-seg{display:inline-flex;border:1.5px solid var(--border);border-radius:999px;overflow:hidden}
+#trends-view .tr-seg button{font:inherit;font-size:12px;font-weight:600;padding:6px 12px;border:none;background:none;color:var(--muted);cursor:pointer}
+#trends-view .tr-seg button[aria-pressed="true"]{background:var(--blue);color:#fff}
+body.dark #trends-view .tr-seg button[aria-pressed="true"]{background:var(--lime);color:#1a1a3e}
+#trends-view .tr-chips{display:flex;flex-wrap:wrap;gap:6px}
+#trends-view .tr-chip{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;padding:5px 10px;border:1.5px solid var(--border);border-radius:999px;background:none;color:var(--muted);cursor:pointer}
+#trends-view .tr-chip .tr-sw{width:10px;height:10px;border-radius:50%;background:var(--c);opacity:.35}
+#trends-view .tr-chip[aria-pressed="true"]{color:var(--onyx);border-color:var(--c)}
+#trends-view .tr-chip[aria-pressed="true"] .tr-sw{opacity:1}
+#trends-view .tr-chip.static{cursor:default}
+#trends-view .tr-svg{display:block;width:100%;height:auto;margin-top:8px;overflow:visible}
+#trends-view .tr-svg text{font-size:10px;fill:var(--muted)}
+#trends-view .tr-svg .tr-xnow{fill:var(--onyx);font-weight:700}
+#trends-view .tr-svg .tr-grid{stroke:var(--border);stroke-width:1}
+#trends-view .tr-svg .tr-line{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+#trends-view .tr-svg .tr-line.dash{stroke-dasharray:5 4}
+#trends-view .tr-svg .tr-line.total{stroke:var(--onyx);stroke-width:3}
+#trends-view .tr-svg .tr-dot{stroke-width:2}
+#trends-view .tr-svg .tr-dot.total{fill:var(--onyx);stroke:var(--onyx)}
+#trends-view .tr-svg .tr-dot.open,#trends-view .tr-svg .tr-dot.total.open{fill:var(--white)}
+#trends-view .tr-svg .tr-hit{fill:transparent;cursor:pointer}
+#trends-view .tr-svg .tr-hit:hover{fill:rgba(128,128,160,.12)}
+#trends-view .tr-chartnote{font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.4}
 #trends-view .tr-tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--white)}
 #trends-view .tr-table{width:100%;border-collapse:collapse;font-size:13px}
 #trends-view .tr-table th{background:var(--snow);font-size:11px;text-align:right;padding:9px 10px;border-bottom:1px solid var(--border);color:var(--muted);white-space:nowrap}
-#trends-view .tr-table th:first-child,#trends-view .tr-table td:first-child{text-align:left;min-width:150px;white-space:normal}
+#trends-view .tr-table th:first-child,#trends-view .tr-table td:first-child{text-align:left;min-width:110px;white-space:normal}
 #trends-view .tr-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;color:var(--onyx);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Number columns share one fixed width and are centered, so the gaps stay even; the Item column takes whatever is left. */
+#trends-view .tr-table th:not(:first-child),#trends-view .tr-table td:not(:first-child){width:86px;min-width:86px;padding-left:4px;padding-right:4px;text-align:center}
+#trends-view .tr-table th:not(:first-child){white-space:normal;line-height:1.35}
+#trends-view .tr-table th.chg-h,#trends-view .tr-table td.chg{width:112px;min-width:112px}
+/* Avg / Month is the longest header: a little wider, and kept on one line. */
+#trends-view .tr-table th:nth-child(3),#trends-view .tr-table td:nth-child(3){width:100px;min-width:100px}
+#trends-view .tr-table th:nth-child(3){white-space:nowrap}
+#trends-view .tr-nw{white-space:nowrap}
+#trends-view .tr-info{position:relative;display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-left:4px;padding:0;border:1.5px solid currentColor;border-radius:50%;background:none;color:var(--muted);font:italic 700 9px/1 Georgia,serif;cursor:pointer;vertical-align:middle}
+#trends-view .tr-info::after{content:'';position:absolute;inset:-9px}
+#trends-view .tr-info:hover,#trends-view .tr-info:focus-visible{color:var(--blue);outline:none}
+body.dark #trends-view .tr-info:hover,body.dark #trends-view .tr-info:focus-visible{color:var(--lime)}
+#trends-view .tr-tip{position:fixed;z-index:60;max-width:240px;background:var(--white);color:var(--onyx);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:400;line-height:1.4;box-shadow:0 4px 14px rgba(0,0,0,.25);text-align:left;white-space:pre-line}
+#trends-view .tr-tip[hidden]{display:none}
 #trends-view .tr-table td.dist{font-weight:700}
+#trends-view .tr-table td.chg{font-size:12px}
+#trends-view .tr-table td.chg .arr{display:inline-block;width:1.1em;font-weight:700}
+#trends-view .tr-table td.chg.up .arr{color:var(--blue)}
+body.dark #trends-view .tr-table td.chg.up .arr{color:var(--lime)}
+#trends-view .tr-table td.chg.down .arr{color:var(--danger)}
+#trends-view .tr-table td.chg.flat .arr,#trends-view .tr-table td.chg.none{color:var(--muted)}
 #trends-view .tr-table tr.cat td{background:var(--blue-pale);color:var(--blue);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:left}
 body.dark #trends-view .tr-table tr.cat td{color:var(--lime)}
 #trends-view .tr-table tr.total td{font-weight:700;background:var(--snow)}
@@ -40,12 +73,12 @@ body.dark #trends-view .tr-table tr.cat td{color:var(--lime)}
 </style>
 <script>
 // Trends: distribution over time, calculated by the server from the order records on every open.
-var trends = { data: null, scope: 'all', period: 'monthly', loading: false, error: '', request: 0 };
+var trends = { data: null, scope: 'all', period: 'monthly', sort: 'catalog', chartMode: 'category', hidden: {}, chartBoxW: 0, loading: false, error: '', request: 0 };
 
 function trEl() { return document.getElementById('trends-view'); }
 
 function trReset() {
-  trends.data = null; trends.scope = 'all'; trends.period = 'monthly'; trends.loading = false; trends.error = ''; trends.request++;
+  trends.data = null; trends.scope = 'all'; trends.period = 'monthly'; trends.sort = 'catalog'; trends.chartMode = 'category'; trends.hidden = {}; trends.loading = false; trends.error = ''; trends.request++;
   var box = trEl();
   if (box) box.innerHTML = '';
 }
@@ -53,7 +86,7 @@ function trReset() {
 // Trends is a Reports tab screen; the Reports tab creates the trends-view box and then calls this.
 function openTrends() {
   if (!trEl()) return;
-  trends.data = null; trends.scope = 'all'; trends.period = 'monthly';
+  trends.data = null; trends.scope = 'all'; trends.period = 'monthly'; trends.sort = 'catalog'; trends.chartMode = 'category'; trends.hidden = {};
   trLoad('');
 }
 
@@ -88,9 +121,34 @@ function trScopeExists(scope) {
 function trRows() {
   var d = trends.data, s = trends.scope;
   if (!d) return [];
-  if (s.indexOf('c:') === 0) return d.items.filter(function(i) { return i.category === s.slice(2); });
-  if (s.indexOf('i:') === 0) return d.items.filter(function(i) { return 'i:' + i.itemId === s; });
-  return d.items;
+  var rows = d.items;
+  if (s.indexOf('c:') === 0) rows = d.items.filter(function(i) { return i.category === s.slice(2); });
+  else if (s.indexOf('i:') === 0) rows = d.items.filter(function(i) { return 'i:' + i.itemId === s; });
+  return trSorted(rows);
+}
+
+// Change in items requested, this month against last month. Null when there is no earlier tracked month.
+function trChange(r) { return r.prevRequested == null ? null : (Number(r.requested) || 0) - (Number(r.prevRequested) || 0); }
+
+// Sorting by change lists the items in one flat list (no category headings). Ties keep catalog order.
+// Change has data only for a finished month that has an earlier tracked month. A month still in progress shows nothing.
+function trHasChange(d) { return !!d && d.period !== 'annual' && !!d.prevMonth && !d.monthToDate; }
+function trSortActive() { return trHasChange(trends.data) && trends.sort !== 'catalog'; }
+function trSorted(rows) {
+  if (!trSortActive()) return rows;
+  var dir = trends.sort === 'decrease' ? 1 : -1;
+  return rows.map(function(r, i) { return { r: r, i: i }; }).sort(function(a, b) {
+    return (trChange(a.r) - trChange(b.r)) * dir || a.i - b.i;
+  }).map(function(x) { return x.r; });
+}
+
+function trChangeCell(r) {
+  var c = trHasChange(trends.data) ? trChange(r) : null;
+  if (c == null) return '<td class="chg none">-</td>';
+  var was = Number(r.prevRequested) || 0, now = Number(r.requested) || 0;
+  if (!was && !now) return '<td class="chg none">-</td>';
+  var cls = c > 0 ? 'up' : c < 0 ? 'down' : 'flat', arrow = c > 0 ? '\u2191' : c < 0 ? '\u2193' : '\u2192';
+  return '<td class="chg ' + cls + '"><span class="arr">' + arrow + '</span> ' + trNum(was) + ' \u2192 ' + trNum(now) + ' (' + (c > 0 ? '+' : c < 0 ? '\u2212' : '') + trNum(Math.abs(c)) + ')</td>';
 }
 
 function trNum(n) { return n == null ? '-' : String(Math.round(n * 10) / 10); }
@@ -114,26 +172,184 @@ function trScopeOptions() {
   return html;
 }
 
-function trChartHTML(series, months) {
-  var max = Math.max.apply(null, series.concat([1])), last = series.length - 1;
-  var title = 'Items distributed per month (picked up)';
-  return '<div class="tr-chart"><h3>' + title + '</h3><div class="tr-bars">' + series.map(function(v, i) {
-    return '<div class="tr-col' + (i === last ? ' sel' : '') + '"><div class="tr-val">' + trNum(v) + '</div><div class="tr-bar" style="height:' + Math.round(v / max * 100) + '%"></div></div>';
-  }).join('') + '</div><div class="tr-labels">' + months.map(function(m, i) {
-    return '<div class="' + (i === last ? 'sel' : '') + '">' + esc(trShort(m)) + '</div>';
-  }).join('') + '</div></div>';
+// Monthly distribution (picked up) as a line chart: one line per category, or one overall line. The chart always shows every
+// category; the Show filter above only narrows the cards and the table. A month still in progress is drawn dashed with an
+// open dot, because pickups lag behind orders and its number is not final.
+var TR_COLORS = ['#4c6ef5', '#f76707', '#2f9e44', '#ae3ec9', '#f59f00', '#0c8599', '#e03131', '#868e96'];
+function trCatColor(d, cat) { var i = d.categories.indexOf(cat); return TR_COLORS[(i < 0 ? 0 : i) % TR_COLORS.length]; }
+function trNiceMax(v) {
+  if (v <= 1) return 1;
+  var p = Math.pow(10, Math.floor(Math.log(v) / Math.LN10)), f = v / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
 }
 
+// Distributed per month for each category, added up from every item (not narrowed by the Show filter).
+function trCatSeries(d) {
+  var out = {};
+  d.categories.forEach(function(c) { out[c] = d.months.map(function() { return 0; }); });
+  d.items.forEach(function(it) {
+    var a = out[it.category];
+    if (a) it.series.forEach(function(v, i) { a[i] += Number(v) || 0; });
+  });
+  return out;
+}
+
+// Months with nothing picked up in any category are left out of the chart: no data is not a data point. (A month in progress
+// that has no pickups yet is left out too, so it only appears, dashed, once something has been picked up.)
+function trChartKeep(d) {
+  var by = trCatSeries(d);
+  return d.months.map(function(_, i) { return i; }).filter(function(i) { return d.categories.some(function(c) { return by[c][i] > 0; }); });
+}
+
+function trChartLines(d, keep) {
+  var by = trCatSeries(d), pick = function(a) { return keep.map(function(i) { return a[i]; }); };
+  if (trends.chartMode === 'total') {
+    return [{ name: 'All literature', total: true, values: keep.map(function(i) {
+      return d.categories.reduce(function(sum, c) { return sum + by[c][i]; }, 0); }) }];
+  }
+  return d.categories.filter(function(c) { return !trends.hidden[c]; }).map(function(c) { return { name: trCat(c), color: trCatColor(d, c), values: pick(by[c]) }; });
+}
+
+function trPath(points) { return points.map(function(p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' '); }
+
+function trChartSVG(months, prog, lines) {
+  var n = months.length, box = trEl(), W = Math.max(280, ((box && box.clientWidth) || 360) - 28), H = 200;
+  trends.chartBoxW = (box && box.clientWidth) || 0;
+  var L = 36, R = 30, T = 12, B = 42, pw = W - L - R, ph = H - T - B;
+  var max = trNiceMax(Math.max.apply(null, [1].concat(lines.reduce(function(all, l) { return all.concat(l.values); }, []))));
+  var X = function(i) { return n > 1 ? L + pw * i / (n - 1) : L + pw / 2; }, Y = function(v) { return T + ph - ph * v / max; };
+  var progLast = n > 1 && prog === n - 1;
+  var svg = '<svg class="tr-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Line chart of items distributed per month. The table below has the same numbers.">';
+  var ticks = [0]; if (max % 2 === 0) ticks.push(max / 2); ticks.push(max);
+  ticks.forEach(function(t) {
+    svg += '<line class="tr-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(t).toFixed(1) + '" y2="' + Y(t).toFixed(1) + '"/><text x="' + (L - 6) + '" y="' + (Y(t) + 3).toFixed(1) + '" text-anchor="end">' + t + '</text>';
+  });
+  months.forEach(function(m, i) {
+    var now = i === prog;
+    svg += '<text class="' + (now ? 'tr-xnow' : '') + '" x="' + X(i).toFixed(1) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + esc(trShort(m)) + '</text>'
+      + (now ? '<text x="' + X(i).toFixed(1) + '" y="' + (H - B + 28) + '" text-anchor="middle">in progress</text>' : '');
+  });
+  lines.forEach(function(l) {
+    var pts = l.values.map(function(v, i) { return [X(i), Y(v)]; }), cls = 'tr-line' + (l.total ? ' total' : ''), color = l.total ? '' : ' style="stroke:' + l.color + '"';
+    var solid = progLast ? pts.slice(0, n - 1) : pts;
+    if (solid.length > 1) svg += '<path class="' + cls + '"' + color + ' d="' + trPath(solid) + '"/>';
+    if (progLast) svg += '<path class="' + cls + ' dash"' + color + ' d="' + trPath(pts.slice(n - 2)) + '"/>';
+    pts.forEach(function(p, i) {
+      var fill = l.total ? '' : ';fill:' + (i === prog ? 'var(--white)' : l.color);
+      svg += '<circle class="tr-dot' + (l.total ? ' total' : '') + (i === prog ? ' open' : '') + '"' + (l.total ? '' : ' style="stroke:' + l.color + fill + '"') + ' cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3.5"/>';
+    });
+  });
+  // One wide hit area per month: hover (mouse) or tap (touch) lists every plotted value for that month.
+  var w = Math.max(28, n > 1 ? pw / (n - 1) : pw);
+  months.forEach(function(m, i) {
+    var tip = m + (i === prog ? ' (in progress)' : '') + '\n' + lines.map(function(l) { return l.name + ': ' + trNum(l.values[i]); }).join('\n');
+    svg += '<rect class="tr-hit" x="' + (X(i) - w / 2).toFixed(1) + '" y="' + T + '" width="' + w.toFixed(1) + '" height="' + ph + '" data-tip="' + esc(tip) + '" onmouseenter="trTipHover(this,true)" onmouseleave="trTipHover(this,false)" onclick="trTipClick(this,event)"/>';
+  });
+  return svg + '</svg>';
+}
+
+function trChartHTML() {
+  var d = trends.data, total = trends.chartMode === 'total';
+  if (!d.categories.length) return '<div class="tr-chart"><h3>Monthly distribution by category (picked up)</h3><div class="tr-empty">No distribution yet.</div></div>';
+  var keep = trChartKeep(d);
+  if (!keep.length) return '<div class="tr-chart"><h3>Monthly distribution by category (picked up)</h3><div class="tr-empty">No distribution yet.</div></div>';
+  var months = keep.map(function(i) { return d.months[i]; }), lines = trChartLines(d, keep);
+  var prog = d.inProgressMonth ? months.indexOf(d.inProgressMonth) : -1;
+  var html = '<div class="tr-chart"><h3>' + (total ? 'Total monthly distribution (picked up)' : 'Monthly distribution by category (picked up)') + '</h3>'
+    + '<div class="tr-chartbar"><div class="tr-seg" role="group" aria-label="Chart view">'
+    + '<button type="button" aria-pressed="' + !total + '" onclick="trSetChartMode(\'category\')">By category</button>'
+    + '<button type="button" aria-pressed="' + total + '" onclick="trSetChartMode(\'total\')">Overall total</button></div></div>'
+    + '<div class="tr-chips">';
+  if (total) html += '<span class="tr-chip static" aria-pressed="true" style="--c:var(--onyx)"><span class="tr-sw"></span>All literature</span>';
+  else d.categories.forEach(function(c, i) {
+    html += '<button type="button" class="tr-chip" style="--c:' + trCatColor(d, c) + '" aria-pressed="' + !trends.hidden[c] + '" onclick="trToggleCat(' + i + ')"><span class="tr-sw"></span>' + esc(trCat(c)) + '</button>';
+  });
+  html += '</div>';
+  html += lines.length ? trChartSVG(months, prog, lines) : '<div class="tr-empty">Pick at least one category to show.</div>';
+  html += '<p class="tr-chartnote">Counts items picked up (Distributed), not items ordered. ' + (prog >= 0 ? esc(d.inProgressMonth) + ' is in progress: its dashed line and open dot will rise as orders are picked up. ' : '') + 'Hover or tap a month for its numbers.</p></div>';
+  return html;
+}
+function trSetChartMode(mode) { trends.chartMode = mode === 'total' ? 'total' : 'category'; trRender(); }
+function trToggleCat(i) { var c = trends.data && trends.data.categories[i]; if (c == null) return; trends.hidden[c] = !trends.hidden[c]; trRender(); }
+
+// Column help text for the info (i) icons. Item has none.
+function trTips(d) {
+  if (d.period === 'annual') return {
+    prev: 'Quantity distributed in ' + (d.prevYear || 'the previous year') + '.',
+    avg: 'Average monthly distribution over the months of ' + d.year + ' counted since tracking began.',
+    requested: 'Total quantity ordered for the selected year.',
+    distributed: 'Total quantity picked up by groups during the selected year.',
+    total: 'Total dollar value of requested items.' };
+  return {
+    prev: 'Quantity distributed last month.',
+    avg: 'Average monthly distribution over the last 3 completed months, or fewer if unavailable.',
+    requested: 'Total quantity ordered for the selected month.',
+    change: 'Difference between this month\u2019s requests and last month\u2019s requests.' + (d.monthToDate ? ' Shown once the month is complete.' : ''),
+    distributed: 'Total quantity picked up by groups during the selected month.',
+    total: 'Total dollar value of requested items.' };
+}
+
+function trInfo(text) {
+  return '<button type="button" class="tr-info" aria-label="What this column means" data-tip="' + esc(text) + '" onmouseenter="trTipHover(this,true)" onmouseleave="trTipHover(this,false)" onblur="trTipHide()" onclick="trTipClick(this,event)">i</button>';
+}
+
+// Columns: Item, last month (or last year), Avg / Month, Requested, Change (monthly only), Distributed, Total.
 function trTableHTML(rows) {
   if (!rows.length) return '<div class="tr-tablewrap"><div class="tr-empty">No orders for this selection yet.</div></div>';
-  var d = trends.data, html = '<div class="tr-tablewrap"><table class="tr-table"><thead><tr><th>Item</th><th>Distributed</th><th>' + (d.period === 'annual' ? (d.prevYear ? esc(d.prevYear) : 'Last year') : (d.prevMonth ? esc(trShort(d.prevMonth)) : 'Last month')) + '</th><th>' + (d.period === 'annual' ? 'Avg/month' : (d.avgMonths ? d.avgMonths + '-mo avg' : 'Avg')) + '</th><th>Requested</th><th>Value</th></tr></thead><tbody>';
+  var d = trends.data, annual = d.period === 'annual', cols = annual ? 6 : 7, flat = trSortActive(), tip = trTips(d);
+  var prevHead = annual ? (d.prevYear ? esc(d.prevYear) : 'Last year') : (d.prevMonth ? esc(String(d.prevMonth).split(' ')[0].slice(0, 3)) : 'Last month');
+  var th = function(label, text, cls, extra) {
+    var cut = label.lastIndexOf(' '), head = cut < 0 ? '' : label.slice(0, cut + 1), tail = cut < 0 ? label : label.slice(cut + 1);
+    return '<th' + (cls ? ' class="' + cls + '"' : '') + '>' + head + '<span class="tr-nw">' + tail + trInfo(text) + '</span>' + (extra || '') + '</th>';
+  };
+  var html = '<div class="tr-tablewrap"><table class="tr-table"><thead><tr><th>Item</th>'
+    + th(prevHead, tip.prev) + th('Avg / Month', tip.avg) + th('Requested', tip.requested)
+    + (annual ? '' : th('Change', tip.change, 'chg-h'))
+    + th('Distributed', tip.distributed) + th('Total', tip.total) + '</tr></thead><tbody>';
   var cat = null;
   rows.forEach(function(r) {
-    if (r.category !== cat) { cat = r.category; html += '<tr class="cat"><td colspan="6">' + esc(trCat(cat)) + '</td></tr>'; }
-    html += '<tr><td>' + esc(r.name) + '</td><td class="dist">' + trNum(r.distributed) + '</td><td>' + trNum(r.prev) + '</td><td>' + trNum(r.avg) + '</td><td>' + trNum(r.requested) + '</td><td>' + trMoney(r.value) + '</td></tr>';
+    if (!flat && r.category !== cat) { cat = r.category; html += '<tr class="cat"><td colspan="' + cols + '">' + esc(trCat(cat)) + '</td></tr>'; }
+    html += '<tr><td>' + esc(r.name) + '</td><td>' + trNum(r.prev) + '</td><td>' + trNum(r.avg) + '</td><td class="dist">' + trNum(r.requested) + '</td>'
+      + (annual ? '' : trChangeCell(r)) + '<td>' + trNum(r.distributed) + '</td><td>' + trMoney(r.requestedValue) + '</td></tr>';
   });
   return html + '</tbody></table></div>';
 }
+
+// One floating help bubble for the whole screen (the table scrolls sideways, so the bubble cannot live inside it).
+// Mouse: hover shows it. Touch: tap toggles it. Keyboard: Enter or Space shows it, Escape or leaving the icon hides it.
+var trTipFor = null;
+function trTipHide() { var t = document.getElementById('tr-tip'); if (t) t.hidden = true; trTipFor = null; }
+function trTipShow(btn) {
+  var t = document.getElementById('tr-tip');
+  if (!t) return;
+  t.textContent = btn.getAttribute('data-tip') || ''; t.hidden = false; trTipFor = btn;
+  var r = btn.getBoundingClientRect(), w = t.offsetWidth, h = t.offsetHeight, vw = document.documentElement.clientWidth || window.innerWidth || 0;
+  var left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, vw - w - 8)), top = r.bottom + 8;
+  if (top + h > (window.innerHeight || 0) - 8 && r.top - h - 8 >= 8) top = r.top - h - 8;
+  t.style.left = left + 'px'; t.style.top = top + 'px';
+}
+function trCanHover() { return typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover)').matches; }
+function trTipHover(btn, on) { if (!trCanHover()) return; if (on) trTipShow(btn); else if (trTipFor === btn) trTipHide(); }
+function trTipClick(btn, ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  if (trTipFor === btn && !trCanHover()) trTipHide(); else trTipShow(btn);
+}
+if (typeof document.addEventListener === 'function') {
+  document.addEventListener('click', function(e) { if (!(e.target && e.target.closest && e.target.closest('.tr-info, .tr-hit'))) trTipHide(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') trTipHide(); });
+  document.addEventListener('scroll', trTipHide, true);
+}
+// The chart is drawn at the screen's width, so redraw it when the width really changes (rotating a phone, resizing a window).
+var trResizeTimer = null;
+function trOnResize() {
+  trTipHide();
+  clearTimeout(trResizeTimer);
+  trResizeTimer = setTimeout(function() {
+    var box = trEl();
+    if (trends.data && box && box.clientWidth && Math.abs(box.clientWidth - (trends.chartBoxW || 0)) > 8) trRender();
+  }, 150);
+}
+if (typeof window.addEventListener === 'function') window.addEventListener('resize', trOnResize);
 
 function trRender() {
   var box = trEl(), d = trends.data;
@@ -152,24 +368,17 @@ function trRender() {
     ? '<label>Year<select onchange="trLoad(this.value)"' + dis + '>' + d.availableYears.map(function(y) { return '<option value="' + esc(y) + '"' + (y === d.year ? ' selected' : '') + '>' + esc(y) + '</option>'; }).join('') + '</select></label>'
     : '<label>Month<select onchange="trLoad(this.value)"' + dis + '>' + d.availableMonths.map(function(m) { return '<option value="' + esc(m) + '"' + (m === d.month ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select></label>';
   html += '<div class="tr-controls"><label>View<select onchange="trSetPeriod(this.value)"' + dis + '><option value="monthly"' + (annual ? '' : ' selected') + '>Monthly</option><option value="annual"' + (annual ? ' selected' : '') + '>Annual</option></select></label>'
-    + pick + '<label>Show<select onchange="trSetScope(this.value)">' + trScopeOptions() + '</select></label></div>';
-  var common = 'Distributed counts picked-up orders only. Quantities represent individual items, except readings, which are counted as sets. Totals include the H&amp;I Subcommittee. '
-    + (d.unknownPackLines && d.unknownPackLines.length ? '<br><strong>Warning:</strong> ' + d.unknownPackLines.length + ' order line(s) have no saved pack size (Order Items column I) and are counted as single items. ' : '');
-  if (annual) {
-    html += '<div class="tr-notice"><strong>' + esc(d.year) + '</strong>' + (d.yearToDate ? '<span class="tr-badge">Year to date</span>' : '')
-      + '<br>' + (d.yearToDate ? 'Orders waiting for pickup are not counted yet, so Distributed looks low until they are picked up. ' : '') + common
-      + 'Counts only the ' + d.monthsCounted + ' month' + (d.monthsCounted === 1 ? '' : 's') + ' of ' + esc(d.year) + ' since tracking began (' + esc(d.startMonth) + ').</div>';
-  } else {
-    html += '<div class="tr-notice"><strong>' + esc(d.month) + '</strong>' + (d.monthToDate ? '<span class="tr-badge">Month to date</span>' : '')
-      + '<br>' + (d.monthToDate ? 'Orders waiting for pickup are not counted yet, so Distributed looks low until they are picked up. ' : '') + common
-      + (n ? 'Average of the ' + n + ' earlier month' + (n === 1 ? '' : 's') + ' since tracking began (' + esc(d.startMonth) + ').' : 'No earlier months since tracking began (' + esc(d.startMonth) + ').') + '</div>';
-  }
+    + pick + '<label>Show<select onchange="trSetScope(this.value)">' + trScopeOptions() + '</select></label>'
+    + (annual ? '' : '<label>Sort<select onchange="trSetSort(this.value)"' + (trHasChange(d) ? '' : ' disabled') + '>'
+      + [['catalog', 'Catalog order'], ['increase', 'Biggest increase'], ['decrease', 'Biggest decrease']].map(function(o) {
+        return '<option value="' + o[0] + '"' + ((trSortActive() ? trends.sort : 'catalog') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+      + '</select></label>') + '</div>';
   html += '<div class="tr-cards">'
     + '<div class="tr-card lead"><span>Items distributed</span><strong>' + trNum(shown) + '</strong><small>' + trMoney(sum('value')) + ' value</small></div>'
     + '<div class="tr-card"><span>' + (annual ? (d.prevYear ? esc(d.prevYear) : 'Last year') : (d.prevMonth ? esc(d.prevMonth) : 'Last month')) + '</span><strong>' + trNum(prev) + '</strong><small>items distributed</small></div>'
     + '<div class="tr-card"><span>' + (annual ? 'Monthly average' : (n ? n + '-month average' : 'Average')) + '</span><strong>' + trNum(avg) + '</strong><small>items distributed per month</small></div>'
     + '<div class="tr-card"><span>Items requested</span><strong>' + trNum(sum('requested')) + '</strong><small>' + esc(annual ? d.year : d.month) + '</small></div></div>';
-  html += trChartHTML(series, d.months) + trTableHTML(rows);
+  html += trChartHTML() + trTableHTML(rows) + '<div id="tr-tip" class="tr-tip" role="tooltip" hidden></div>';
   box.innerHTML = html;
 }
 
@@ -179,4 +388,5 @@ function trSetPeriod(value) {
   trLoad('');
 }
 function trSetScope(value) { trends.scope = value; trRender(); }
+function trSetSort(value) { trends.sort = value === 'increase' || value === 'decrease' ? value : 'catalog'; trRender(); }
 </script>

@@ -75,6 +75,13 @@ still sent. The Secretary report email is deliberately plain: the Lit Chair revi
   or the optional Order Multiple for bulk items) (rounded up to whole packs). Quantities are editable; blank or 0 leaves a product out. **Add Item** lists every
   active product by category, including Order on Request ones. An optional **Requested For** note on a manually added Order on
   Request product is kept for the chair (in Order History) and is never in the email or printout.
+- **Prices read the way Free State's own form reads:** the Price column is the price of ONE item (a pack item's catalog price
+  divided by its Pack Size), quantities are singles, and Price x Quantity = Total. Optional **Quantity Price** (Catalog column K,
+  the price of ONE item) is the reduced price Free State's form gives when an order has 100 or more pamphlets in total
+  ("individually or in combo"). Every product with a Quantity Price counts toward the same 100; at 100 or more they all switch to
+  their Quantity Price, below that the regular price. Leave column K blank for anything that has no reduced price (booklets,
+  handbooks, keytags...). The screen shows how many pamphlets are in the order. Free State changes these prices from time to
+  time: update column K from the current form.
 - **Review & Send** shows the exact email (From, To, Subject and the Bill To, Ship To and items tables). **Send Order**
   emails it directly; there is no Gmail draft. The recipient and addresses are read from Settings on the server, never from the browser.
 - Unfinished edits live only in that browser tab (sessionStorage) so a refresh keeps them; they do not follow you to another
@@ -174,7 +181,7 @@ advanced service turned on (Services > Sheets API) and the script time zone set 
 |---|---|
 | Orders | Order ID, Timestamp, Area Meeting Month, Group Name, Contact Name, Email, Phone, Estimated Total, Fulfilled Total, Status, Fulfilled At, **Revision** (column L must be exactly "Revision") |
 | Order Items | Row ID, Order ID, Item ID, Item Name, Unit Price, Qty Ordered, Qty Fulfilled, Line Total, Pack Size (saved when the order is placed) |
-| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size, Inventory Type (optional: Stocked or Order on Request), Order Multiple (optional, see Inventory) |
+| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size, Inventory Type (optional: Stocked or Order on Request), Order Multiple (optional, see Inventory), Quantity Price (optional, column K, see Free State order) |
 | Config | Two columns, Setting and Value, with rows: Lit Chair Email, Dashboard Access Code, Secretary Email |
 | Schedule | Meeting Month (e.g. "October 2026"), Window Open, Window Close |
 | Groups | Group Name (one group per row) |

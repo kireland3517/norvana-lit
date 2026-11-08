@@ -98,7 +98,7 @@ function fsCatalog_() {
   const data = getSheet('Catalog').getDataRange().getValues(), map = {};
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
-    map[String(data[i][0])] = { name: String(data[i][2]), category: String(data[i][1]), price: Number(data[i][3]) || 0, packSize: Number(data[i][7]) || 1, active: String(data[i][5]).trim().toUpperCase() === 'YES', inventoryType: inventoryTypeOf_(data[i][1], data[i][8]) };
+    map[String(data[i][0])] = { name: String(data[i][2]), category: String(data[i][1]), price: Number(data[i][3]) || 0, packSize: Number(data[i][7]) || 1, quantityPrice: Number(data[i][10]) > 0 ? Number(data[i][10]) : 0, active: String(data[i][5]).trim().toUpperCase() === 'YES', inventoryType: inventoryTypeOf_(data[i][1], data[i][8]) };
   }
   return map;
 }
@@ -108,8 +108,23 @@ function fsLineTotal_(qty, price, packSize) {
   return Math.round((Number(qty) / (Number(packSize) > 1 ? Number(packSize) : 1)) * Number(price) * 100) / 100;
 }
 function fsMoney_(n) { return '$' + Number(n || 0).toFixed(2); }
+// Quantity price (Catalog column K): the price of ONE item once an order holds 100 or more of the items that have one, counted
+// together ("individually or in combo", as Free State's form says for pamphlets). Below that, the regular price applies.
+// Items with no Quantity Price never take part. Lines are then priced singly: quantity x price of one item, to the cent.
+const FS_QUANTITY_MIN_ = 100;
+function fsRound4_(n) { return Math.round(Number(n) * 10000) / 10000; }
+function fsPooledQty_(lines) { return lines.reduce(function(sum, l) { return sum + (Number(l.quantityPrice) > 0 ? Number(l.qty) || 0 : 0); }, 0); }
+function fsQuantityPriceApplies_(lines) { return fsPooledQty_(lines) >= FS_QUANTITY_MIN_; }
+function fsQuantityLineTotal_(qty, quantityPrice) { return Math.round(Number(qty) * Number(quantityPrice) * 100) / 100; }
+// The catalog price of a pack item is per pack, but Free State's form prices every item singly and quantities are singles.
+// So the order shows the price of ONE item (price / pack size), and Price x Quantity = Total. The totals themselves are unchanged.
+function fsUnitPrice_(price, packSize) { return Math.round(Number(price) / (Number(packSize) > 1 ? Number(packSize) : 1) * 10000) / 10000; }
+// Older saved lines have only the pack price.
+function fsShownPrice_(l) { return l.unitPrice != null ? Number(l.unitPrice) : Number(l.price); }
+// Two decimals, or up to four when a single item costs a fraction of a cent (never rounds the price shown away from the total).
+function fsUnitMoney_(n) { return '$' + Number(n || 0).toFixed(4).replace(/0{1,2}$/, ''); }
 function fsGrandTotal_(lines) { return Math.round(lines.reduce(function(sum, l) { return sum + Number(l.total || 0); }, 0) * 100) / 100; }
-function fsPublicLines_(lines) { return lines.map(function(l) { return { itemId: l.itemId, name: l.name, qty: l.qty, price: l.price, total: l.total }; }); }
+function fsPublicLines_(lines) { return lines.map(function(l) { return { itemId: l.itemId, name: l.name, qty: l.qty, price: fsShownPrice_(l), total: l.total }; }); }
 
 // Validates raw lines from the browser and rebuilds everything else (names, addresses, recipient) from the sheet.
 function fsBuildSnapshot_(rawLines) {
@@ -120,7 +135,7 @@ function fsBuildSnapshot_(rawLines) {
     e.missing = missing;
     throw e;
   }
-  const catalog = fsCatalog_(), seen = {}, lines = [];
+  const catalog = fsCatalog_(), seen = {}, entries = [];
   rawLines.forEach(function(l) {
     const itemId = String(l && l.itemId != null ? l.itemId : '').trim();
     if (!itemId) throw new Error('Check the order and try again.');
@@ -134,9 +149,18 @@ function fsBuildSnapshot_(rawLines) {
     if (!item) throw new Error('A product in this order is no longer in the catalog. Remove it and review again.');
     if (qty === 0) return;
     if (!item.active) throw new Error(item.name + ' is no longer active. Remove it and review again.');
-    lines.push({ itemId: itemId, name: item.name, qty: qty, price: item.price, total: fsLineTotal_(qty, item.price, item.packSize), inventoryType: item.inventoryType, requestedFor: cleanText_(l.requestedFor, FS_MAX_TEXT_) });
+    entries.push({ itemId: itemId, item: item, qty: qty, requestedFor: cleanText_(l.requestedFor, FS_MAX_TEXT_) });
   });
-  if (!lines.length) throw new Error('Enter a quantity for at least one product.');
+  if (!entries.length) throw new Error('Enter a quantity for at least one product.');
+  // Prices are decided for the whole order at once, because the reduced price depends on the combined quantity.
+  const reduced = fsQuantityPriceApplies_(entries.map(function(e) { return { qty: e.qty, quantityPrice: e.item.quantityPrice }; }));
+  const lines = entries.map(function(e) {
+    const item = e.item, quantity = reduced && item.quantityPrice > 0;
+    return { itemId: e.itemId, name: item.name, qty: e.qty, price: item.price,
+      unitPrice: quantity ? fsRound4_(item.quantityPrice) : fsUnitPrice_(item.price, item.packSize),
+      total: quantity ? fsQuantityLineTotal_(e.qty, item.quantityPrice) : fsLineTotal_(e.qty, item.price, item.packSize),
+      inventoryType: item.inventoryType, requestedFor: e.requestedFor };
+  });
   const v = cfg.values;
   return {
     recipient: v.email, subject: demoPrefix_() + FREE_STATE_SUBJECT_,
@@ -149,7 +173,7 @@ function fsBuildSnapshot_(rawLines) {
 
 // Change detector only (not a security hash): the email content plus the recipient.
 function fsFingerprint_(snap) {
-  const text = JSON.stringify([snap.recipient, snap.subject, snap.billTo, snap.shipTo, snap.lines.map(function(l) { return [l.itemId, l.name, l.qty, l.price, l.total]; })]);
+  const text = JSON.stringify([snap.recipient, snap.subject, snap.billTo, snap.shipTo, snap.lines.map(function(l) { return [l.itemId, l.name, l.qty, fsShownPrice_(l), l.total]; })]);
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
   return h.toString(16) + '-' + text.length;
@@ -158,7 +182,7 @@ function fsFingerprint_(snap) {
 function fsText_(snap) {
   const pairs = function(rows) { return rows.map(function(r) { return r[0] + ': ' + r[1]; }).join('\n'); };
   return 'NORVANA Literature Order\n\nBILL TO\n' + pairs(snap.billTo) + '\n\nSHIP TO\n' + pairs(snap.shipTo) +
-    '\n\nORDER ITEMS\nItem # | Description | Price | Quantity | Total\n' + snap.lines.map(function(l) { return l.itemId + ' | ' + l.name + ' | ' + fsMoney_(l.price) + ' | ' + l.qty + ' | ' + fsMoney_(l.total); }).join('\n') +
+    '\n\nORDER ITEMS\nItem # | Description | Price | Quantity | Total\n' + snap.lines.map(function(l) { return l.itemId + ' | ' + l.name + ' | ' + fsUnitMoney_(fsShownPrice_(l)) + ' | ' + l.qty + ' | ' + fsMoney_(l.total); }).join('\n') +
     '\nORDER TOTAL: ' + fsMoney_(fsGrandTotal_(snap.lines));
 }
 
@@ -168,7 +192,7 @@ function fsHtml_(snap, pixelUrl) {
   const band = function(i) { return i % 2 ? 'background:#f5f6f7;' : 'background:#ffffff;'; };
   const pairRows = function(rows) { return rows.map(function(r, i) { return '<tr><td width="34%" style="' + cell + band(i) + '">' + emailEsc_(r[0]) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(r[1]) + '</td></tr>'; }).join(''); };
   const itemRows = snap.lines.map(function(l, i) {
-    return '<tr><td width="18%" style="' + cell + band(i) + '">' + emailEsc_(l.itemId) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(l.name) + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.price) + '</td><td width="12%" align="right" style="' + cell + band(i) + 'text-align:right">' + l.qty + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.total) + '</td></tr>';
+    return '<tr><td width="18%" style="' + cell + band(i) + '">' + emailEsc_(l.itemId) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(l.name) + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsUnitMoney_(fsShownPrice_(l)) + '</td><td width="12%" align="right" style="' + cell + band(i) + 'text-align:right">' + l.qty + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.total) + '</td></tr>';
   }).join('') + '<tr><td colspan="4" align="right" style="' + cell + 'font-weight:bold;text-align:right">Order Total</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">' + fsMoney_(fsGrandTotal_(snap.lines)) + '</td></tr>';
   const table = function(inner) { return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 16px 0">' + inner + '</table>'; };
   return '<!DOCTYPE html><html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body style="margin:0;padding:16px;background:#ffffff">' +
