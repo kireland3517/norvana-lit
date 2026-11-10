@@ -106,6 +106,12 @@ function getCatalogForForm() {
       packSize: Number(row[7]) || 1,
     });
   }
+  // Inactive Order on Request items (e.g. the literature racks) show a Request button instead of a quantity. Retired items never show.
+  const requestable = requestableItems_();
+  Object.keys(requestable).forEach(function(id) {
+    const it = requestable[id];
+    catalog.push({ itemId: id, category: it.category, name: it.name, price: it.price, packSize: 1, requestable: true });
+  });
   return catalog;
 }
 
@@ -264,6 +270,48 @@ function saveNewOrder_(orderId, now, meetingMonth, group, contact, email, phone,
   }
 }
 
+// The group's open (New) order for this meeting month, if it has one.
+function findMergeableOrder_(groupName, meetingMonth) {
+  const data = getSheet('Orders').getDataRange().getValues(), want = String(groupName).trim().toLowerCase();
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0] || String(row[3]).trim().toLowerCase() !== want) continue;
+    if (meetingMonthFromOrdersCell_(row[2]) !== meetingMonth || normalizedStatus_(row[9]) !== 'New') continue;
+    return { orderId: String(row[0]).trim(), number: i + 1, revision: Number(row[11]) || 0 };
+  }
+  return null;
+}
+
+// Adds the new items to an existing New order: same item adds to its quantity (price stays as it was when the order was placed),
+// other items become new lines. Updates the estimated total and bumps the revision so an open edit cannot overwrite it.
+// Returns every line now on the order and the new total.
+function mergeIntoOrder_(found, items) {
+  const itemsSheet = getSheet('Order Items'), ordersSheet = getSheet('Orders'), data = itemsSheet.getDataRange().getValues();
+  const idx = orderItemRowIndicesForOrder_(data, found.orderId), byItem = {}, requests = [], lines = [];
+  let seq = 0;
+  idx.forEach(function(i) {
+    byItem[String(data[i][2])] = i;
+    seq = Math.max(seq, parseInt(String(data[i][0]).slice(found.orderId.length + 1), 10) || 0);
+    lines.push({ itemId: String(data[i][2]), name: String(data[i][3]), price: Number(data[i][4]) || 0, packSize: Number(data[i][8]) >= 1 ? Number(data[i][8]) : 1, qty: Number(data[i][5]) || 0, row: i });
+  });
+  items.forEach(function(item) {
+    const existing = lines.find(function(l) { return l.itemId === item.itemId; });
+    if (existing) {
+      existing.qty = Math.min(existing.qty + item.qty, SUBMIT_MAX_QTY_);
+      requests.push(cellsRequest_(itemsSheet, existing.row + 1, 6, [existing.qty]));
+    } else {
+      seq++;
+      itemsSheet.appendRow([found.orderId + '-' + String(seq).padStart(2, '0'), found.orderId, item.itemId, item.name, item.price, item.qty, '', '', item.packSize || 1]);
+      lines.push({ itemId: item.itemId, name: item.name, price: item.price, packSize: item.packSize || 1, qty: item.qty });
+    }
+  });
+  const total = Math.round(lines.reduce(function(sum, l) { return sum + l.price * l.qty; }, 0) * 100) / 100;
+  requests.push(cellsRequest_(ordersSheet, found.number, 8, [total]));
+  requests.push(cellsRequest_(ordersSheet, found.number, 12, [found.revision + 1]));
+  commitCells_(requests);
+  return { items: lines.map(function(l) { return { itemId: l.itemId, name: l.name, price: l.price, packSize: l.packSize, qty: l.qty }; }), total: total };
+}
+
 function submitOrder(payload) {
   payload = payload && typeof payload === 'object' ? payload : {};
 
@@ -279,14 +327,19 @@ function submitOrder(payload) {
   if (email.length > SUBMIT_MAX_EMAIL_ || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { success: false, error: 'Please enter a valid email address.' };
   }
-  if (!Array.isArray(payload.items) || payload.items.length === 0) {
+  // Items the group asked for instead of ordering (inactive Order on Request items) travel with the order as one submission.
+  const askedIds = Array.isArray(payload.requests)
+    ? payload.requests.map(function(r) { return String(r == null ? '' : r).trim(); }).filter(function(r, i, a) { return r && a.indexOf(r) === i; }).slice(0, 20)
+    : [];
+  const orderedLines = Array.isArray(payload.items) ? payload.items : [];
+  if (orderedLines.length === 0 && askedIds.length === 0) {
     return { success: false, error: 'Please select at least one item.' };
   }
-  if (payload.items.length > SUBMIT_MAX_LINES_) {
+  if (orderedLines.length > SUBMIT_MAX_LINES_) {
     return { success: false, error: 'This order has too many lines. Please contact the Lit Chair.' };
   }
   const fingerprint = JSON.stringify([requestedGroup, email.toLowerCase(),
-    payload.items.map(function(i) { return [i && i.itemId, Number(i && i.qty)]; })]);
+    orderedLines.map(function(i) { return [i && i.itemId, Number(i && i.qty)]; }), askedIds]);
   const replay = requestId ? recallSubmission_(requestId, fingerprint) : null;
   if (replay) return replay;
 
@@ -305,7 +358,7 @@ function submitOrder(payload) {
     return { success: false, error: 'System busy - please try again in a moment.' };
   }
 
-  let orderId, items, estimatedTotal;
+  let orderId, items, estimatedTotal, mergedItems = null, wasMerged = false, askedItems = [];
   try {
     const again = requestId ? recallSubmission_(requestId, fingerprint) : null;
     if (again) return again;
@@ -327,7 +380,7 @@ function submitOrder(payload) {
     const subcommittee = isSubcommitteeGroup_(groupName);
     const quantities = new Map();
     let notAllowed = false;
-    payload.items.forEach(function(item) {
+    orderedLines.forEach(function(item) {
       const id = item && typeof item.itemId === 'string' ? item.itemId : '';
       const qty = Math.floor(Number(item && item.qty));
       if (!catalog.has(id) || !Number.isFinite(qty) || qty < 1) return;
@@ -341,10 +394,23 @@ function submitOrder(payload) {
     items = Array.from(quantities.keys()).map(function(id) {
       return { itemId: id, name: catalog.get(id).name, price: catalog.get(id).price, packSize: catalog.get(id).packSize, qty: quantities.get(id) };
     });
-    if (items.length === 0) {
+    // Items asked for (not in stock) are checked against the same category rules.
+    const asking = askedIds.length ? checkRequestedItems_(askedIds, subcommittee) : { items: [], error: '' };
+    if (asking.error) return { success: false, error: asking.error };
+    askedItems = asking.items;
+    if (items.length === 0 && askedItems.length === 0) {
       return { success: false, error: 'No valid items in order.' };
     }
 
+    // A group's orders for one meeting month are one order: if the group already has a New order for this month, the new items are
+    // added to it (same item: quantities add up). A Ready or Completed order is never changed, so that case starts a new order.
+    // A submission with only requested items makes no order at all.
+    orderId = '';
+    const found = items.length ? findMergeableOrder_(groupName, meetingMonth) : null;
+    if (found) {
+      const merged = mergeIntoOrder_(found, items);
+      orderId = found.orderId; estimatedTotal = merged.total; mergedItems = merged.items; wasMerged = true;
+    } else if (items.length) {
     // -- Generate unique order ID (inside lock) --
     const meetingDate = meetingMonth ? new Date(meetingMonth + ' 1') : now;
     const yy          = String(meetingDate.getFullYear()).slice(2);
@@ -369,8 +435,11 @@ function submitOrder(payload) {
     estimatedTotal = Math.round(estimatedTotal * 100) / 100;
 
     saveNewOrder_(orderId, now, meetingMonth, groupName, contactName, email, phone, estimatedTotal, items);
+    }
+    if (items.length) closeRequestsForOrder_(groupName, items); // ordering an item a group had asked for finishes that request
+    if (askedItems.length) saveRequests_(groupName, contactName, email, phone, askedItems, meetingMonth);
     noteSubmission_(email, groupName);
-    if (requestId) rememberSubmission_(requestId, fingerprint, { success: true, orderId: orderId });
+    if (requestId) rememberSubmission_(requestId, fingerprint, { success: true, orderId: orderId, merged: wasMerged, requested: askedItems.length });
   } catch(e) {
     return { success: false, error: e.message };
   } finally {
@@ -379,34 +448,42 @@ function submitOrder(payload) {
   refreshMonthlySummarySafe_();
 
   // -- Send emails after the lock is released (order already saved; surface warning if mail fails) --
-  const emailPayload = { groupName: groupName, contactName: contactName, email: email, phone: phone, meetingMonth: meetingMonth, items: items };
+  // One confirmation to the group and one alert to the chair, whatever the submission held: the order, the requested items, or both.
+  const emailPayload = { groupName: groupName, contactName: contactName, email: email, phone: phone, meetingMonth: meetingMonth, items: mergedItems || items,
+    requested: askedItems.map(function(a) { return a.name; }) };
   try {
-    sendConfirmationToGroup_(emailPayload, orderId, estimatedTotal);
-    sendAlertToLitChair_(emailPayload, orderId, estimatedTotal);
+    if (items.length) {
+      sendConfirmationToGroup_(emailPayload, orderId, estimatedTotal, wasMerged);
+      sendAlertToLitChair_(emailPayload, orderId, estimatedTotal, wasMerged);
+    } else {
+      sendRequestConfirmation_(emailPayload);
+      sendRequestAlert_(emailPayload);
+    }
   } catch(mailErr) {
     return {
       success: true,
-      orderId: orderId,
-      warning: 'Order saved (ID: ' + orderId + ') but confirmation email could not be sent. Please note your order ID and contact the Lit Chair.',
+      orderId: orderId, merged: wasMerged, requested: askedItems.length,
+      warning: 'Your submission was saved' + (orderId ? ' (order ID: ' + orderId + ')' : '') + ' but the confirmation email could not be sent. Please contact the Lit Chair.',
     };
   }
 
-  return { success: true, orderId: orderId };
+  return { success: true, orderId: orderId, merged: wasMerged, requested: askedItems.length };
 }
 
 // -- Emails --
 
-function sendConfirmationToGroup_(payload, orderId, estimatedTotal) {
+function sendConfirmationToGroup_(payload, orderId, estimatedTotal, merged) {
   const lines = payload.items.map(i =>
     '  ' + i.name + ' (x' + i.qty + ') - $' + (i.price * i.qty).toFixed(2)).join('\n');
   const subcommittee = isSubcommitteeGroup_(payload.groupName);
   sendStyledMail_({
     to: payload.email,
     subject: 'Literature Order Confirmation - ' + payload.groupName,
-    eyebrow: payload.meetingMonth + EMAIL_DOT_ + 'Order confirmation',
-    headline: ['You asked.', "We're on it."],
-    lead: "Your literature order is in. We'll get everything together and let you know when it's ready for pickup.",
-    pill: 'Order submitted',
+    eyebrow: payload.meetingMonth + EMAIL_DOT_ + (merged ? 'Order updated' : 'Order confirmation'),
+    headline: merged ? ['Added to', 'your order.'] : ['You asked.', "We're on it."],
+    lead: merged ? ['We added your new items to your earlier order for this meeting.', "Here's everything on it now."]
+      : "Your literature order is in. We'll get everything together and let you know when it's ready for pickup.",
+    pill: merged ? 'Order updated' : 'Order submitted',
     heading: payload.groupName, subheading: 'Order ' + orderId, statusLabel: 'Order received',
     itemsLabel: 'Requested items',
     items: payload.items.map(i => ({ name: i.name, qty: i.qty, amount: i.price * i.qty })),
@@ -416,14 +493,17 @@ function sendConfirmationToGroup_(payload, orderId, estimatedTotal) {
     callout: subcommittee
       ? { label: 'Paid by', text: 'This order is charged to the H&I subcommittee budget, so no payment is needed at pickup.' }
       : null,
-    notes: ['Totals are estimates and depend on available inventory. The final amount will be confirmed when the order is ready for pickup.'],
+    notes: ['Totals are estimates and depend on available inventory. The final amount will be confirmed when the order is ready for pickup.']
+      .concat(payload.requested && payload.requested.length ? ['Also requested (not in stock): ' + payload.requested.join(', ') + '. The Lit Chair orders these when asked, and you will get an email when they arrive.'] : []),
     footer: ['Questions? Contact the Lit Chair at ' + getLitChairEmail() + '.', 'NORVANA Literature Committee'],
     body:
-      'Thank you for submitting your literature order for the ' + payload.meetingMonth + ' area meeting.\n\n' +
+      (merged ? 'Your new items were added to your earlier order for the ' + payload.meetingMonth + ' area meeting. This is everything on it now.\n\n'
+        : 'Thank you for submitting your literature order for the ' + payload.meetingMonth + ' area meeting.\n\n') +
       'GROUP: ' + payload.groupName + '\n' +
       'CONTACT: ' + payload.contactName + '\n\n' +
       'ITEMS ORDERED:\n' + lines + '\n\n' +
       'ESTIMATED TOTAL: $' + estimatedTotal.toFixed(2) + '\n\n' +
+      (payload.requested && payload.requested.length ? 'ALSO REQUESTED (not in stock): ' + payload.requested.join(', ') + '. You will get an email when they arrive.\n\n' : '') +
       'All totals are estimates. Final amounts are based on actual inventory at time of fulfillment. ' +
       (isSubcommitteeGroup_(payload.groupName)
         ? 'This order is charged to the H&I subcommittee budget, so no payment is needed at pickup. You will receive a second email when your order is ready for pickup.\n\n'
@@ -433,17 +513,18 @@ function sendConfirmationToGroup_(payload, orderId, estimatedTotal) {
   });
 }
 
-function sendAlertToLitChair_(payload, orderId, estimatedTotal) {
+function sendAlertToLitChair_(payload, orderId, estimatedTotal, merged) {
   const lines = payload.items.map(i =>
     '  ' + i.itemId + '  ' + i.name + ' (x' + i.qty + ') - $' + (i.price * i.qty).toFixed(2)).join('\n');
   // Goes straight into the inbox (not Sent) when the chair address is the account running the script.
   deliverStyledMailToOwnInbox_({
     to: getLitChairEmail(),
-    subject: 'New Order - ' + payload.groupName,
+    subject: (merged ? 'Order Updated - ' : 'New Order - ') + payload.groupName,
     eyebrow: payload.meetingMonth + EMAIL_DOT_ + 'Chair notification',
-    headline: ['Someone needs', 'literature.'],
-    lead: 'A new literature order just came in. Another group is getting ready to carry the message.',
-    pill: 'New order received',
+    headline: merged ? ['Order', 'updated.'] : ['Someone needs', 'literature.'],
+    lead: merged ? 'This group added items to an order that has not been filled yet. It shows everything on the order now.'
+      : 'A new literature order just came in. Another group is getting ready to carry the message.',
+    pill: merged ? 'Items added to an order' : 'New order received',
     heading: payload.groupName, subheading: 'Order ' + orderId, statusLabel: 'Needs fulfillment',
     contact: { label: 'Group contact', name: payload.contactName, detail: payload.email + (payload.phone ? EMAIL_DOT_ + payload.phone : '') },
     itemsLabel: 'Requested items',
@@ -452,16 +533,19 @@ function sendAlertToLitChair_(payload, orderId, estimatedTotal) {
     callout: isSubcommitteeGroup_(payload.groupName)
       ? { label: 'Paid by', text: 'H&I subcommittee budget (no payment at pickup).' }
       : null,
-    notes: ['Totals are estimates and depend on available inventory. The final amount will be confirmed when the order is ready for pickup.'],
+    notes: ['Totals are estimates and depend on available inventory. The final amount will be confirmed when the order is ready for pickup.']
+      .concat(payload.requested && payload.requested.length ? ['This group also asked for items that are not in stock: ' + payload.requested.join(', ') + '. See the Requests list on the Lit Chair tab.'] : []),
     footer: ['Sent to the Literature Chair.', 'NORVANA Literature Committee'],
     body:
-      'New literature order submitted.\n\n' +
+      (merged ? 'Items were added to an existing order (the list below is everything on it now).\n\n' : 'New literature order submitted.\n\n') +
       'ORDER ID: ' + orderId + '\nMEETING MONTH: ' + payload.meetingMonth + '\n' +
       'GROUP: ' + payload.groupName + '\nCONTACT: ' + payload.contactName + '\n' +
       'EMAIL: ' + payload.email + '\nPHONE: ' + payload.phone + '\n' +
       (isSubcommitteeGroup_(payload.groupName) ? 'PAID BY: H&I subcommittee budget (no payment at pickup)\n' : '') + '\n' +
       'ITEMS:\n' + lines + '\n\n' +
-      'ESTIMATED TOTAL: $' + estimatedTotal.toFixed(2) + '\n\nNORVANA Literature Orders System',
+      'ESTIMATED TOTAL: $' + estimatedTotal.toFixed(2) + '\n\n' +
+      (payload.requested && payload.requested.length ? 'ALSO REQUESTED (not in stock): ' + payload.requested.join(', ') + '\n\n' : '') +
+      'NORVANA Literature Orders System',
   });
 }
 
@@ -966,6 +1050,8 @@ function getCatalogAll(token) {
       orderMultiple: orderMultiple,
       // Optional Quantity Price (column K): price of ONE item once a Free State order has 100 or more such items in total.
       quantityPrice: Number(row[10]) > 0 ? Number(row[10]) : 0,
+      // Optional Bulk Price (column L, booklets): price of ONE item once the order holds MORE than 100 of that same item.
+      bulkPrice: Number(row[11]) > 0 ? Number(row[11]) : 0,
       targetStock: lowAt + orderMultiple,
       rowIndex: i + 1,
     });

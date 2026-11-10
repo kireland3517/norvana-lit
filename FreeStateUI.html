@@ -16,6 +16,16 @@ body.dark #fs-order .fs-back{color:var(--lime)}
 #fs-order .fs-table td.fs-q .qty-wrap{justify-content:center}
 #fs-order .fs-qty{width:46px;height:32px;text-align:center;font:inherit;font-size:15px;font-weight:600;padding:0 2px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
 #fs-order .fs-x{background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:4px 6px}
+@media (max-width:520px){
+#fs-order .fs-table th{padding:8px 3px;font-size:10px}
+#fs-order .fs-table td{padding:7px 3px;font-size:13px}
+#fs-order .fs-table td.fs-id{width:auto;font-size:12px}
+#fs-order .fs-table td:last-child,#fs-order .fs-table th:last-child{padding-left:0;padding-right:2px}
+#fs-order .qty-wrap.compact{gap:2px}
+#fs-order .qty-wrap.compact .qty-btn{width:24px;height:28px;font-size:16px}
+#fs-order .fs-qty{width:34px;height:28px;font-size:14px}
+#fs-order .fs-x{padding:4px 3px;font-size:18px}
+}
 #fs-order .fs-req{width:100%;margin-top:6px;font:inherit;font-size:12px;padding:6px 8px;border:1px dashed var(--border);border-radius:8px;background:var(--white);color:var(--onyx);box-sizing:border-box}
 #fs-order .fs-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
 #fs-order .fs-actions button{flex:1;min-width:130px;font:inherit;font-size:14px;font-weight:600;padding:13px;border-radius:12px;border:1.5px solid var(--border);background:var(--white);color:var(--blue);cursor:pointer}
@@ -50,6 +60,8 @@ function fsEl() { return document.getElementById('fs-order'); }
 function fsItem(id) { return (typeof inventoryItems !== 'undefined' ? inventoryItems : []).find(function(i) { return i.itemId === id; }); }
 function fsOnRequest(id) { var it = fsItem(id); return !!it && it.inventoryType === 'Order on Request'; }
 function fsActive(it) { return it && !(it.active === false || it.active === 'false' || it.active === 'FALSE'); }
+// An inactive Order on Request item (waiting for Free State to deliver it) can still go on a Free State order.
+function fsUsable(it) { return !!it && (fsActive(it) || it.inventoryType === 'Order on Request'); }
 
 function fsSaveDraft() {
   try { sessionStorage.setItem(FS_DRAFT_KEY, JSON.stringify({ lines: fs.lines })); } catch (e) {}
@@ -76,6 +88,11 @@ function fsSuggestedLines() {
   var stocked = liveInventoryItems().filter(function(i) { return fsActive(i) && i.inventoryType !== 'Order on Request'; });
   var model = inventoryReportModel(stocked, { categories: null, include: 'reorder' }), lines = [];
   model.groups.forEach(function(g) { g.rows.forEach(function(r) { if (r.suggested > 0) lines.push({ itemId: r.itemId, qty: String(r.suggested), requestedFor: '', manual: false }); }); });
+  // Items groups have asked for (inactive, waiting for Free State): one for each open request, with the groups noted for the chair only.
+  ((typeof itemRequestsData !== 'undefined' && itemRequestsData && itemRequestsData.items) || []).forEach(function(it) {
+    if (it.state !== 'waiting' || !fsItem(it.itemId) || !fsUsable(fsItem(it.itemId)) || lines.some(function(l) { return l.itemId === it.itemId; })) return;
+    lines.push({ itemId: it.itemId, qty: String(it.openCount), requestedFor: it.requests.filter(function(q) { return q.status === 'Open'; }).map(function(q) { return q.group; }).join(', ').slice(0, 100), manual: true });
+  });
   return lines;
 }
 
@@ -106,7 +123,7 @@ function openFreeStateOrder() {
   google.script.run
     .withSuccessHandler(function(state) {
       if (state && state.success && state.pending) { fs.attention = state.pending; fs.screen = 'attention'; fsRender(); return; }
-      fsStartEdit();
+      loadRequests(fsStartEdit); // the suggestions include items groups have asked for
     })
     .withFailureHandler(function() { fsStartEdit(); })
     .getFreeStateOrderState(sessionToken);
@@ -137,7 +154,7 @@ function fsStartEdit() {
   fs.lines = [];
   // An empty saved order is not worth keeping: start again from the suggestions so a stale blank never hides low stock.
   if (draft && draft.length) {
-    fs.lines = draft.filter(function(l) { var it = fsItem(l.itemId); if (!it || !fsActive(it)) { dropped++; return false; } return true; });
+    fs.lines = draft.filter(function(l) { var it = fsItem(l.itemId); if (!it || !fsUsable(it)) { dropped++; return false; } return true; });
     if (dropped) fs.note = dropped + ' product' + (dropped === 1 ? ' is' : 's are') + ' no longer available and was removed from your saved order.';
   }
   if (!fs.lines.length) { fs.lines = fsSuggestedLines(); if (!fs.lines.length) fs.note = FS_NOTHING_LOW_; }
@@ -209,7 +226,7 @@ function fsEditHTML() {
   }).join('');
   if (!rows) rows = '<tr><td colspan="6" style="color:var(--muted)">No products yet. Use Add Item.</td></tr>';
   return '<table class="fs-table"><thead><tr><th>Item #</th><th>Description</th><th class="fs-m">Price</th><th class="fs-q">Quantity</th><th class="fs-m">Total</th><th class="fs-m" aria-label="Remove"></th></tr></thead><tbody>' + rows + '</tbody>'
-    + '<tfoot><tr><td colspan="4" style="text-align:right;font-weight:600">Order Total</td><td class="fs-m" style="font-weight:700" id="fs-grand">' + fsMoney(fsGrandTotal()) + '</td><td></td></tr></tfoot></table>'
+    + '<tfoot>' + fsFooterRows() + '</tfoot></table>'
     + '<div class="fs-qp" id="fs-qp">' + fsQuantityNoteHTML() + '</div>'
     + (fs.pickerOpen ? fsPickerHTML() : '')
     + '<div class="fs-actions"><button type="button" onclick="fsTogglePicker()">Add Item</button><button type="button" onclick="fsResetToSuggested()">Reset to Suggested</button><button type="button" class="primary" id="fs-review-btn" onclick="fsReview()"' + (fs.busy ? ' disabled' : '') + '>Review &amp; Send</button></div>';
@@ -224,10 +241,18 @@ function fsUnitMoney(n) { return '$' + Number(n || 0).toFixed(4).replace(/0{1,2}
 // Quantity price (Catalog column K, the price of ONE item): once the order holds 100 or more of the items that have one, counted
 // together, every one of them is priced at it. Same rule and same threshold as the server (FS_QUANTITY_MIN_).
 var FS_QUANTITY_MIN = 100;
+// Booklets (Catalog column L, price of ONE item): the Bulk Price applies once the order holds MORE than 100 of that same item.
+var FS_BULK_OVER = 100;
+function fsBP(it) { return it && Number(it.bulkPrice) > 0 ? Number(it.bulkPrice) : 0; }
+function fsBulk(l) { return fsBP(fsItem(l.itemId)) > 0 && (parseInt(l.qty, 10) || 0) > FS_BULK_OVER; }
 function fsQP(it) { return it && Number(it.quantityPrice) > 0 ? Number(it.quantityPrice) : 0; }
 function fsPooledQty() { return fs.lines.reduce(function(sum, l) { return sum + (fsQP(fsItem(l.itemId)) ? parseInt(l.qty, 10) || 0 : 0); }, 0); }
 function fsReduced() { return fsPooledQty() >= FS_QUANTITY_MIN; }
-function fsLinePrice(l) { var it = fsItem(l.itemId), qp = fsQP(it); return qp && fsReduced() ? Math.round(qp * 10000) / 10000 : fsUnitPrice(it); }
+function fsLinePrice(l) {
+  var it = fsItem(l.itemId), qp = fsQP(it);
+  if (fsBulk(l)) return Math.round(fsBP(it) * 10000) / 10000;
+  return qp && fsReduced() ? Math.round(qp * 10000) / 10000 : fsUnitPrice(it);
+}
 function fsQuantityNoteHTML() {
   if (!fs.lines.some(function(l) { return fsQP(fsItem(l.itemId)); })) return '';
   var n = fsPooledQty();
@@ -236,11 +261,33 @@ function fsQuantityNoteHTML() {
 }
 function fsLineTotal(l) {
   var it = fsItem(l.itemId), qty = parseInt(l.qty, 10) || 0, qp = fsQP(it);
+  if (fsBulk(l)) return Math.round(qty * fsBP(it) * 100) / 100;
   if (qp && fsReduced()) return Math.round(qty * qp * 100) / 100;
   var pack = it && Number(it.packSize) > 1 ? Number(it.packSize) : 1;
   return Math.round((qty / pack) * (it ? Number(it.price) || 0 : 0) * 100) / 100;
 }
-function fsGrandTotal() { return Math.round(fs.lines.reduce(function(sum, l) { return sum + fsLineTotal(l); }, 0) * 100) / 100; }
+function fsSubtotal() { return Math.round(fs.lines.reduce(function(sum, l) { return sum + fsLineTotal(l); }, 0) * 100) / 100; }
+// Free State's invoice from the sub-total; same rules as the server (fsSummary_): 6.5% discount from $500.00, shipping by band on the
+// sub-total before the discount, and a flat $6.00 fuel surcharge folded into the Shipping line. Orders are never picked up.
+function fsCents(n) { return Math.round(Number(n) * 100 + 1e-7) / 100; }
+function fsHandling(sub) {
+  if (sub <= 25) return 6;
+  if (sub <= 50) return 9;
+  return fsCents(sub * (sub <= 150 ? 0.17 : sub <= 500 ? 0.12 : 0.08));
+}
+// Literature racks do not qualify for the discount (marked so on the form); they still count toward the $500.00 and the shipping.
+var FS_NO_DISCOUNT = ['9053', '9054', '9055', '9053H&I', '9054H&I', '9055H&I'];
+function fsNoDiscountTotal() { return fsCents(fs.lines.reduce(function(sum, l) { return sum + (FS_NO_DISCOUNT.indexOf(String(l.itemId)) >= 0 ? fsLineTotal(l) : 0); }, 0)); }
+function fsSummary() {
+  var sub = fsCents(fsSubtotal()), disc = sub >= 500 ? fsCents(Math.max(0, sub - fsNoDiscountTotal()) * 0.065) : 0, ship = sub > 0 ? fsCents(fsHandling(sub) + 6) : 0;
+  return { subtotal: sub, discount: disc, shipping: ship, total: fsCents(sub - disc + ship) };
+}
+function fsGrandTotal() { return fsSummary().total; }
+function fsFooterRows() {
+  var s = fsSummary(), row = function(label, id, value, bold) { return '<tr><td colspan="4" style="text-align:right;font-weight:' + (bold ? '700' : '500') + '">' + label + '</td><td class="fs-m" style="font-weight:' + (bold ? '700' : '500') + '" id="' + id + '">' + value + '</td><td></td></tr>'; };
+  return row('Sub-Total', 'fs-sub', fsMoney(s.subtotal), false) + row('Discount (6.5% at $500 or more)', 'fs-disc', s.discount ? '-' + fsMoney(s.discount) : fsMoney(0), false)
+    + row('Shipping and fuel surcharge', 'fs-ship', fsMoney(s.shipping), false) + row('Order Total', 'fs-grand', fsMoney(s.total), true);
+}
 // One quantity can move every pamphlet to (or off) the reduced price, so every row's price and total is refreshed.
 function fsUpdateTotals() {
   fs.lines.forEach(function(l) {
@@ -248,8 +295,8 @@ function fsUpdateTotals() {
     if (p) p.textContent = fsUnitMoney(fsLinePrice(l));
     if (t) t.textContent = fsMoney(fsLineTotal(l));
   });
-  var g = document.getElementById('fs-grand'), q = document.getElementById('fs-qp');
-  if (g) g.textContent = fsMoney(fsGrandTotal());
+  var s = fsSummary(), q = document.getElementById('fs-qp');
+  [['fs-sub', fsMoney(s.subtotal)], ['fs-disc', s.discount ? '-' + fsMoney(s.discount) : fsMoney(0)], ['fs-ship', fsMoney(s.shipping)], ['fs-grand', fsMoney(s.total)]].forEach(function(p) { var e = document.getElementById(p[0]); if (e) e.textContent = p[1]; });
   if (q) q.textContent = fsQuantityNoteHTML();
 }
 function fsLine(id) { return fs.lines.find(function(l) { return l.itemId === id; }); }
@@ -278,7 +325,7 @@ function fsPickerHTML() {
 }
 function fsPickerListHTML() {
   var q = fs.pickerText.trim().toLowerCase(), order = typeof CAT_ORDER !== 'undefined' ? CAT_ORDER : [], items = (typeof inventoryItems !== 'undefined' ? inventoryItems : []).filter(function(i) {
-    return fsActive(i) && (!q || String(i.itemId).toLowerCase().indexOf(q) >= 0 || String(i.name).toLowerCase().indexOf(q) >= 0);
+    return fsUsable(i) && (!q || String(i.itemId).toLowerCase().indexOf(q) >= 0 || String(i.name).toLowerCase().indexOf(q) >= 0);
   });
   var cats = order.filter(function(c) { return items.some(function(i) { return i.category === c; }); }).concat(
     items.map(function(i) { return i.category; }).filter(function(c, n, a) { return order.indexOf(c) < 0 && a.indexOf(c) === n; }));
@@ -294,7 +341,7 @@ function fsPickerListHTML() {
 function fsPickerSearch(value) { fs.pickerText = value; var l = document.getElementById('fs-pick-list'); if (l) l.innerHTML = fsPickerListHTML(); }
 function fsAdd(id) {
   var it = fsItem(id);
-  if (!it || !fsActive(it) || fsLine(id)) return;
+  if (!it || !fsUsable(it) || fsLine(id)) return;
   fs.lines.push({ itemId: id, qty: '', requestedFor: '', manual: true, fresh: true });
   fs.pickerOpen = false; fs.pickerText = ''; fsSaveDraft(); fsRender();
   var inputs = document.querySelectorAll('.fs-qty'); // the new row sits among the sorted rows
@@ -407,11 +454,16 @@ function fsSentHTML() {
 function fsPairsTable(rows) {
   return '<table>' + rows.map(function(r) { return '<tr><td style="text-align:left;width:32%">' + esc(r[0]) + '</td><td style="text-align:left">' + esc(r[1]) + '</td></tr>'; }).join('') + '</table>';
 }
+function fsPrintTotals(o) {
+  var s = o.summary, row = function(label, value, bold) { return '<tr><td colspan="4" style="text-align:right;' + (bold ? 'font-weight:bold' : '') + '">' + label + '</td><td style="' + (bold ? 'font-weight:bold' : '') + '">' + value + '</td></tr>'; };
+  if (!s || s.legacy) return row('Order Total', fsMoney(o.orderTotal), true);
+  return row('Sub-Total', fsMoney(s.subtotal), false) + (s.discount ? row('Discount (6.5%)', '-' + fsMoney(s.discount), false) : '') + row('Shipping and Fuel Surcharge', fsMoney(s.shipping), false) + row('Order Total', fsMoney(s.total), true);
+}
 function fsPrintOrder() {
   var o = fs.order; if (!o) return;
   var items = '<table><thead><tr><th style="text-align:left">Item #</th><th style="text-align:left">Description</th><th>Price</th><th>Quantity</th><th>Total</th></tr></thead><tbody>'
     + o.lines.map(function(l) { return '<tr><td style="text-align:left">' + esc(l.itemId) + '</td><td style="text-align:left">' + esc(l.name) + '</td><td>' + fsUnitMoney(l.price) + '</td><td>' + esc(l.qty) + '</td><td>' + fsMoney(l.total) + '</td></tr>'; }).join('')
-    + '<tr><td colspan="4" style="text-align:right;font-weight:bold">Order Total</td><td style="font-weight:bold">' + fsMoney(o.orderTotal) + '</td></tr></tbody></table>';
+    + fsPrintTotals(o) + '</tbody></table>';
   printReportPage('Free State Literature Order', '<h1>NORVANA</h1><h2>Free State Literature Order</h2><p>Order ' + esc(o.orderId) + ' | Sent ' + esc(o.sentDate) + '</p>'
     + '<h3>Bill To</h3>' + fsPairsTable(o.billTo) + '<h3>Ship To</h3>' + fsPairsTable(o.shipTo) + '<h3>Order Items</h3>' + items);
 }

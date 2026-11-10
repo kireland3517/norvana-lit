@@ -79,9 +79,35 @@ still sent. The Secretary report email is deliberately plain: the Lit Chair revi
   divided by its Pack Size), quantities are singles, and Price x Quantity = Total. Optional **Quantity Price** (Catalog column K,
   the price of ONE item) is the reduced price Free State's form gives when an order has 100 or more pamphlets in total
   ("individually or in combo"). Every product with a Quantity Price counts toward the same 100; at 100 or more they all switch to
-  their Quantity Price, below that the regular price. Leave column K blank for anything that has no reduced price (booklets,
-  handbooks, keytags...). The screen shows how many pamphlets are in the order. Free State changes these prices from time to
+  their Quantity Price, below that the regular price. Leave column K blank for anything that has no reduced price (handbooks,
+  keytags...). The screen shows how many pamphlets are in the order. Free State changes these prices from time to
   time: update column K from the current form.
+- **Booklet Bulk Price** (Catalog column L, the price of ONE copy): the form prints two prices with "(1-100)" on each booklet
+  (White Book .92/.78). Above 100 copies of the SAME booklet the Bulk Price applies; 100 or fewer use the regular price. Booklets
+  are never pooled together and do not count toward the pamphlet 100.
+- **Item requests (racks and anything not kept in stock).** A Catalog item that is **inactive (Active = NO) and Inventory Type = Order on Request**
+  stays on the group order form in its normal category, always at the bottom of the list, with a **Request** button instead of a quantity
+  (retired items, inactive but Stocked, never show). Tapping Request only marks the item (tap again to undo); the requests go to the
+  server **with the order in one submission** (`submitOrder` payload `requests`), so one confirmation email to the group and one
+  alert to the chair cover everything (the order emails get an "Also requested" line; a submission of only requests sends the
+  request emails and makes no order). The racks are loaded twice: 9053-9055 in Special Orders (every group) and 9053H&I-9055H&I in H&I. A request
+  needs the group, contact name and email already filled in at the top of the form, is saved to the **Item Requests** tab (created by
+  the app) and emails the group and the Lit Chair. The **Requests** tile on the Lit Chair tab (always there, count = items still
+  open) lists them by item: **Waiting for item** (still inactive; shown in red after 30 days), **Ready to notify** (you marked it
+  Active; **Let them know** emails every group that asked and marks them Notified) and **Done** (the group ordered it, or everyone was
+  told). Ordering an item closes that group's request for it. The Free State order screen suggests the items groups are waiting for
+  (an inactive Order on Request item can be ordered from Free State). Flow: group asks -> order it from Free State -> mark it Active in
+  Inventory -> Let them know. The racks never take Free State's discount.
+- **Same group, same month = one order.** If a group submits again while it still has a **New** order for that meeting month, the
+  new items are added to that order (same item: quantities add, price stays as ordered), the estimated total and revision are
+  updated and both emails say the order was updated. A Ready or Completed order is never changed, so then a new order starts.
+- **Order total = Free State's invoice.** Sub-total (sum of the lines), minus a 6.5% discount when the sub-total is $500.00 or more,
+  plus shipping: $6.00 up to $25.00, $9.00 up to $50.00, then 17% up to $150.00, 12% up to $500.00 and 8% above, always figured on
+  the sub-total BEFORE the discount, plus a flat $6.00 fuel surcharge (Free State prints the fuel inside its Shipping line, so the
+  app does too). Orders are never picked up. Checked to the cent against four Free State invoices (Aug 3, Aug 28, Sep 25, Nov 2 2026).
+  The same numbers are in the screen, the email, the printout and the history; orders saved before this keep their old total.
+  The $6 and $9 bands and any rate above $2,499.00 are not confirmed by an invoice. If Free State changes the schedule, change
+  `fsHandling_`, `fsSummary_` (FreeStateOrders.gs) and `fsHandling`, `fsSummary` (FreeStateUI.html) together.
 - **Review & Send** shows the exact email (From, To, Subject and the Bill To, Ship To and items tables). **Send Order**
   emails it directly; there is no Gmail draft. The recipient and addresses are read from Settings on the server, never from the browser.
 - Unfinished edits live only in that browser tab (sessionStorage) so a refresh keeps them; they do not follow you to another
@@ -181,11 +207,12 @@ advanced service turned on (Services > Sheets API) and the script time zone set 
 |---|---|
 | Orders | Order ID, Timestamp, Area Meeting Month, Group Name, Contact Name, Email, Phone, Estimated Total, Fulfilled Total, Status, Fulfilled At, **Revision** (column L must be exactly "Revision") |
 | Order Items | Row ID, Order ID, Item ID, Item Name, Unit Price, Qty Ordered, Qty Fulfilled, Line Total, Pack Size (saved when the order is placed) |
-| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size, Inventory Type (optional: Stocked or Order on Request), Order Multiple (optional, see Inventory), Quantity Price (optional, column K, see Free State order) |
+| Catalog | Item ID, Category, Item Name, Unit Price, Stock, Active (YES/NO), Low At, Pack Size, Inventory Type (optional: Stocked or Order on Request), Order Multiple (optional, see Inventory), Quantity Price (optional, column K) and Bulk Price (optional, column L), see Free State order |
 | Config | Two columns, Setting and Value, with rows: Lit Chair Email, Dashboard Access Code, Secretary Email |
 | Schedule | Meeting Month (e.g. "October 2026"), Window Open, Window Close |
 | Groups | Group Name (one group per row) |
 | Chair Reports | Presentation Month (or Reporting Month), Draft JSON, Finalized JSON, Revision, Email Attempt JSON |
+| Item Requests | Request ID, Requested At, Meeting Month, Group, Contact, Email, Phone, Item ID, Item Name, Status (Open, Notified or Done), Notified At, Closed At (created by the app on the first request; leave it alone) |
 | Order History | Order ID, Sent At, Item #, Description, Quantity, Inventory Type, Requested For, Status, Recipient, Bill To, Ship To, Recorded At (one row per product, created by the app on the first sent order) |
 | Free State Order Log | Request ID, Order ID, Status, Created, Updated, Attempt JSON, Snapshot JSON (technical send record, created by the app; leave it alone) |
 

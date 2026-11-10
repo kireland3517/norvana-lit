@@ -122,6 +122,41 @@ test('assembled local preview loads Reports (Orders, Trends and Chair Report; in
   assert.equal(vm.runInContext('allOrders.length',c),0);assert.equal(vm.runInContext('ordersReportData',c),null);assert.equal(vm.runInContext('chairData',c),null);
 });
 
+test('Requests screens: Request button instead of a quantity, an always-there Requests tile and list with its three states',()=>{
+  const html=require('./preview.cjs').renderPreview(), elements={}, timers=[];
+  function element(id){return elements[id] ||= {innerHTML:'',textContent:'',value:'',style:{},classList:{add(){},remove(){},contains(){return false;}},insertAdjacentHTML(where,s){this.innerHTML+=s;}};}
+  const storage={getItem:()=>null,setItem(){},removeItem(){}};
+  const c=vm.createContext({console,Date,Number,Set,Map,Math,JSON,Object,Array,String,Proxy,
+    setTimeout:f=>{timers.push(f);return timers.length;},clearTimeout(){},localStorage:storage,sessionStorage:storage,
+    document:{body:element('body'),getElementById:element,querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){}}});
+  c.window=c;c.addEventListener=()=>{};c.scrollTo=()=>{};
+  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))vm.runInContext(m[1],c,{filename:'assembled-preview.html'});
+  // Order form: a requestable item has a Request button and no quantity controls; asking marks it Requested for that group.
+  element('group-name').value='Example Group';
+  vm.runInContext("catalog=[{itemId:'9053',name:'8 Pocket Literature Rack',category:'Special Orders',price:25.5,packSize:1,requestable:true},{itemId:'B1',name:'Basic Text',category:'Special Orders',price:10,packSize:1}];qtys={B1:0,'9053':0};hiRules={group:'H&I Subcommittee',onlyCategories:['H&I'],hiddenCategories:[]};renderCatalogArea();",c);
+  let form=element('cat-wrap').innerHTML;
+  assert.match(form,/id="row-9053"[\s\S]*Not in stock\. Ask the Lit Chair to order it\.[\s\S]*onclick="askForItem\('9053'\)">Request<\/button>/);assert.doesNotMatch(form,/id="qty-9053"/);assert.match(form,/id="qty-B1"/);
+  assert.ok(form.indexOf('id="row-B1"')<form.indexOf('id="row-9053"'),'items to request sit at the bottom of their list');
+  // Tapping Request only marks the item (nothing is sent); it goes with the order on Submit, and tapping again undoes it.
+  vm.runInContext("requestedItems['Example Group|9053']=true;renderCatalogArea();",c);form=element('cat-wrap').innerHTML;
+  assert.match(form,/Will be requested when you submit[\s\S]*class="req-btn req-on"[^>]*>Requested &#10003;<\/button>/);
+  assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(askedItemIds())",c)),['9053']);
+  assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(askedItemIds())",c)),['9053']);
+  // Lit Chair tab: the Requests tile is always there; the list shows waiting, ready to notify and done, or an empty message.
+  assert.match(html,/id="tile-Requests" onclick="filterOrders\('Requests'\)"/);assert.match(html,/id="stat-requests">-</);
+  vm.runInContext("itemRequestsData={success:true,openCount:0,items:[]};updateStats();filterOrders('Requests');",c);
+  assert.equal(element('stat-requests').textContent,0);assert.match(element('orders-list').innerHTML,/No open requests/);
+  vm.runInContext(`itemRequestsData={success:true,openCount:2,items:[
+    {itemId:'9053',name:'8 Pocket Literature Rack',active:true,state:'ready',openCount:2,requests:[{group:'Sunday Serenity',contact:'Jane D.',requestedAt:'2026-10-03T12:00:00Z',status:'Open',stale:false},{group:'Hope',contact:'Pri S.',requestedAt:'2026-10-05T12:00:00Z',status:'Open',stale:false}]},
+    {itemId:'9054',name:'16 Pocket Literature Rack',active:false,state:'waiting',openCount:1,requests:[{group:'Old Group',contact:'',requestedAt:'2026-08-01T12:00:00Z',status:'Open',stale:true}]},
+    {itemId:'9055',name:'20 Pocket Literature Rack',active:true,state:'done',openCount:0,requests:[{group:'Done Group',contact:'',requestedAt:'2026-09-01T12:00:00Z',status:'Done',closedAt:'2026-09-20T12:00:00Z',stale:false}]}]};updateStats();renderOrderList();`,c);
+  const list=element('orders-list').innerHTML;assert.equal(element('stat-requests').textContent,2);
+  assert.match(list,/req-card ready[\s\S]*8 Pocket Literature Rack[\s\S]*Ready to notify[\s\S]*Sunday Serenity[\s\S]*Let them know \(2\)/);
+  assert.match(list,/req-card waiting[\s\S]*Waiting for item[\s\S]*Old Group[\s\S]*class="stale"[\s\S]*over 30 days[\s\S]*mark it Active in Inventory/);
+  assert.match(list,/req-card done[\s\S]*Done[\s\S]*Ordered /);
+  // The Free State order suggests an item groups are waiting for, with the groups noted for the chair only.
+  assert.match(vm.runInContext("fsSuggestedLines.toString()",c),/itemRequestsData/);
+});
 test('Reports move to the new ordering month after a meeting passes, but never during a save',()=>{
   const html=require('./preview.cjs').renderPreview(), elements={}, timers=[];
   function element(id){return elements[id] ||= {innerHTML:'',textContent:'',style:{},classList:{add(){},remove(){},contains(){return false;}},insertAdjacentHTML(where,s){this.innerHTML+=s;}};}
@@ -149,7 +184,7 @@ function fixture() {
     Catalog: [['Item ID','Category','Item Name','Unit Price','Stock','Active'],['B1','Books','Book',99,2,'YES'],['B2','Books','Inactive',5,0,'NO']],
     Config: [['Setting','Value'],['Dashboard Access Code','test'],['Lit Chair Email','chair@example.invalid'],['Secretary Email','secretary@example.invalid']],
     Schedule: [['Meeting Month','Window Open','Window Close'],['October 2026',new Date('2026-09-04T04:00:00Z'),new Date('2026-10-01T04:00:00Z')],['November 2026',new Date('2026-10-02T04:00:00Z'),new Date('2026-11-05T05:00:00Z')]],
-    Groups: [['Group'],['Group A']], 'Monthly Report': [['Group']],
+    Groups: [['Group'],['Group A'],['Group B']], 'Monthly Report': [['Group']],
     'Chair Reports': [['Presentation Month','Draft JSON','Finalized JSON','Revision','Email Attempt JSON']]
   };
   const names = Object.keys(tables), cache = new Map([['session_test','1']]), props = new Map();
@@ -192,7 +227,7 @@ function fixture() {
       if(loseResponse){loseResponse=false;throw Error('Response lost after commit');}
     }}}
   });
-  for(const file of ['Code.gs','OrderWorkflow.gs','ChairReports.gs','EmailTemplate.gs','FreeStateOrders.gs','TrendsReport.gs','MonthlySummary.gs','ChairReportView.gs']) vm.runInContext(fs.readFileSync(file,'utf8'),context,{filename:file});
+  for(const file of ['Code.gs','OrderWorkflow.gs','ChairReports.gs','EmailTemplate.gs','FreeStateOrders.gs','ItemRequests.gs','TrendsReport.gs','MonthlySummary.gs','ChairReportView.gs']) vm.runInContext(fs.readFileSync(file,'utf8'),context,{filename:file});
   const oid='NL-2610-001', quantities=q=>[{rowId:oid+'-01',qtyFulfilled:q}];
   return {c:context,tables,emails,appendLog,formats,hidden,oid,quantities,stock:()=>tables.Catalog[1][4],rev:()=>tables.Orders[1][11],
     ready:q=>context.fulfillOrder(oid,quantities(q),999999,'test',tables.Orders[1][11]),
@@ -634,14 +669,14 @@ test('public submission ignores negative stock and client month; deleted IDs are
   f.c.Date=class extends NativeDate {constructor(...args){super(...(args.length?args:['2026-10-02T03:59:59.999Z']));} static [Symbol.hasInstance](v){return v instanceof NativeDate;}};
   f.c.deleteOrder(f.oid,'test',0);
   f.c.updateStockCounts([{itemId:'B1',stock:-10}],'test');
-  const result=f.c.submitOrder({groupName:'Group A',contactName:'Test',email:'group@example.invalid',meetingMonth:'December 2030',items:[{itemId:'B1',qty:2},{itemId:'B2',qty:5}]});
+  const result=f.c.submitOrder({groupName:'Group B',contactName:'Test',email:'group@example.invalid',meetingMonth:'December 2030',items:[{itemId:'B1',qty:2},{itemId:'B2',qty:5}]});
   assert.equal(result.success,true);assert.equal(result.orderId,'NL-2610-002');assert.equal(f.tables.Orders[1][2],'October 2026');assert.equal(f.stock(),-10);assert.equal(f.tables['Order Items'].length,2);
 });
 test('pack size is saved on each new order line, and reports count individual items from that saved size (never from today\'s Catalog)', () => {
   const f = fixture(), NativeDate = Date;
   f.c.Date = class extends NativeDate {constructor(...args){super(...(args.length?args:['2026-10-02T03:59:59.999Z']));} static [Symbol.hasInstance](v){return v instanceof NativeDate;}};
   f.tables.Catalog[0][7] = 'Pack Size'; f.tables.Catalog[1][7] = 5;
-  const sent = f.c.submitOrder({groupName: 'Group A', contactName: 'Test', email: 'group@example.invalid', items: [{itemId: 'B1', qty: 2}]});
+  const sent = f.c.submitOrder({groupName: 'Group B', contactName: 'Test', email: 'group@example.invalid', items: [{itemId: 'B1', qty: 2}]});
   assert.equal(sent.success, true);
   const saved = f.tables['Order Items'].find(r => String(r[0]).startsWith(sent.orderId));
   assert.equal(saved[5], 2); assert.equal(saved[8], 5, 'Order Items column I holds the pack size');
@@ -708,7 +743,7 @@ function openWindow(f){
   const NativeDate=Date;
   f.c.Date=class extends NativeDate {constructor(...args){super(...(args.length?args:['2026-09-20T16:00:00.000Z']));} static [Symbol.hasInstance](v){return v instanceof NativeDate;}};
 }
-const order=(over={})=>Object.assign({groupName:'Group A',contactName:'Pat',email:'pat@example.invalid',phone:'555-0100',requestId:'req-00000001',items:[{itemId:'B1',qty:2}]},over);
+const order=(over={})=>Object.assign({groupName:'Group B',contactName:'Pat',email:'pat@example.invalid',phone:'555-0100',requestId:'req-00000001',items:[{itemId:'B1',qty:2}]},over);
 const lastOrder=f=>f.tables.Orders[f.tables.Orders.length-1];
 
 test('order text is stored literally: formulas never reach the sheet as formulas',()=>{
@@ -753,7 +788,8 @@ test('repeating the same order (lost response, double tap) returns the original 
   const again=f.c.submitOrder(order());
   assert.equal(again.orderId,first.orderId);assert.equal(f.tables.Orders.length,orders);assert.equal(f.emails.length,mails);
   const changed=f.c.submitOrder(order({items:[{itemId:'B1',qty:9}]}));
-  assert.equal(changed.success,true);assert.notEqual(changed.orderId,first.orderId);
+  // A different order from the same group for the same month is added to the first one, not a second order.
+  assert.equal(changed.success,true);assert.equal(changed.orderId,first.orderId);assert.equal(changed.merged,true);
 });
 
 test('flooding one email address is limited; other people are unaffected',()=>{
@@ -1215,7 +1251,7 @@ test('Free State preview: validates every line on the server and never exposes s
   // The catalog price of a pack item is per pack (P1: $1 per pack of 10), but the order shows the price of ONE item ($0.10), because quantities
   // are singles and Free State's form prices every item singly. So Price x Quantity = Total on every line; the grand total is the sum of the line totals.
   p.lines.forEach(l=>assert.equal(Math.round(l.price*l.qty*100)/100,l.total,l.itemId+': price x quantity equals total'));
-  assert.equal(p.orderTotal,2011);assert.match(p.html,/Order Total[\s\S]*\$2011\.00/);assert.match(p.text,/ORDER TOTAL: \$2011\.00/);assert.match(p.text,/P1 \| IP #1 <Who> \| \$0\.10 \| 40 \| \$4\.00/);assert.match(p.html,/\$0\.10<\/td>[\s\S]*?>40<\/td>[\s\S]*?\$4\.00/);assert.doesNotMatch(p.text,/\$1\.00 \| 40/);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.summary)),{subtotal:2011,discount:130.72,shipping:166.88,total:2047.16});assert.equal(p.orderTotal,2047.16);assert.match(p.html,/Sub-Total[\s\S]*\$2011\.00[\s\S]*Discount \(6\.5%\)[\s\S]*-\$130\.72[\s\S]*Shipping and Fuel Surcharge[\s\S]*\$166\.88[\s\S]*Order Total[\s\S]*\$2047\.16/);assert.match(p.text,/SUB-TOTAL: \$2011\.00\nDISCOUNT \(6\.5%\): -\$130\.72\nSHIPPING AND FUEL SURCHARGE: \$166\.88\nORDER TOTAL: \$2047\.16/);assert.match(p.text,/P1 \| IP #1 <Who> \| \$0\.10 \| 40 \| \$4\.00/);assert.match(p.html,/\$0\.10<\/td>[\s\S]*?>40<\/td>[\s\S]*?\$4\.00/);assert.doesNotMatch(p.text,/\$1\.00 \| 40/);
   // Price of one item: shown to the cent, or up to four decimals when it is a fraction of a cent; older saved lines (pack price only) still display.
   assert.equal(f.c.fsUnitPrice_(1.45,5),0.29);assert.equal(f.c.fsUnitPrice_(3.4,25),0.136);assert.equal(f.c.fsUnitPrice_(5,1),5);assert.equal(f.c.fsUnitPrice_(5,0),5);
   assert.equal(f.c.fsUnitMoney_(0.29),'$0.29');assert.equal(f.c.fsUnitMoney_(0.136),'$0.136');assert.equal(f.c.fsUnitMoney_(1),'$1.00');assert.equal(f.c.fsUnitMoney_(11.75),'$11.75');assert.equal(f.c.fsUnitMoney_(0.5),'$0.50');
@@ -1234,7 +1270,7 @@ test('Free State quantity price: items with a Quantity Price (Catalog column K) 
   const at = go([['Q1',60],['Q2',40],['B1',20]]);      // 100 together
   assert.deepEqual([line(at,'Q1').price,line(at,'Q1').total,line(at,'Q2').price,line(at,'Q2').total],[0.26,15.6,0.31,12.4],'100 pamphlets: reduced price on every pamphlet');
   assert.deepEqual([line(at,'B1').price,line(at,'B1').total],[99,1980],'items with no Quantity Price are never discounted');
-  assert.equal(at.orderTotal,Math.round((15.6+12.4+1980)*100)/100);assert.match(at.text,/Q1 \| IP #5 \| \$0\.26 \| 60 \| \$15\.60/);assert.match(at.text,/Q2 \| IP #2 \| \$0\.31 \| 40 \| \$12\.40/);
+  assert.equal(at.summary.subtotal,Math.round((15.6+12.4+1980)*100)/100);assert.match(at.text,/Q1 \| IP #5 \| \$0\.26 \| 60 \| \$15\.60/);assert.match(at.text,/Q2 \| IP #2 \| \$0\.31 \| 40 \| \$12\.40/);
   at.lines.forEach(l=>assert.equal(Math.round(l.price*l.qty*100)/100,l.total,l.itemId+': price x quantity equals total'));
   // The pool includes Spanish pamphlets, counts only items that have a Quantity Price, and one item can reach 100 alone.
   assert.equal(line(go([['Q1',50],['Q3',50]]),'Q1').price,0.26,'Spanish literature counts toward the 100');
@@ -1247,6 +1283,106 @@ test('Free State quantity price: items with a Quantity Price (Catalog column K) 
   // What is reviewed is what is sent, at the reduced price.
   f.c.sendFreeStateOrder(at.previewId,'test');
   assert.match(f.emails[0].body,/Q1 \| IP #5 \| \$0\.26 \| 60 \| \$15\.60/);assert.match(f.emails[0].htmlBody,/\$0\.26<\/td>[\s\S]*?>60<\/td>[\s\S]*?\$15\.60/);
+});
+test('Free State invoice: discount, shipping and the $6 fuel surcharge reproduce four real Free State invoices to the cent',()=>{
+  const f = fsFixture(), sum = n => JSON.parse(JSON.stringify(f.c.fsSummary_(n)));
+  // [sub-total, discount, shipping (fuel included), total] exactly as printed on the invoices of 08/03, 08/28, 09/25 and 11/02.
+  for (const [sub,disc,ship,total] of [[589.66,38.33,53.17,604.5],[1259.83,81.89,106.79,1284.73],[1016,66.04,87.28,1037.24],[332.46,0,45.9,378.36]])
+    assert.deepEqual(sum(sub),{subtotal:sub,discount:disc,shipping:ship,total},'invoice with sub-total '+sub);
+  // The shipping bands on the form's schedule, each with the $6.00 fuel surcharge on top.
+  const ship = n => sum(n).shipping;
+  assert.deepEqual([ship(0.01),ship(10),ship(25)],[12,12,12]);assert.deepEqual([ship(25.01),ship(50)],[15,15]);
+  assert.equal(ship(50.01),14.5);assert.equal(ship(100),23);assert.equal(ship(150),31.5);            // 17%
+  assert.equal(ship(150.01),24);assert.equal(ship(500),66);                       // 12% (500 -> 60 + 6)
+  assert.equal(ship(500.01),46);assert.equal(ship(1000),86);                      // 8%
+  // The discount starts at $500.00 and shipping is always figured before it.
+  assert.equal(sum(499.99).discount,0);assert.equal(sum(500).discount,32.5);assert.deepEqual(sum(500),{subtotal:500,discount:32.5,shipping:66,total:533.5});
+  assert.deepEqual(sum(0),{subtotal:0,discount:0,shipping:0,total:0});
+  // An order saved before shipping existed keeps its plain total.
+  assert.deepEqual(JSON.parse(JSON.stringify(f.c.fsSummaryOf_({lines:[{total:10},{total:5.5}]}))),{subtotal:15.5,discount:0,shipping:0,total:15.5,legacy:true});
+  assert.match(f.c.fsText_({recipient:'x',billTo:[],shipTo:[],lines:[{itemId:'A',name:'n',qty:1,price:1,total:1}]}),/\nORDER TOTAL: \$1\.00$/);
+  // The emailed order carries the same lines as the screen, and the same totals.
+  const p = f.preview([{itemId:'B1',qty:6}]);assert.deepEqual(JSON.parse(JSON.stringify(p.summary)),{subtotal:594,discount:38.61,shipping:53.52,total:608.91});
+  f.c.sendFreeStateOrder(p.previewId,'test');assert.match(f.emails[0].body,/SUB-TOTAL: \$594\.00\nDISCOUNT \(6\.5%\): -\$38\.61\nSHIPPING AND FUEL SURCHARGE: \$53\.52\nORDER TOTAL: \$608\.91/);
+});
+test('Free State literature racks (9053-9055) count toward the $500 and the shipping but never take the discount',()=>{
+  const f = fsFixture();f.tables.Catalog.push(['9053','H&I','8 Pocket Literature Rack',25.5,0,'YES',1,1,'Order on Request']);
+  const p = f.preview([{itemId:'B1',qty:6},{itemId:'9053',qty:1}]);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.summary)),{subtotal:619.5,discount:38.61,shipping:55.56,total:636.45});
+  const q = f.preview([{itemId:'B1',qty:1},{itemId:'9053',qty:20}]);   // 99 + 510: over $500, but only the $99 is discountable
+  assert.deepEqual(JSON.parse(JSON.stringify(q.summary)),{subtotal:609,discount:6.44,shipping:54.72,total:657.28});
+  assert.equal(f.c.fsSummary_(609).discount,39.59,'without the racks flag the whole sub-total would be discounted');
+});
+test('same group, same month: new items are added to the open (New) order; Ready orders are never changed',()=>{
+  const f=fixture();openWindow(f);f.tables.Catalog.push(['B3','Books','Third Book',7,0,'YES']);
+  const first=f.c.submitOrder(order({requestId:'req-merge-001',items:[{itemId:'B1',qty:2}]}));
+  assert.equal(first.success,true);assert.equal(first.merged,false);const orders=f.tables.Orders.length;f.emails.length=0;
+  const again=f.c.submitOrder(order({requestId:'req-merge-002',items:[{itemId:'B1',qty:3},{itemId:'B3',qty:1}]}));
+  assert.equal(again.success,true);assert.equal(again.merged,true);assert.equal(again.orderId,first.orderId);assert.equal(f.tables.Orders.length,orders,'no second order');
+  const lines=f.tables['Order Items'].filter(l=>l[1]===first.orderId);
+  assert.deepEqual(JSON.parse(JSON.stringify(lines.map(l=>[l[0],l[2],l[5]]))),[[first.orderId+'-01','B1',5],[first.orderId+'-02','B3',1]]);
+  const row=f.tables.Orders.find(r=>r[0]===first.orderId);assert.equal(row[7],5*99+1*lines[1][4],'estimated total covers every line');assert.equal(row[11],1,'revision moves so an open edit cannot overwrite it');
+  const confirm=f.emails.find(e=>e.to==='pat@example.invalid'),alert=f.emails.find(e=>e.to==='chair@example.invalid');
+  assert.match(confirm.subject,/Literature Order Confirmation/);assert.match(confirm.htmlBody,/Added to/);assert.match(confirm.htmlBody,/Order updated/);assert.match(confirm.body,/added to your earlier order/);assert.match(confirm.body,/Book \(x5\)/);assert.match(confirm.body,/Third Book \(x1\)/);
+  assert.match(alert.subject,/Order Updated/);assert.match(alert.body,/added to an existing order/);
+  // Another group, or an order that has been marked Ready, starts a separate order.
+  assert.notEqual(f.c.submitOrder(order({requestId:'req-merge-003',groupName:'Group A',items:[{itemId:'B1',qty:1}]})).orderId,first.orderId);
+  assert.equal(f.c.fulfillOrder(first.orderId,[{rowId:first.orderId+'-01',qtyFulfilled:5},{rowId:first.orderId+'-02',qtyFulfilled:1}],999,'test',1).success,true);
+  const next=f.c.submitOrder(order({requestId:'req-merge-004',items:[{itemId:'B1',qty:1}]}));assert.equal(next.merged,false);assert.notEqual(next.orderId,first.orderId);
+});
+test('item requests: an inactive Order on Request item shows a Request button and is tracked until it is done',()=>{
+  const f=fixture();openWindow(f);
+  f.tables.Catalog.push(['9053','Special Orders','8 Pocket Literature Rack',25.5,0,'NO',1,1,'Order on Request'],['9053H&I','H&I','8 Pocket Literature Rack',25.5,0,'NO',1,1,'Order on Request'],['R1','Books','Retired Book',5,0,'NO',1,1]);
+  const form=f.c.getFormData().catalog;
+  assert.equal(form.find(i=>i.itemId==='9053').requestable,true);assert.equal(form.find(i=>i.itemId==='R1'),undefined,'retired items never show');assert.equal(form.find(i=>i.itemId==='B1').requestable,undefined);
+  assert.equal(f.c.submitOrder(order({requestId:'req-rack-001',items:[{itemId:'9053',qty:1}]})).success,false,'a requestable item cannot be ordered');
+  // A request travels with the submit: here the group submits only a request (no order), so no order is made.
+  let askN=0;const ask=over=>f.c.submitOrder(order(Object.assign({requestId:'req-ask-'+(++askN),items:[],requests:['9053']},over)));
+  const ordersBefore=f.tables.Orders.length;
+  assert.equal(ask({groupName:'Nope'}).success,false);assert.equal(ask({contactName:''}).success,false);assert.equal(ask({email:'bad'}).success,false);
+  assert.equal(ask({requests:['R1']}).success,false);assert.equal(ask({requests:['B1']}).success,false);assert.equal(ask({requests:['9053H&I']}).success,false,'H&I-only items are refused for other groups');
+  assert.equal(f.c.submitOrder(order({requestId:'req-ask-none',items:[],requests:[]})).success,false,'nothing to submit');
+  assert.equal(f.tables['Item Requests'] ? f.tables['Item Requests'].length : 1,1,'nothing saved yet');
+  const r=ask();assert.equal(r.success,true);assert.equal(r.requested,1);assert.equal(r.orderId,'');assert.equal(f.tables.Orders.length,ordersBefore,'a request alone creates no order');
+  const sheet=f.tables['Item Requests'];assert.equal(sheet.length,2);assert.deepEqual(JSON.parse(JSON.stringify([sheet[1][0],sheet[1][3],sheet[1][4],sheet[1][5],sheet[1][7],sheet[1][9]])),['RQ-0001','Group B','Pat','pat@example.invalid','9053','Open']);
+  assert.equal(f.emails.length,2);assert.ok(f.emails.find(e=>e.to==='pat@example.invalid'&&/received/i.test(e.subject)));assert.ok(f.emails.find(e=>e.to==='chair@example.invalid'&&/Item request/.test(e.subject)));
+  assert.equal(ask().success,true);assert.equal(f.tables['Item Requests'].length,2,'the same group asking again adds nothing');
+  assert.equal(ask({groupName:'Group A',contactName:'Sam'}).success,true);
+  // The Lit Chair list: waiting while the item is inactive, ready to notify once it is Active.
+  assert.equal(f.c.getItemRequests('bad-token').success,false);
+  let list=f.c.getItemRequests('test');assert.equal(list.openCount,1);assert.equal(list.items[0].state,'waiting');assert.equal(list.items[0].openCount,2);assert.deepEqual(JSON.parse(JSON.stringify(list.items[0].requests.map(q=>q.group))),['Group B','Group A']);
+  assert.equal(f.c.notifyItemRequesters('9053','test').success,false,'the item must be Active first');
+  f.tables.Catalog.find(r=>r[0]==='9053')[5]='YES'; // what marking it Active in Inventory does
+  list=f.c.getItemRequests('test');assert.equal(list.items[0].state,'ready');
+  f.emails.length=0;assert.equal(f.c.notifyItemRequesters('9053','bad-token').success,false);
+  const n=f.c.notifyItemRequesters('9053','test');assert.equal(n.success,true);assert.equal(n.sent,2);assert.equal(f.emails.length,2);assert.match(f.emails[0].subject,/Now available/);assert.match(f.emails[0].body,/8 Pocket Literature Rack/);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.tables['Item Requests'].slice(1).map(q=>q[9]))),['Notified','Notified']);assert.equal(f.c.notifyItemRequesters('9053','test').sent,0,'nobody is told twice');
+  list=f.c.getItemRequests('test');assert.equal(list.items[0].state,'done');assert.equal(list.openCount,0);
+  // Ordering the item finishes that group's request.
+  const o=f.c.submitOrder(order({requestId:'req-rack-002',items:[{itemId:'9053',qty:1}]}));assert.equal(o.success,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.tables['Item Requests'].slice(1).map(q=>q[9]))),['Done','Notified']);assert.ok(f.tables['Item Requests'][1][11]);
+  // An order and requests in one submission: one order, one confirmation to the group, one alert to the chair, and the requests saved.
+  const h=fixture();openWindow(h);h.tables.Catalog.push(['9053','Special Orders','8 Pocket Literature Rack',25.5,0,'NO',1,1,'Order on Request'],['9054','Special Orders','16 Pocket Literature Rack',32,0,'NO',1,1,'Order on Request']);
+  const both=h.c.submitOrder(order({requestId:'req-both-001',items:[{itemId:'B1',qty:1}],requests:['9053','9054','9053']}));
+  assert.equal(both.success,true);assert.ok(both.orderId);assert.equal(both.requested,2);assert.equal(h.emails.length,2,'one email each way, not one per request');
+  const mail=h.emails.find(e=>e.to==='pat@example.invalid');assert.match(mail.body,/ALSO REQUESTED.*8 Pocket Literature Rack, 16 Pocket Literature Rack/);assert.match(mail.subject,/Order Confirmation/);
+  assert.match(h.emails.find(e=>e.to==='chair@example.invalid').body,/ALSO REQUESTED/);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.tables['Item Requests'].slice(1).map(q=>[q[7],q[9]]))),[['9053','Open'],['9054','Open']]);
+  assert.equal(h.c.submitOrder(order({requestId:'req-both-001',items:[{itemId:'B1',qty:1}],requests:['9053','9054','9053']})).orderId,both.orderId,'a repeated tap of Submit changes nothing');assert.equal(h.tables['Item Requests'].length,3);
+});
+test('Free State booklets: a Bulk Price (Catalog column L) applies above 100 of the SAME item, never pooled and never counted toward the pamphlet 100',()=>{
+  const f = fsFixture(), line = (p,id)=>p.lines.find(l=>l.itemId===id), go = lines => f.preview(lines.map(([itemId,qty])=>({itemId,qty})));
+  // White Book: $4.60 per pack of 5 ($0.92 each), $0.78 each above 100. Q1 is a pamphlet with a Quantity Price.
+  f.tables.Catalog.push(['K1','Books','White Booklet',4.6,0,'YES',5,5,'','','',0.78],['K2','Books','Behind the Walls',1.15,0,'YES',5,1,'','','',1.05],['Q1','IPs','IP #5',1.45,0,'YES',5,5,'','',0.26]);
+  assert.deepEqual([line(go([['K1',100]]),'K1').price,line(go([['K1',100]]),'K1').total],[0.92,92],'exactly 100 is still the first price (the form says 1-100)');
+  assert.deepEqual([line(go([['K1',101]]),'K1').price,line(go([['K1',101]]),'K1').total],[0.78,78.78],'101 gets the bulk price on every copy');
+  assert.deepEqual([line(go([['K2',100]]),'K2').price,line(go([['K2',101]]),'K2').price,line(go([['K2',101]]),'K2').total],[1.15,1.05,106.05]);
+  assert.equal(line(go([['K1',60],['K2',60]]),'K1').price,0.92,'two different booklets are not added together');
+  const mix = go([['K1',60],['Q1',60]]);assert.deepEqual([line(mix,'K1').price,line(mix,'Q1').price],[0.92,0.29],'booklets do not count toward the pamphlet 100');
+  const both = go([['K1',101],['Q1',100]]);assert.deepEqual([line(both,'K1').price,line(both,'Q1').price],[0.78,0.26]);
+  both.lines.forEach(l=>assert.equal(Math.round(l.price*l.qty*100)/100,l.total,l.itemId+': price x quantity equals total'));
+  // A blank column L behaves as before.
+  assert.equal(line(go([['B1',500]]),'B1').price,99);
 });
 test('Free State send: logs the pending record before emailing, emails once, records history, never touches stock',()=>{
   const f = fsFixture(), p = f.preview(), stockBefore = JSON.stringify(f.tables.Catalog.map(r=>r[4]));let claimSeen = null;
@@ -1381,14 +1517,14 @@ test('Free State screens: suggestions, quantity limits, picker, draft kept acros
   assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(fs.lines.map(l=>[l.itemId,l.qty]))",c)),[['B1','7']]);
   const screen=elements['fs-order'].innerHTML;
   assert.match(screen,/Free State Order/);assert.match(screen,/Item #<\/th><th>Description<\/th><th class="fs-m">Price<\/th><th class="fs-q">Quantity<\/th><th class="fs-m">Total<\/th>/);assert.doesNotMatch(screen,/On Hand|Target|In stock|Low stock/i);
-  assert.match(screen,/id="fs-total-B1">\$70\.00/);assert.match(screen,/id="fs-grand">\$70\.00/);
+  assert.match(screen,/id="fs-total-B1">\$70\.00/);assert.match(screen,/id="fs-sub">\$70\.00[\s\S]*id="fs-disc">\$0\.00[\s\S]*id="fs-ship">\$17\.90[\s\S]*id="fs-grand">\$87\.90/);
   assert.match(screen,/Add Item/);assert.match(screen,/Review &amp; Send/);assert.doesNotMatch(screen,/Spanish|SP3101/);
   // Pack items (IP #7 and IP #1 Spanish: $1.45 per pack of 5) show the price of ONE item, so Price x Quantity = Total on every row.
   vm.runInContext("fs.lines=[{itemId:'B1',qty:'7',requestedFor:'',manual:false},{itemId:'P1',qty:'10',requestedFor:'',manual:false},{itemId:'SP3101',qty:'7',requestedFor:'',manual:true}];fsRender();",c);
   const rows=[...elements['fs-order'].innerHTML.matchAll(/<tr><td class="fs-id">([^<]+)<\/td><td>.*?<td class="fs-m"[^>]*>\$([\d.]+)<\/td><td class="fs-q">.*?value="(\d+)".*?id="fs-total-[^"]+">\$([\d.]+)<\/td>/g)].map(m=>[m[1],Number(m[2]),Number(m[3]),Number(m[4])]);
   assert.deepEqual(rows,[['B1',10,7,70],['P1',0.29,10,2.9],['SP3101',0.29,7,2.03]]);
   rows.forEach(r=>assert.equal(Math.round(r[1]*r[2]*100)/100,r[3],r[0]+': price x quantity equals total'));
-  assert.match(elements['fs-order'].innerHTML,/id="fs-grand">\$74\.93/);
+  assert.match(elements['fs-order'].innerHTML,/id="fs-sub">\$74\.93[\s\S]*id="fs-grand">\$93\.67/);
   // Quantity price: P1 and SP3101 (Catalog column K = $0.26 each) share one pool. 99 together is still the regular $0.29; 100 together
   // moves both to $0.26, and Basic Text (no Quantity Price) never moves.
   const priced=()=>[...elements['fs-order'].innerHTML.matchAll(/id="fs-price-([^"]+)">\$([\d.]+)<\/td>.*?id="fs-total-[^"]+">\$([\d.]+)<\/td>/g)].map(m=>[m[1],Number(m[2]),Number(m[3])]);
@@ -1398,7 +1534,7 @@ test('Free State screens: suggestions, quantity limits, picker, draft kept acros
   vm.runInContext("fsSetQty('SP3101',INPUT)",Object.assign(c,{INPUT:{value:'40'}}));vm.runInContext("fsRender();",c);
   assert.deepEqual(priced(),[['B1',10,70],['P1',0.26,15.6],['SP3101',0.26,10.4]]);
   assert.match(elements['fs-order'].innerHTML,/id="fs-qp">Reduced pamphlet prices apply: 100 pamphlets in this order \(100 or more\)\./);
-  assert.match(elements['fs-order'].innerHTML,/id="fs-grand">\$96\.00/);
+  assert.match(elements['fs-order'].innerHTML,/id="fs-sub">\$96\.00[\s\S]*id="fs-grand">\$118\.32/);
   vm.runInContext("fsStep('P1',-1);fsRender();",c);assert.deepEqual(priced(),[['B1',10,70],['P1',0.29,17.11],['SP3101',0.29,11.6]],'one fewer drops the whole order back to the regular price');
   vm.runInContext("fs.lines=[{itemId:'B1',qty:'7',requestedFor:'',manual:false},{itemId:'P1',qty:'100',requestedFor:'',manual:false}];fsRender();",c);
   assert.deepEqual(priced(),[['B1',10,70],['P1',0.26,26]],'100 of one pamphlet is enough on its own');

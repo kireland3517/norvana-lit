@@ -98,7 +98,7 @@ function fsCatalog_() {
   const data = getSheet('Catalog').getDataRange().getValues(), map = {};
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
-    map[String(data[i][0])] = { name: String(data[i][2]), category: String(data[i][1]), price: Number(data[i][3]) || 0, packSize: Number(data[i][7]) || 1, quantityPrice: Number(data[i][10]) > 0 ? Number(data[i][10]) : 0, active: String(data[i][5]).trim().toUpperCase() === 'YES', inventoryType: inventoryTypeOf_(data[i][1], data[i][8]) };
+    map[String(data[i][0])] = { name: String(data[i][2]), category: String(data[i][1]), price: Number(data[i][3]) || 0, packSize: Number(data[i][7]) || 1, quantityPrice: Number(data[i][10]) > 0 ? Number(data[i][10]) : 0, bulkPrice: Number(data[i][11]) > 0 ? Number(data[i][11]) : 0, active: String(data[i][5]).trim().toUpperCase() === 'YES', inventoryType: inventoryTypeOf_(data[i][1], data[i][8]) };
   }
   return map;
 }
@@ -123,7 +123,40 @@ function fsUnitPrice_(price, packSize) { return Math.round(Number(price) / (Numb
 function fsShownPrice_(l) { return l.unitPrice != null ? Number(l.unitPrice) : Number(l.price); }
 // Two decimals, or up to four when a single item costs a fraction of a cent (never rounds the price shown away from the total).
 function fsUnitMoney_(n) { return '$' + Number(n || 0).toFixed(4).replace(/0{1,2}$/, ''); }
-function fsGrandTotal_(lines) { return Math.round(lines.reduce(function(sum, l) { return sum + Number(l.total || 0); }, 0) * 100) / 100; }
+// Bulk Price (Catalog column L, booklets): Free State's form shows two prices with "(1-100)" on each booklet, so the second
+// (price of ONE item) applies once the order holds MORE than 100 of that same item. Unlike the pamphlets, booklets are not pooled.
+const FS_BULK_OVER_ = 100;
+function fsBulkApplies_(qty, bulkPrice) { return Number(bulkPrice) > 0 && Number(qty) > FS_BULK_OVER_; }
+function fsSubtotal_(lines) { return Math.round(lines.reduce(function(sum, l) { return sum + Number(l.total || 0); }, 0) * 100) / 100; }
+// Free State's invoice, worked out from the sub-total (checked against four of their real invoices, to the cent):
+//   discount  6.5% when the sub-total is $500.00 or more (the form lists nothing above $2,499.00, so the same rate carries on)
+//   shipping  $6.00 up to $25.00, $9.00 up to $50.00, then 17% up to $150.00, 12% up to $500.00, 8% above that - always figured on the
+//             sub-total BEFORE the discount
+//   fuel      a flat $6.00 on every shipped order; Free State prints it inside the Shipping line, so this does too
+// Orders are never picked up, so shipping and fuel always apply.
+const FS_DISCOUNT_FROM_ = 500, FS_DISCOUNT_RATE_ = 0.065, FS_FUEL_ = 6;
+// The literature racks are marked on Free State's form as not qualifying for the discount: they count toward the $500.00 and the
+// shipping, but the 6.5% is taken only on everything else.
+const FS_NO_DISCOUNT_ = ['9053', '9054', '9055', '9053H&I', '9054H&I', '9055H&I']; // the H&I list has its own copy of each rack
+function fsNoDiscountTotal_(lines) { return fsCents_(lines.reduce(function(sum, l) { return sum + (FS_NO_DISCOUNT_.indexOf(String(l.itemId)) >= 0 ? Number(l.total || 0) : 0); }, 0)); }
+function fsCents_(n) { return Math.round(Number(n) * 100 + 1e-7) / 100; }
+function fsHandling_(subtotal) {
+  if (subtotal <= 25) return 6;
+  if (subtotal <= 50) return 9;
+  return fsCents_(subtotal * (subtotal <= 150 ? 0.17 : subtotal <= 500 ? 0.12 : 0.08));
+}
+function fsSummary_(subtotal, noDiscount) {
+  subtotal = fsCents_(subtotal);
+  const discount = subtotal >= FS_DISCOUNT_FROM_ ? fsCents_(Math.max(0, subtotal - fsCents_(noDiscount || 0)) * FS_DISCOUNT_RATE_) : 0;
+  const shipping = subtotal > 0 ? fsCents_(fsHandling_(subtotal) + FS_FUEL_) : 0;
+  return { subtotal: subtotal, discount: discount, shipping: shipping, total: fsCents_(subtotal - discount + shipping) };
+}
+// Orders saved before shipping existed have no summary: they keep showing the plain sum of their lines.
+function fsSummaryOf_(snap) {
+  if (snap.summary) return snap.summary;
+  const sum = fsSubtotal_(snap.lines);
+  return { subtotal: sum, discount: 0, shipping: 0, total: sum, legacy: true };
+}
 function fsPublicLines_(lines) { return lines.map(function(l) { return { itemId: l.itemId, name: l.name, qty: l.qty, price: fsShownPrice_(l), total: l.total }; }); }
 
 // Validates raw lines from the browser and rebuilds everything else (names, addresses, recipient) from the sheet.
@@ -148,17 +181,18 @@ function fsBuildSnapshot_(rawLines) {
     const item = catalog[itemId];
     if (!item) throw new Error('A product in this order is no longer in the catalog. Remove it and review again.');
     if (qty === 0) return;
-    if (!item.active) throw new Error(item.name + ' is no longer active. Remove it and review again.');
+    // An Order on Request item stays inactive until it arrives (groups can only ask for it), so it can still be ordered from Free State.
+    if (!item.active && item.inventoryType !== 'Order on Request') throw new Error(item.name + ' is no longer active. Remove it and review again.');
     entries.push({ itemId: itemId, item: item, qty: qty, requestedFor: cleanText_(l.requestedFor, FS_MAX_TEXT_) });
   });
   if (!entries.length) throw new Error('Enter a quantity for at least one product.');
   // Prices are decided for the whole order at once, because the reduced price depends on the combined quantity.
   const reduced = fsQuantityPriceApplies_(entries.map(function(e) { return { qty: e.qty, quantityPrice: e.item.quantityPrice }; }));
   const lines = entries.map(function(e) {
-    const item = e.item, quantity = reduced && item.quantityPrice > 0;
+    const item = e.item, special = fsBulkApplies_(e.qty, item.bulkPrice) ? item.bulkPrice : (reduced && item.quantityPrice > 0 ? item.quantityPrice : 0);
     return { itemId: e.itemId, name: item.name, qty: e.qty, price: item.price,
-      unitPrice: quantity ? fsRound4_(item.quantityPrice) : fsUnitPrice_(item.price, item.packSize),
-      total: quantity ? fsQuantityLineTotal_(e.qty, item.quantityPrice) : fsLineTotal_(e.qty, item.price, item.packSize),
+      unitPrice: special ? fsRound4_(special) : fsUnitPrice_(item.price, item.packSize),
+      total: special ? fsQuantityLineTotal_(e.qty, special) : fsLineTotal_(e.qty, item.price, item.packSize),
       inventoryType: item.inventoryType, requestedFor: e.requestedFor };
   });
   const v = cfg.values;
@@ -167,13 +201,14 @@ function fsBuildSnapshot_(rawLines) {
     billTo: [['Group Name', FREE_STATE_GROUP_NAME_], ['Group Location', v.billLocation], ['Mailing Address', v.billAddress], ['City', v.billCity],
       ['State', v.billState], ['ZIP Code', v.billZip], ['Contact Person', v.billContact], ['Phone Number', v.billPhone], ['Email', cfg.litChairEmail]],
     shipTo: [['Name', v.shipName], ['Phone', v.shipPhone], ['Street Address', v.shipStreet], ['City', v.shipCity], ['State', v.shipState], ['ZIP Code', v.shipZip]],
-    lines: lines
+    lines: lines,
+    summary: fsSummary_(fsSubtotal_(lines), fsNoDiscountTotal_(lines))
   };
 }
 
 // Change detector only (not a security hash): the email content plus the recipient.
 function fsFingerprint_(snap) {
-  const text = JSON.stringify([snap.recipient, snap.subject, snap.billTo, snap.shipTo, snap.lines.map(function(l) { return [l.itemId, l.name, l.qty, fsShownPrice_(l), l.total]; })]);
+  const text = JSON.stringify([snap.recipient, snap.subject, snap.billTo, snap.shipTo, snap.lines.map(function(l) { return [l.itemId, l.name, l.qty, fsShownPrice_(l), l.total]; }), fsSummaryOf_(snap)]);
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
   return h.toString(16) + '-' + text.length;
@@ -183,7 +218,21 @@ function fsText_(snap) {
   const pairs = function(rows) { return rows.map(function(r) { return r[0] + ': ' + r[1]; }).join('\n'); };
   return 'NORVANA Literature Order\n\nBILL TO\n' + pairs(snap.billTo) + '\n\nSHIP TO\n' + pairs(snap.shipTo) +
     '\n\nORDER ITEMS\nItem # | Description | Price | Quantity | Total\n' + snap.lines.map(function(l) { return l.itemId + ' | ' + l.name + ' | ' + fsUnitMoney_(fsShownPrice_(l)) + ' | ' + l.qty + ' | ' + fsMoney_(l.total); }).join('\n') +
-    '\nORDER TOTAL: ' + fsMoney_(fsGrandTotal_(snap.lines));
+    fsTotalsText_(snap);
+}
+function fsTotalsText_(snap) {
+  const s = fsSummaryOf_(snap);
+  if (s.legacy) return '\nORDER TOTAL: ' + fsMoney_(s.total);
+  return '\nSUB-TOTAL: ' + fsMoney_(s.subtotal) + (s.discount ? '\nDISCOUNT (6.5%): -' + fsMoney_(s.discount) : '') +
+    '\nSHIPPING AND FUEL SURCHARGE: ' + fsMoney_(s.shipping) + '\nORDER TOTAL: ' + fsMoney_(s.total);
+}
+
+function fsTotalRows_(snap, cell) {
+  const s = fsSummaryOf_(snap);
+  const row = function(label, value, bold) { return '<tr><td colspan="4" align="right" style="' + cell + (bold ? 'font-weight:bold;' : '') + 'text-align:right">' + label + '</td><td align="right" style="' + cell + (bold ? 'font-weight:bold;' : '') + 'text-align:right">' + value + '</td></tr>'; };
+  if (s.legacy) return row('Order Total', fsMoney_(s.total), true);
+  return row('Sub-Total', fsMoney_(s.subtotal), false) + (s.discount ? row('Discount (6.5%)', '-' + fsMoney_(s.discount), false) : '') +
+    row('Shipping and Fuel Surcharge', fsMoney_(s.shipping), false) + row('Order Total', fsMoney_(s.total), true);
 }
 
 function fsHtml_(snap, pixelUrl) {
@@ -193,7 +242,7 @@ function fsHtml_(snap, pixelUrl) {
   const pairRows = function(rows) { return rows.map(function(r, i) { return '<tr><td width="34%" style="' + cell + band(i) + '">' + emailEsc_(r[0]) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(r[1]) + '</td></tr>'; }).join(''); };
   const itemRows = snap.lines.map(function(l, i) {
     return '<tr><td width="18%" style="' + cell + band(i) + '">' + emailEsc_(l.itemId) + '</td><td style="' + cell + band(i) + '">' + emailEsc_(l.name) + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsUnitMoney_(fsShownPrice_(l)) + '</td><td width="12%" align="right" style="' + cell + band(i) + 'text-align:right">' + l.qty + '</td><td width="14%" align="right" style="' + cell + band(i) + 'text-align:right">' + fsMoney_(l.total) + '</td></tr>';
-  }).join('') + '<tr><td colspan="4" align="right" style="' + cell + 'font-weight:bold;text-align:right">Order Total</td><td align="right" style="' + cell + 'font-weight:bold;text-align:right">' + fsMoney_(fsGrandTotal_(snap.lines)) + '</td></tr>';
+  }).join('') + fsTotalRows_(snap, cell);
   const table = function(inner) { return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 16px 0">' + inner + '</table>'; };
   return '<!DOCTYPE html><html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body style="margin:0;padding:16px;background:#ffffff">' +
     '<div style="max-width:640px;margin:0 auto">' +
@@ -208,7 +257,7 @@ function fsHtml_(snap, pixelUrl) {
 function fsPublicOrder_(snap, rec) {
   const sent = rec.attempt && rec.attempt.acceptedAt ? new Date(rec.attempt.acceptedAt) : new Date();
   return { orderId: rec.orderId, sentDate: Utilities.formatDate(sent, Session.getScriptTimeZone(), 'MMMM d, yyyy'),
-    billTo: snap.billTo, shipTo: snap.shipTo, lines: fsPublicLines_(snap.lines), orderTotal: fsGrandTotal_(snap.lines) };
+    billTo: snap.billTo, shipTo: snap.shipTo, lines: fsPublicLines_(snap.lines), orderTotal: fsSummaryOf_(snap).total, summary: fsSummaryOf_(snap) };
 }
 
 function previewFreeStateOrder(lines, token) {
@@ -217,7 +266,7 @@ function previewFreeStateOrder(lines, token) {
     const stored = snap.lines.map(function(l) { return { itemId: l.itemId, qty: l.qty, requestedFor: l.requestedFor }; });
     CacheService.getScriptCache().put('fs_preview_' + previewId, JSON.stringify({ token: token, lines: stored, fingerprint: fingerprint }), FS_PREVIEW_SECONDS_);
     return { success: true, previewId: previewId, fingerprint: fingerprint, from: FREE_STATE_FROM_, to: snap.recipient, subject: snap.subject,
-      html: fsHtml_(snap), text: fsText_(snap), lines: fsPublicLines_(snap.lines), orderTotal: fsGrandTotal_(snap.lines) };
+      html: fsHtml_(snap), text: fsText_(snap), lines: fsPublicLines_(snap.lines), orderTotal: fsSummaryOf_(snap).total, summary: fsSummaryOf_(snap) };
   });
 }
 
@@ -433,7 +482,7 @@ function getFreeStateRecentOrders(token) {
       const rec = fsLogRow_(i + 1, store.data);
       if (rec.status !== 'Recorded' || !rec.attempt.openToken) continue; // orders sent before tracking existed have nothing to report
       orders.push({ orderId: rec.orderId, sentAt: rec.attempt.acceptedAt || rec.updated, openedAt: rec.attempt.openedAt || '', opens: Number(rec.attempt.opens) || 0,
-        orderTotal: fsGrandTotal_(rec.snapshot.lines) });
+        orderTotal: fsSummaryOf_(rec.snapshot).total });
     }
     return { success: true, orders: orders };
   });

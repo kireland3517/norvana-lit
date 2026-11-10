@@ -468,11 +468,41 @@
   .view-sub { font-size: 14px; color: var(--muted); margin-bottom: 16px; }
 
   /* Match Reports: two equal flex columns (was repeat(3,1fr) with only 2 tiles) */
-  .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
   .stat-tile { background: var(--white); border: 2px solid var(--border); border-radius: 10px; padding: 7px 4px; text-align: center; box-shadow: 0 1px 3px rgba(46,49,146,0.05); min-width: 0; cursor: pointer; transition: border-color 0.18s; user-select: none; }
   .stat-tile.active-new { border-color: #a8b4ff; }
   .stat-tile.active-ready { border-color: var(--lime-dark); }
   .stat-tile.active-completed { border-color: #1dc9a4; }
+  .stat-tile.active-requests { border-color: #e0a526; }
+  .stat-num.amber { color: #e0a526; }
+
+  /* Item requests: Request button on the order form and the Requests list on the Lit Chair tab */
+  .req-btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--blue); background: transparent; color: var(--blue); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .req-btn:disabled { opacity: 0.6; cursor: default; }
+  .req-btn.req-on { background: var(--blue); color: #fff; }
+  body.dark .req-btn.req-on { background: var(--lime-dark); color: #1a1a3e; }
+  .req-done { padding: 6px 12px; border-radius: 20px; background: var(--snow); color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .item-row.requestable .item-name { color: var(--onyx); }
+  .req-note { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .req-card { background: var(--white); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .req-card.ready { border-left-color: var(--lime-dark); }
+  .req-card.waiting { border-left-color: #e0a526; }
+  .req-card.done { opacity: 0.8; }
+  .req-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .req-item { font-size: 15px; font-weight: 600; color: var(--onyx); }
+  .req-sub { font-size: 12px; color: var(--muted); }
+  .req-pill { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; background: var(--snow); color: var(--muted); }
+  .req-pill.ready { background: #eef6c9; color: #4d5a00; }
+  .req-pill.waiting { background: #fbefd0; color: #7a5200; }
+  .req-who { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; color: var(--onyx); }
+  .req-who span:last-child { color: var(--muted); font-size: 12px; text-align: right; }
+  .req-who .stale { color: var(--danger); font-weight: 600; }
+  .req-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .req-foot .req-btn { background: var(--blue); color: #fff; }
+  body.dark .req-btn { border-color: var(--lime-dark); color: var(--lime-dark); }
+  body.dark .req-foot .req-btn { background: var(--lime-dark); color: #1a1a3e; }
+  body.dark .req-pill.ready { background: #3a4a12; color: #dff08a; }
+  body.dark .req-pill.waiting { background: #4a3a14; color: #f5c869; }
   .stat-num { font-size: 15px; font-weight: 600; line-height: 1; }
   .stat-num.periwinkle { color: #a8b4ff; }
   .stat-num.lime { color: var(--lime-dark); }
@@ -951,7 +981,7 @@
     border-color: var(--border);
   }
   body.dark .stat-tile { background: var(--white); }
-  body.dark .stat-tile:not(.active-new):not(.active-ready):not(.active-completed) { border-color: var(--border); }
+  body.dark .stat-tile:not(.active-new):not(.active-ready):not(.active-completed):not(.active-requests) { border-color: var(--border); }
   body.dark .fulfill-col-label { color: var(--lime); opacity: 0.75; }
   body.dark .fulfill-col-val { color: var(--lime); opacity: 0.9; }
   body.dark .fulfill-input-wrap .fulfill-col-label { color: var(--lime); opacity: 0.75; }
@@ -1166,6 +1196,7 @@
           <div class="stat-tile active-new" id="tile-New" onclick="filterOrders('New')"><div class="stat-num periwinkle" id="stat-new">-</div><div class="stat-label">New</div></div>
           <div class="stat-tile" id="tile-Ready" onclick="filterOrders('Ready')"><div class="stat-num green" id="stat-ready">-</div><div class="stat-label">Ready</div></div>
           <div class="stat-tile" id="tile-Completed" onclick="filterOrders('Completed')"><div class="stat-num teal" id="stat-completed">-</div><div class="stat-label">Completed</div></div>
+          <div class="stat-tile" id="tile-Requests" onclick="filterOrders('Requests')"><div class="stat-num amber" id="stat-requests">-</div><div class="stat-label">Requests</div></div>
         </div>
         <div id="orders-list">
           <div class="spinner"><div class="spin"></div>Loading orders...</div>
@@ -1303,6 +1334,8 @@ let sessionToken   = null;  // server-issued token, validated on every privilege
 let orderRequestId = '';    // one random ID per order; lets the server ignore an accidental repeat of the same order
 let meetingMonth   = '';
 let allOrders      = [];
+let itemRequestsData = null;       // {items, openCount} from the Item Requests tab, once loaded
+let requestedItems = {};            // items the group tapped Request on, sent with the order when it is submitted: 'group|itemId'
 let currentFilter  = 'New';
 let currentOrderId = null;
 let completedMonth = null;
@@ -1466,11 +1499,11 @@ function doLogin() {
      ['panel-body', '']].forEach(function(p) {
       var el = document.getElementById(p[0]); if (el) el.innerHTML = p[1];
     });
-    ['stat-new', 'stat-ready', 'stat-completed'].forEach(function(id) {
+    ['stat-new', 'stat-ready', 'stat-completed', 'stat-requests'].forEach(function(id) {
       var el = document.getElementById(id); if (el) el.textContent = '-';
     });
     var panel = document.getElementById('order-panel'); if (panel) panel.classList.remove('open');
-    allOrders = []; currentOrderId = null; currentItems = [];
+    allOrders = []; itemRequestsData = null; currentOrderId = null; currentItems = [];
     inventoryCategories = []; activeInventoryCategory = null; window._settingsGroups = null;
     ordersReportData = null; chairData = null; chairPreview = null;
     if (typeof fsReset === 'function') fsReset();
@@ -1631,7 +1664,8 @@ function renderCatalogArea() {
     cats[item.category].push(item);
   });
   Object.keys(cats).forEach(function(c) {
-    cats[c].sort(function(a, b) { return itemSortScore(a) - itemSortScore(b); });
+    // Items to request (not in stock) always sit at the bottom of their list, below the items that can be ordered.
+    cats[c].sort(function(a, b) { return (a.requestable ? 1 : 0) - (b.requestable ? 1 : 0) || itemSortScore(a) - itemSortScore(b); });
   });
 
   const orderedCats = allowedCategories(Object.keys(cats), group);
@@ -1657,6 +1691,17 @@ function renderCatalogArea() {
     }
     cats[cat].forEach(function(item) {
       const id = item.itemId;
+      if (item.requestable) {
+        const asked = requestedItems[group + '|' + id];
+        panelHtml += '<div class="item-row requestable" id="row-' + esc(id) + '">'
+          + '<div class="item-info"><div class="item-name">' + esc(item.name) + '</div>'
+          + '<div class="item-price">$' + Number(item.price).toFixed(2) + '</div>'
+          + '<div class="req-note">' + (asked ? 'Will be requested when you submit. We will email you when it is in.' : 'Not in stock. Ask the Lit Chair to order it.') + '</div></div>'
+          + (asked ? '<button type="button" class="req-btn req-on" id="req-' + esc(id) + '" onclick="askForItem(\'' + esc(id) + '\')">Requested &#10003;</button>'
+                   : '<button type="button" class="req-btn" id="req-' + esc(id) + '" onclick="askForItem(\'' + esc(id) + '\')">Request</button>')
+          + '</div>';
+        return;
+      }
       const qty = qtys[id] || 0;
       const packNote = (item.packSize > 1 && rules.onlyCategories.indexOf(cat) !== -1) ? ' &middot; pack of ' + Number(item.packSize) : '';
       panelHtml += '<div class="item-row' + (qty > 0 ? ' has-qty' : '') + '" id="row-' + esc(id) + '">'
@@ -1691,6 +1736,7 @@ function initForm(groups) {
     groups.map(function(g) { return '<option value="' + esc(g) + '">' + esc(g) + '</option>'; }).join('');
 
   catalog.forEach(function(item) { qtys[item.itemId] = 0; });
+  requestedItems = {};
   activeCat = null;
 
   let html = '';
@@ -1722,6 +1768,26 @@ function initForm(groups) {
 
   document.getElementById('view-order').innerHTML = html;
   renderCatalogArea();
+}
+
+// Request button on an item that is not in stock: tapping marks it (tap again to undo). It is sent with the order when the form is submitted.
+function askForItem(id) {
+  const g = (document.getElementById('group-name') || {}).value || '';
+  if (!g) { alert('Choose your group at the top of the form first.'); return; }
+  const key = g + '|' + id;
+  if (requestedItems[key]) delete requestedItems[key]; else requestedItems[key] = true;
+  const row = document.getElementById('row-' + id), btn = document.getElementById('req-' + id);
+  const asked = !!requestedItems[key];
+  if (btn) { btn.innerHTML = asked ? 'Requested &#10003;' : 'Request'; btn.classList.toggle('req-on', asked); }
+  const note = row && row.querySelector('.req-note');
+  if (note) note.textContent = asked ? 'Will be requested when you submit. We will email you when it is in.' : 'Not in stock. Ask the Lit Chair to order it.';
+  updateSubmitState();
+}
+
+// The items this group tapped Request on, still on the form for this group.
+function askedItemIds() {
+  const g = (document.getElementById('group-name') || {}).value || '';
+  return catalog.filter(function(i) { return i.requestable && requestedItems[g + '|' + i.itemId]; }).map(function(i) { return i.itemId; });
 }
 
 function switchCat(cat) {
@@ -1802,7 +1868,7 @@ function updateSubmitState() {
   const group   = (document.getElementById('group-name')   || {}).value;
   const contact = (document.getElementById('contact-name') || {}).value;
   const email   = (document.getElementById('email')        || {}).value;
-  const hasItems = Object.keys(qtys).some(function(k) { return qtys[k] > 0; });
+  const hasItems = Object.keys(qtys).some(function(k) { return qtys[k] > 0; }) || askedItemIds().length > 0;
   const btn = document.getElementById('submit-btn');
   if (btn) btn.disabled = !(group && contact && email && hasItems);
 }
@@ -1829,6 +1895,7 @@ function handleSubmit() {
     email:        document.getElementById('email').value,
     phone:        (document.getElementById('phone') || {}).value || '',
     items:        items,
+    requests:     askedItemIds(),
     requestId:    orderRequestId || (orderRequestId = newRequestId()),
   };
 
@@ -1843,12 +1910,13 @@ function onOrderSuccess(result) {
     orderRequestId = '';
     const groupName = document.getElementById('group-name').value;
     const msg = result.warning ? esc(result.warning)
-      : 'A confirmation email is on its way. You\'ll receive a second email when your order is ready for pickup.';
+      : (result.orderId ? 'A confirmation email is on its way. You\'ll receive a second email when your order is ready for pickup.' : 'A confirmation email is on its way. We will email you when the item is in.')
+        + (result.orderId && result.requested ? ' The items you requested are not in stock; we will email you when they arrive.' : '');
     document.getElementById('view-order').innerHTML =
       '<div class="card success-screen">'
       + '<div class="success-check">&#10003;</div>'
-      + '<div class="success-title">Order submitted!</div>'
-      + '<div class="success-order-id">Order ' + esc(result.orderId || '') + '</div>'
+      + '<div class="success-title">' + (result.orderId ? 'Order submitted!' : 'Request sent!') + '</div>'
+      + (result.orderId ? '<div class="success-order-id">Order ' + esc(result.orderId) + '</div>' : '')
       + '<div class="success-group">' + esc(groupName) + '</div>'
       + '<div class="success-msg">' + msg + '</div>'
       + '<button type="button" class="submit-btn" onclick="startNewOrder()">Start New Order</button>'
@@ -1907,9 +1975,56 @@ function renderOrders(orders) {
   viewsLoaded.orders = true;
   updateStats();
   renderOrderList();
+  loadRequests();
 }
 
-var TILE_ACTIVE_CLASS = { New: 'active-new', Ready: 'active-ready', Completed: 'active-completed' };
+// -- Requests: groups that asked for an item that is not in stock (see ItemRequests.gs) --
+function loadRequests(done) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (dashboardSignedOut) return;
+      if (r && r.success) { itemRequestsData = r; updateStats(); if (currentFilter === 'Requests') renderOrderList(); }
+      if (done) done();
+    })
+    .withFailureHandler(function() { if (done) done(); })
+    .getItemRequests(sessionToken);
+}
+function reqWhen(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString([], { month: 'short', day: 'numeric' }); }
+function requestsHTML() {
+  var d = itemRequestsData;
+  if (!d) return '<div class="spinner"><div class="spin"></div>Loading requests...</div>';
+  if (!d.items.length) return '<div class="empty-state"><div class="empty-title">No open requests</div><div class="empty-sub">When a group asks for an item that is not in stock, it shows up here.</div></div>';
+  var label = { ready: 'Ready to notify', waiting: 'Waiting for item', done: 'Done' };
+  return d.items.map(function(it) {
+    var who = it.requests.map(function(q) {
+      var when = q.status === 'Done' ? 'Ordered ' + reqWhen(q.closedAt) : q.status === 'Notified' ? 'Notified ' + reqWhen(q.notifiedAt) : 'Asked ' + reqWhen(q.requestedAt) + (q.stale ? ' (over 30 days)' : '');
+      return '<div class="req-who"><span>' + esc(q.group) + (q.contact ? ' &middot; ' + esc(q.contact) : '') + '</span><span' + (q.stale ? ' class="stale"' : '') + '>' + esc(when) + '</span></div>';
+    }).join('');
+    var foot = it.state === 'ready'
+      ? '<span>It is in stock now. Groups can order it.</span><button type="button" class="req-btn" onclick="notifyRequesters(\'' + esc(it.itemId) + '\')">Let them know (' + it.openCount + ')</button>'
+      : it.state === 'waiting' ? '<span>Order it from Free State, then mark it Active in Inventory.</span>'
+      : '<span>Everyone has been told or has ordered.</span>';
+    return '<div class="req-card ' + it.state + '"><div class="req-head"><div><div class="req-item">' + esc(it.name) + '</div><div class="req-sub">' + (it.active ? 'Active' : 'Not active yet') + '</div></div>'
+      + '<span class="req-pill ' + it.state + '">' + label[it.state] + '</span></div>' + who + '<div class="req-foot">' + foot + '</div></div>';
+  }).join('');
+}
+function notifyRequesters(itemId) {
+  var it = itemRequestsData && itemRequestsData.items.find(function(i) { return i.itemId === itemId; });
+  if (!it) return;
+  showConfirm('Email ' + it.openCount + ' group' + (it.openCount === 1 ? '' : 's') + ' that the ' + it.name + ' is available?', 'Send', function() {
+    showToast('Sending...', 30000);
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r || r.success === false) { showToast((r && r.error) || 'Could not send the emails.', 6000); return; }
+        showToast(r.sent + ' group' + (r.sent === 1 ? '' : 's') + ' told' + (r.failed ? '; ' + r.failed + ' email' + (r.failed === 1 ? '' : 's') + ' failed, try again' : ''), 5000);
+        loadRequests();
+      })
+      .withFailureHandler(function() { showToast('Could not reach the server. Try again.', 6000); })
+      .notifyItemRequesters(itemId, sessionToken);
+  });
+}
+
+var TILE_ACTIVE_CLASS = { New: 'active-new', Ready: 'active-ready', Completed: 'active-completed', Requests: 'active-requests' };
 
 function updateStats() {
   const newCount       = allOrders.filter(function(o) { return o.status === 'New'; }).length;
@@ -1918,14 +2033,15 @@ function updateStats() {
   document.getElementById('stat-new').textContent       = newCount;
   document.getElementById('stat-ready').textContent     = ready;
   document.getElementById('stat-completed').textContent = completed;
+  document.getElementById('stat-requests').textContent  = itemRequestsData ? itemRequestsData.openCount : '-';
   applyTileActive();
 }
 
 function applyTileActive() {
-  ['New', 'Ready', 'Completed'].forEach(function(s) {
+  ['New', 'Ready', 'Completed', 'Requests'].forEach(function(s) {
     var tile = document.getElementById('tile-' + s);
     if (!tile) return;
-    tile.classList.remove('active-new', 'active-ready', 'active-completed');
+    tile.classList.remove('active-new', 'active-ready', 'active-completed', 'active-requests');
     if (currentFilter === s) tile.classList.add(TILE_ACTIVE_CLASS[s]);
   });
 }
@@ -1971,6 +2087,7 @@ function setCompletedMonth(value) { completedMonth = value; updateStats(); rende
 
 function renderOrderList() {
   const list = document.getElementById('orders-list');
+  if (currentFilter === 'Requests') { list.innerHTML = requestsHTML(); return; }
   const inCompleted = currentFilter === 'Completed';
   const monthPicker = inCompleted ? completedMonthPickerHTML() : '';
   const filtered = currentFilter === 'All'
